@@ -1,0 +1,7 @@
+build/
+.react-router/
+playwright-report/
+test-results/
+storybook-static/
+pnpm-lock.yaml
+app/components/ui/

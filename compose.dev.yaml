@@ -1,0 +1,52 @@
+# Development services only: Postgres and SeaweedFS (S3-compatible image storage, docs/media.md). The app itself runs
+# on the host with `pnpm dev`. Start with `pnpm services`; the values match `.env.example`.
+
+# Pinned so the volumes keep their names even when the folder is renamed. Rename per project.
+name: template-dev
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # S3 without authentication: fine on a development machine, never in production (docs/media.md, Configuration).
+  # Each bucket claims several volumes up front, and the volume count is derived from free disk / volume size. With the
+  # default 30 GB volumes a laptop runs out after two or three buckets ("No writable volumes"), so volumes stay small.
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.99
+    command: server -dir=/data -s3 -s3.port=8333 -master.volumeSizeLimitMB=1024
+    ports:
+      - "8333:8333"
+    volumes:
+      - seaweedfs:/data
+
+  # Creates the media bucket once SeaweedFS answers, then exits. Safe on every `up`: an existing bucket is left alone.
+  seaweedfs-init:
+    image: amazon/aws-cli:2.32.29
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        until aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket app-media 2>/dev/null
+        || aws --endpoint-url http://seaweedfs:8333 s3 mb s3://app-media; do sleep 2; done
+    environment:
+      AWS_ACCESS_KEY_ID: dev
+      AWS_SECRET_ACCESS_KEY: dev
+      AWS_DEFAULT_REGION: us-east-1
+    depends_on:
+      - seaweedfs
+
+volumes:
+  pgdata:
+  seaweedfs:

@@ -1,0 +1,124 @@
+# Frontend Guideline (React Router Framework Mode)
+
+The frontend is organized by route. Each route slice owns everything that only it uses, and code moves to a shared
+location only when a second consumer needs it. The UI is in Persian and right-to-left.
+
+## Structure
+
+```text
+app/
+  root.tsx                  # document shell, global providers, root error boundary
+  routes.ts                 # route config: maps URLs to route modules
+  app.css                   # global styles and theme tokens
+  routes/
+    <slice>/                # one flat folder per route
+      <slice-name>.tsx      # route module
+      components/           # components used only by this route
+      hooks/                # hooks used only by this route
+      queries.ts            # data-fetching options used only by this route
+      atoms.ts              # Jotai atoms used only by this route
+      schema.ts             # form schemas owned by this route
+      *.server.ts           # server-only helpers for this route's loader/action
+  components/
+    primitive/              # this app's versions of shadcn components
+    shared/                 # app-made UI shared by multiple routes
+    ui/                     # shadcn source, reference only
+  hooks/                    # hooks shared by multiple routes
+  atoms/                    # Jotai atoms shared by multiple routes
+  lib/                      # shared helpers (browser-safe, or *.server.ts)
+  orpc/client.ts            # typed API client (see backend guideline)
+```
+
+Not every slice needs every file. Start with the route module alone and split it out as it grows.
+
+## Route Slices
+
+- **Flat, not nested.** URL hierarchy does not imply folder nesting: use `dashboard_user/`, never `dashboard/user/`.
+  Nesting of layouts is expressed in `routes.ts`, not in the file tree.
+- **Colocate.** The route module, its exports (`loader`, `action`, `clientLoader`, `clientAction`, `meta`, `headers`,
+  `ErrorBoundary`), its `./+types/...` imports, and its private components, hooks, queries, and schemas all live in its
+  slice.
+- **Promote only when shared.** Move code to `app/components/shared/`, `app/hooks/`, or `app/lib/` only when multiple routes
+  use it or it clearly belongs to a broader domain. Never import from another route's slice; promote instead.
+- **Use generated types.** Type loaders, actions, and components with the route's generated `Route` types instead of
+  hand-written ones.
+
+## Data and the Server Boundary
+
+- **Render-critical data** comes from the route `loader`, so pages render fully on the server.
+- **Client-side interactions** (submitting, refreshing, polling) use the typed oRPC client and its TanStack Query
+  utilities. Never call the API with a hand-written `fetch`.
+- **Server-only code** uses the `.server.ts` suffix and is only imported from loaders, actions, or other server
+  modules. Secrets and environment values never reach a component.
+- The frontend may import browser-safe backend files (contracts, `constants.ts`, `*.errors.ts`) for types and shared
+  option values, never services, repositories, or `*.server.ts` files.
+
+## State
+
+- Server data belongs to loaders and TanStack Query. Shareable view state belongs in URL search params, and form input
+  belongs to the form.
+- Local state uses `useState` and props. Use Jotai only for client state shared across distant parts of the tree.
+- See [`jotai.md`](./jotai.md) for how to define, place, and use atoms.
+- URL state goes through nuqs, with one typed parser map per route shared by its loader and components. See
+  [`nuqs.md`](./nuqs.md).
+
+## Navigation
+
+- Use `Link`, `NavLink`, `Form` and `useNavigate` from `react-router`. Moving to another pathname fades the page on
+  its own; query, hash and nuqs updates stay instant. See [`view-transitions.md`](./view-transitions.md).
+- Don't pass React Router's `viewTransition` option. It starts a second view transition that cancels React's.
+
+## Forms
+
+- Each form has its own schema in its route's `schema.ts`, written for user experience (messages, when to validate).
+  Do not derive it from backend validation, even when the rules currently match; update both explicitly when a
+  requirement changes.
+- Shared option lists (select values, limits) are imported from the feature's browser-safe constants.
+- The server is the final authority. Show its per-field messages next to the matching field and its general errors in
+  a form-level message.
+- Disable submission while pending and keep the user's input after a failure.
+
+## Components
+
+- One component per file. File names are kebab-case; component names are PascalCase.
+- Components receive data through props. Fetching and mutation belong to the route module or its hooks, which keeps
+  components easy to reuse and preview.
+- Shared components are documented with Storybook stories. Stories are maintained UI documentation; keep them in sync
+  with the component.
+- Handle every state a user can see: loading, empty, error, and success.
+
+## Persian, RTL, and Accessibility
+
+- The document is `lang="fa"` and `dir="rtl"`. All user-facing text is Persian; code identifiers and developer
+  diagnostics stay in English.
+- Use logical directions, never physical ones: Tailwind `ms-`/`me-`, `ps-`/`pe-`, `start-`/`end-`, `text-start`
+  instead of `ml-`, `pl-`, `left-`, `text-left`. Mirror directional icons.
+- Format numbers and dates with `Intl` and the `fa-IR` locale. Inputs that accept numbers must accept Persian and
+  Arabic digits.
+- Use semantic elements and native controls first. Every input has a label, every action is keyboard-reachable, and
+  errors are announced to assistive technology.
+
+## Styling
+
+- Style with Tailwind utilities. Put design tokens (colors, fonts, spacing scale) in `app.css` instead of hard-coding
+  values in components.
+- Extract a component when a pattern repeats, not a utility class.
+
+## Testing
+
+- Cover consequential user flows (forms, critical navigation) with Playwright smoke tests.
+- Do not test styling, markup structure, or library behavior. Use Storybook for visual and accessibility review.
+
+## Adding a Route
+
+1. **Register** the route in `routes.ts` and create its flat slice folder.
+2. **Load** render-critical data in the `loader`; add `meta` and an `ErrorBoundary` where needed.
+3. **Build** the UI from shared components plus slice-private ones.
+4. **Forms**: add `schema.ts` and submit through the oRPC client, showing the server's field errors.
+5. **Promote** anything a second route now needs.
+6. **Test** the flow with Playwright if it is consequential.
+
+## Code Conventions
+
+General code conventions (imports without barrel files, object parameters, section dividers, comments, JSDoc) are
+defined in `CLAUDE.md` and apply to frontend code as well.
