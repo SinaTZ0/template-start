@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/vazirmatn";
 
-/* Tokens follow docs/app-identity.md. Names follow shadcn; the one call to action per view is `highlight`, and
+/* Tokens follow docs/frontend/app-identity.md. Names follow shadcn; the one call to action per view is `highlight`, and
    shadcn's `accent` is the quiet wash for hover and selected states. */
 
 @custom-variant dark (&:is(.dark *));
@@ -18,7 +18,7 @@
   --text-lg--line-height: calc(28 / 16);
 
   /* The app's type styles as `text-<name>`: size, line height and weight together. Small sizes and medium weights
-     keep the page quiet (docs/app-identity.md → Type); display, h1 and h2 drop one step on phones, below. */
+     keep the page quiet (docs/frontend/app-identity.md → Type); display, h1 and h2 drop one step on phones, below. */
   --text-display: 2.75rem;
   --text-display--line-height: 4.25rem;
   --text-display--font-weight: 700;
@@ -145,7 +145,7 @@
 
 /*===== Light Theme =====*/
 
-/* Placeholder palette: neutral grays and one primary. Replace these per project (docs/app-identity.md). */
+/* Placeholder palette: neutral grays and one primary. Replace these per project (docs/frontend/app-identity.md). */
 :root {
   --radius: 0.75rem;
 
@@ -285,7 +285,7 @@
   ::selection {
     @apply bg-accent text-foreground;
   }
-  /* A light icon line (docs/app-identity.md). Author CSS beats
+  /* A light icon line (docs/frontend/app-identity.md). Author CSS beats
      lucide's `stroke-width` attribute, so change it with a `stroke-*` class, not the `strokeWidth` prop. */
   :where(svg.lucide) {
     stroke-width: 1.5;
@@ -299,7 +299,7 @@
 /*===== Motion =====*/
 
 /* Page fade on client navigations: the site layout's `<ViewTransition>` tags the old and new page with the `page`
-   class (docs/view-transitions.md). `root` is the rest of the document (header, footer), which cross-fades alongside.
+   class (docs/frontend/view-transitions.md). `root` is the rest of the document (header, footer), which cross-fades alongside.
    Without these rules the browser's default cross-fade runs at 250ms. The page ignores input while it runs, so keep it
    short. */
 ::view-transition-group(root),

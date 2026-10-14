@@ -22,7 +22,7 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.url(),
   // Signs Altcha challenges so the server can verify a solution without storing the challenge.
   ALTCHA_HMAC_KEY: z.string().min(32),
-  // S3-compatible storage for uploaded images (SeaweedFS in development; docs/media.md). The app writes through this
+  // S3-compatible storage for uploaded images (SeaweedFS in development; docs/backend/media.md). The app writes through this
   // endpoint.
   S3_ENDPOINT: z.url(),
   S3_BUCKET_NAME: z.string().min(1),

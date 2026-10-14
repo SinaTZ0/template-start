@@ -1,7 +1,9 @@
-# Frontend Guideline (React Router Framework Mode)
+# Frontend Architecture (React Router Framework Mode)
 
 The frontend is organized by route. Each route slice owns everything that only it uses, and code moves to a shared
 location only when a second consumer needs it. The UI is in Persian and right-to-left.
+
+These are the rules. The steps for building a page are in [frontend-flow.md](../frontend-flow.md).
 
 ## Structure
 
@@ -26,7 +28,7 @@ app/
   hooks/                    # hooks shared by multiple routes
   atoms/                    # Jotai atoms shared by multiple routes
   lib/                      # shared helpers (browser-safe, or *.server.ts)
-  orpc/client.ts            # typed API client (see backend guideline)
+  orpc/client.ts            # typed API client (see ../backend/architecture.md)
 ```
 
 Not every slice needs every file. Start with the route module alone and split it out as it grows.
@@ -108,15 +110,6 @@ Not every slice needs every file. Start with the route module alone and split it
 
 - Cover consequential user flows (forms, critical navigation) with Playwright smoke tests.
 - Do not test styling, markup structure, or library behavior. Use Storybook for visual and accessibility review.
-
-## Adding a Route
-
-1. **Register** the route in `routes.ts` and create its flat slice folder.
-2. **Load** render-critical data in the `loader`; add `meta` and an `ErrorBoundary` where needed.
-3. **Build** the UI from shared components plus slice-private ones.
-4. **Forms**: add `schema.ts` and submit through the oRPC client, showing the server's field errors.
-5. **Promote** anything a second route now needs.
-6. **Test** the flow with Playwright if it is consequential.
 
 ## Code Conventions
 

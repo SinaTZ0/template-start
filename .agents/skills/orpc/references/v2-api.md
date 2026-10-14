@@ -1,7 +1,7 @@
 # oRPC v2 API Cheat Sheet
 
 Verified against the v2 docs (`2.0.0-beta`). Where this file and the installed `.d.ts` disagree, the types win.
-File names and layering follow `docs/backend-guideline.md`; that guideline wins on architecture, this file on API usage.
+File names and layering follow `docs/backend/architecture.md`; that guideline wins on architecture, this file on API usage.
 
 ## Contract (`@orpc/contract`, browser-safe)
 

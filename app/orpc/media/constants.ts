@@ -1,7 +1,7 @@
 import type { UserRole } from "~/lib/user-constants";
 
 /*===== Media Constants =====*/
-// Browser-safe values shared by the upload API, the image component and the forms. See docs/media.md.
+// Browser-safe values shared by the upload API, the image component and the forms. See docs/backend/media.md.
 
 /*===== Kinds =====*/
 export const MEDIA_KINDS = ["avatar", "image"] as const;

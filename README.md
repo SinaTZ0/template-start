@@ -42,23 +42,23 @@ Generate the secrets with `openssl rand -base64 32`.
 ```text
 app/
   routes.ts, root.tsx, app.css     route config, document shell, theme tokens
-  routes/<slice>/                  one flat folder per route (docs/frontend-guideline.md)
-  components/primitive/            this app's shadcn components (docs/components.md)
+  routes/<slice>/                  one flat folder per route (docs/frontend/architecture.md)
+  components/primitive/            this app's shadcn components (docs/frontend/components.md)
   components/shared/               app-made components used by several routes
   components/ui/                   untouched shadcn source, reference only
-  orpc/                            the API, one folder per feature (docs/backend-guideline.md)
+  orpc/                            the API, one folder per feature (docs/backend/architecture.md)
   lib/                             auth, storage, logger, session guard, helpers
   db/                              Drizzle schema, client, seed
-docs/                              guidelines; start with the one for the layer you touch
+docs/                              start at backend-flow.md or frontend-flow.md
 ```
 
 ## Starting a New Project
 
 1. Rename: `name` in `package.json` and `compose.dev.yaml`, `SITE_NAME` in `app/lib/site.ts`, the bucket name in
    `.env.example` and `compose.dev.yaml`.
-2. Fill in `docs/app-identity.md` and the colour tokens in `app/app.css`. Replace `public/favicon.ico`.
+2. Fill in `docs/frontend/app-identity.md` and the colour tokens in `app/app.css`. Replace `public/favicon.ico`.
 3. Update the first paragraph of `CLAUDE.md`.
 4. Build the first real feature by copying the shape of `note`, then delete the example (`app/orpc/note/`,
    `app/routes/notes*`, the `note` table, its entries in `contract.ts`, `router.ts` and `routes.ts`).
 5. Before production: turn on email verification once mail can be sent (`auth.server.ts`), give the S3 store real
-   credentials and a read-only public path (`docs/media.md`), and schedule the orphan-media cleanup if uploads matter.
+   credentials and a read-only public path (`docs/backend/media.md`), and schedule the orphan-media cleanup if uploads matter.

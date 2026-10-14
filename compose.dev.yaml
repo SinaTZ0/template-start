@@ -1,4 +1,4 @@
-# Development services only: Postgres and SeaweedFS (S3-compatible image storage, docs/media.md). The app itself runs
+# Development services only: Postgres and SeaweedFS (S3-compatible image storage, docs/backend/media.md). The app itself runs
 # on the host with `pnpm dev`. Start with `pnpm services`; the values match `.env.example`.
 
 # Pinned so the volumes keep their names even when the folder is renamed. Rename per project.
@@ -21,7 +21,7 @@ services:
       timeout: 5s
       retries: 30
 
-  # S3 without authentication: fine on a development machine, never in production (docs/media.md, Configuration).
+  # S3 without authentication: fine on a development machine, never in production (docs/backend/media.md, Configuration).
   # Each bucket claims several volumes up front, and the volume count is derived from free disk / volume size. With the
   # default 30 GB volumes a laptop runs out after two or three buckets ("No writable volumes"), so volumes stay small.
   seaweedfs:

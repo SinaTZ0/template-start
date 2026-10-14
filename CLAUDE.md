@@ -2,10 +2,12 @@
 
 These instructions apply to the entire repository unless overridden by a more specific `AGENTS.md` in a subdirectory.
 
-This is a React Router v8 application using Framework Mode, started from the project template. The application's user-facing content is in Persian and right-to-left. Its look and feel is defined in `docs/app-identity.md`.
+This is a React Router v8 application using Framework Mode, started from the project template. The application's user-facing content is in Persian and right-to-left. Its look and feel is defined in `docs/frontend/app-identity.md`.
 
-- Backend: contract-first oRPC (`docs/backend-guideline.md`), Better-Auth email + password with an Altcha sign-up captcha, Drizzle + Postgres, image uploads to S3-compatible storage (`docs/media.md`), and pino logging with per-request timing (`docs/logging.md`).
-- Frontend: flat route slices and primitives (`docs/frontend-guideline.md`, `docs/components.md`).
+The docs have two entry points. Start backend work at `docs/backend-flow.md` and frontend work at `docs/frontend-flow.md`. Each one is a list of steps that links to the rule docs in `docs/backend/` and `docs/frontend/` at the step where they apply.
+
+- Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing (`docs/backend/logging.md`).
+- Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`).
 - The `note` feature (`app/orpc/note/`, `app/routes/notes/`) is the template's worked example. Copy its shape for new features; delete it once the project has its own.
 
 ## Working Directory
@@ -48,7 +50,7 @@ Preserve established local conventions unless a rule below explicitly says other
 
 ### Components
 
-- Primitives are this app's versions of shadcn components and live in `app/components/primitive/<name>/` as `<name>.tsx`, `<name>.styles.ts` and `<name>.stories.tsx`. `app/components/ui/` holds the untouched shadcn source as reference only: never edit or import from it. Read `docs/components.md` before creating or restyling a component.
+- Primitives are this app's versions of shadcn components and live in `app/components/primitive/<name>/` as `<name>.tsx`, `<name>.styles.ts` and `<name>.stories.tsx`. `app/components/ui/` holds the untouched shadcn source as reference only: never edit or import from it. Read `docs/frontend/components.md` before creating or restyling a component.
 - Write style maps with `defineStyles` and the shared group names; join them with `joinStyles` / `composeStyles`.
 - If a shadcn component has no primitive yet, create one from its `ui/` source, keeping shadcn's API and `data-slot`s.
 - App-made components with no shadcn original (e.g. `form-alert`, `site-link`) live in `app/components/shared/<name>/` once more than one route uses them.

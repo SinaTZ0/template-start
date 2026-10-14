@@ -1,6 +1,6 @@
 /*===== Style Groups =====*/
 
-/** The shared vocabulary for naming Tailwind groups; see docs/components.md. */
+/** The shared vocabulary for naming Tailwind groups; see docs/frontend/components.md. */
 type StyleGroup =
   | "layout"
   | "geometry"

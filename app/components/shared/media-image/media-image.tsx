@@ -4,7 +4,7 @@ import type { Media } from "~/orpc/media/contract";
 
 /*===== Media Image =====*/
 /**
- * Renders one variant of an uploaded image (docs/media.md).
+ * Renders one variant of an uploaded image (docs/backend/media.md).
  *
  * The `<img>` carries the variant's intrinsic `width` and `height`, so the browser reserves its space before it loads
  * (no layout shift), and the blurred placeholder shows behind it meanwhile. Size it with CSS (`className`); the

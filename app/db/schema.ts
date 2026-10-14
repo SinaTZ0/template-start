@@ -86,7 +86,7 @@ export const verification = pgTable(
 );
 
 /*===== Media =====*/
-// One row per uploaded image (docs/media.md). The row's id is the `mediaId` in the storage key, and it is inserted only
+// One row per uploaded image (docs/backend/media.md). The row's id is the `mediaId` in the storage key, and it is inserted only
 // after every variant is in the bucket. Entities point to it with a nullable foreign key (`note.image_media_id`, ...).
 
 export const media = pgTable(

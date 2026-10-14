@@ -13,7 +13,7 @@
 
 - `app/components/ui/` holds the untouched shadcn source, with every component installed. It is reference material only: never edit it and never import from it. Read it only when creating a primitive.
 - `app/components/shared/` holds app-made components used by more than one route: things with no shadcn original, such as `form-alert`, `site-link`, `media-image` and `theme-toggle`. They use the same one-folder-per-component layout, with a `<name>.styles.ts` only when the component has its own style map, and a story for anything visible. The shadcn API rule below doesn't apply to them; they compose primitives instead.
-- Route-specific pieces stay in their route slice and move to `shared/` when a second route needs them; see [frontend-guideline.md](./frontend-guideline.md).
+- Route-specific pieces stay in their route slice and move to `shared/` when a second route needs them; see [architecture.md](./architecture.md).
 
 Import directly from the owning file. `buttonVariants` and other CVA helpers come from the `*.styles.ts` file.
 
@@ -71,7 +71,7 @@ Prefer a CVA variant over `data-[size=…]:` selectors on the element itself. Ke
 
 ## Changing a primitive
 
-A primitive's styles change every page that uses it, so follow the "Prepare shared pieces" step in [design-flow.md](./design-flow.md). Before you change a default or add a variant, check the existing consumers and the other primitives that compose it, because some rely on its slots and selectors (`data-slot`, `in-data-[slot=button-group]`, `has-data-[icon=…]`, `aria-invalid`). Then update the story.
+A primitive's styles change every page that uses it, so follow the "Prepare shared pieces" step in [frontend-flow.md](../frontend-flow.md). Before you change a default or add a variant, check the existing consumers and the other primitives that compose it, because some rely on its slots and selectors (`data-slot`, `in-data-[slot=button-group]`, `has-data-[icon=…]`, `aria-invalid`). Then update the story.
 
 ## Whole-card links
 

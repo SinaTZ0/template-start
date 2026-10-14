@@ -1,7 +1,9 @@
-# Backend Guideline (oRPC)
+# Backend Architecture (oRPC)
 
 The backend is a contract-first oRPC API organized by feature. Each feature owns everything needed to understand and
 change it, each layer has one job, and dependencies only point inward toward persistence.
+
+These are the rules. The steps for adding a feature are in [backend-flow.md](../backend-flow.md).
 
 ## Structure
 
@@ -151,17 +153,7 @@ return { id: result.id };
   and rethrow the same error in services.
 - Production writes JSON lines to stdout; development pretty-prints. `LOG_LEVEL` sets the threshold.
 - Every request logs its duration and time per kind of work. Wrap slow work that isn't timed automatically in
-  `span(...)` from `app/lib/trace.server.ts`. Details, and how to read a slow request's timeline: `docs/logging.md`.
-
-## Adding a Feature
-
-1. **Contract** — input/output schemas and declared errors; register it in the root `contract.ts`.
-2. **Validation and repository** — domain schema and the queries the feature needs.
-3. **Service** — rules and orchestration, returning explicit outcomes.
-4. **Mapper** — only if the stored and public shapes differ.
-5. **Procedure** — attach middleware, call the service, map outcomes; register it in `router.ts`.
-6. **HTTP specifics** — status codes or method rules in `handler.server.ts`, if the defaults don't fit.
-7. **Test** — an integration test, if the behavior is consequential.
+  `span(...)` from `app/lib/trace.server.ts`. Details, and how to read a slow request's timeline: [logging.md](./logging.md).
 
 ## Naming
 

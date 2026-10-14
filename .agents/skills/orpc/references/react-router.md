@@ -1,6 +1,6 @@
 # oRPC in React Router Framework Mode
 
-The project is React Router v8 in Framework Mode with SSR. Read `docs/frontend-guideline.md` for the route-side
+The project is React Router v8 in Framework Mode with SSR. Read `docs/frontend/architecture.md` for the route-side
 rules. Upstream page: `https://orpc.dev/docs/adapters/react-router.md`.
 
 ## Mounting the Handler

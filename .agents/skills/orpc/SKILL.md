@@ -12,9 +12,10 @@ differently, so never write oRPC code from memory: check it against the v2 docs 
 
 ## Before Writing Code
 
-1. **Read the project architecture.** `docs/backend-guideline.md` defines the contract-first `app/orpc/` layout,
-   layers, error rules, middleware placement, and naming. `docs/frontend-guideline.md` defines how routes consume
-   the API. Those guidelines win over generic oRPC examples. This skill covers the library API only.
+1. **Read the project architecture.** `docs/backend-flow.md` gives the steps for adding a feature.
+   `docs/backend/architecture.md` defines the contract-first `app/orpc/` layout, layers, error rules, middleware
+   placement, and naming. `docs/frontend/architecture.md` defines how routes consume the API. Those docs win over
+   generic oRPC examples. This skill covers the library API only.
 2. **Check the installed version.** Read `version` in `node_modules/@orpc/server/package.json`. All `@orpc/*`
    packages must be on the same version; mixing betas breaks the wire format and types.
 3. **Avoid v1 habits.** Read `references/v1-pitfalls.md` whenever you touch builders, middleware, errors, handlers,
