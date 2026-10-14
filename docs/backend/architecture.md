@@ -13,7 +13,8 @@ app/orpc/
   router.ts                 # composes feature procedures into the API router
   implementer.server.ts     # implements the contract, declares base context, applies global middleware
   handler.server.ts         # HTTP adapter: RPC handler, plugins, status codes, allowed methods
-  client.ts                 # typed browser client, built from the contract only
+  client.ts                 # typed browser client and TanStack Query utils, built from the contract only
+  server-client.server.ts   # in-process client for loaders and actions, created per request
   errors.ts                 # shared error data shape, common errors, error-code → HTTP status map
   middleware/
     <name>/
@@ -113,10 +114,11 @@ return { id: result.id };
 
 ### Middleware
 
-- **Global** middleware (error normalization and its logging) is applied once in the implementer so it wraps validation too.
+- **Global** middleware (procedure timing, then error normalization and its logging) is applied once in the
+  implementer, so it wraps validation too.
   The router is assembled with the undecorated implementer, so global middleware never runs twice.
-- **Feature-level** middleware is opt-in per procedure with `.use()`. It provides dependencies (e.g. the database) or
-  enforces guards (e.g. auth, origin checks) and passes results through `context`.
+- **Feature-level** middleware is opt-in per procedure with `.use()`. It provides dependencies (`provideDbMiddleware`)
+  or enforces guards (`requireUserMiddleware`, origin checks) and passes results through `context`.
 - Each middleware lives in its own folder with its errors, and stays generic: it may depend on the shape of the input
   (e.g. `{ token: string }`), never on a specific feature.
 - Middleware used by only one feature may stay inside that feature's `procedure.ts`.
@@ -145,15 +147,14 @@ return { id: result.id };
 
 ### Logging
 
-- Server code logs through `app/lib/logger.server.ts` (pino), never `console`. Take a tagged child per module:
-  `const log = createLogger("media")`.
-- Log errors under the `err` key so the stack and cause are serialized: `log.error({ err, mediaId }, "message")`. Keep
-  the message short and constant; put variable details in the object so logs stay searchable.
+- Server code logs through a tagged pino child (`createLogger("media")` from `app/lib/logger.server.ts`), never
+  `console`. Errors go under the `err` key.
 - The global error middleware logs every unexpected failure once, with the `errorId` the client receives. Don't log
   and rethrow the same error in services.
-- Production writes JSON lines to stdout; development pretty-prints. `LOG_LEVEL` sets the threshold.
-- Every request logs its duration and time per kind of work. Wrap slow work that isn't timed automatically in
-  `span(...)` from `app/lib/trace.server.ts`. Details, and how to read a slow request's timeline: [logging.md](./logging.md).
+- Wrap slow work that isn't timed automatically in `span(...)` from `app/lib/trace.server.ts`.
+
+How to write logs, what each request's timing line means, and how to read a slow request's timeline:
+[logging.md](./logging.md).
 
 ## Naming
 

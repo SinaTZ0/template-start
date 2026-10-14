@@ -28,9 +28,10 @@ The `note` feature (`app/orpc/note/`) is the worked example. Copy its shape.
    parameter and returns explicit outcomes instead of throwing ([architecture.md](./backend/architecture.md) →
    Services return outcomes, Explicit dependencies). Image uploads follow [media.md](./backend/media.md).
 5. **Mapper**: add `mapper.ts` only if the stored and public shapes differ.
-6. **Procedure**: in `procedure.ts`, attach the middleware it needs (database, `requireUserMiddleware`,
-   `requireRoleMiddleware`), call the service, and map each failure outcome to a declared contract error. Register it
-   in `app/orpc/router.ts` ([architecture.md](./backend/architecture.md) → Middleware, Auth).
+6. **Procedure**: in `procedure.ts`, attach the middleware it needs (`requireUserMiddleware` or
+   `requireRoleMiddleware`, then `provideDbMiddleware`), call the service, and map each failure outcome to a declared
+   contract error. Register it in `app/orpc/router.ts` ([architecture.md](./backend/architecture.md) → Middleware,
+   Auth).
 7. **HTTP specifics**: set status codes or method rules in `handler.server.ts`, only if the defaults don't fit.
 
 ## Check
@@ -39,5 +40,5 @@ The `note` feature (`app/orpc/note/`) is the worked example. Copy its shape.
    `span(...)` ([logging.md](./backend/logging.md)).
 9. **Test**: add an `integration.test.ts` if the behavior is consequential: a success case and the failures that
    matter ([architecture.md](./backend/architecture.md) → Testing). Run `pnpm lint` and `pnpm typecheck`.
-10. **Use it**: a page reads the procedure in its `loader` or calls it through the oRPC client. Build that side with
-    [frontend-flow.md](./frontend-flow.md).
+10. **Use it**: a page reads the procedure in its `loader` through `createServerClient(request)` or calls it from the
+    browser through `orpc` in `app/orpc/client.ts`. Build that side with [frontend-flow.md](./frontend-flow.md).

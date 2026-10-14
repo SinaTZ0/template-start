@@ -18,6 +18,7 @@ app/
       components/           # components used only by this route
       hooks/                # hooks used only by this route
       queries.ts            # data-fetching options used only by this route
+      search-params.ts      # nuqs parsers shared by this route's loader and components
       atoms.ts              # Jotai atoms used only by this route
       schema.ts             # form schemas owned by this route
       *.server.ts           # server-only helpers for this route's loader/action
@@ -28,7 +29,7 @@ app/
   hooks/                    # hooks shared by multiple routes
   atoms/                    # Jotai atoms shared by multiple routes
   lib/                      # shared helpers (browser-safe, or *.server.ts)
-  orpc/client.ts            # typed API client (see ../backend/architecture.md)
+  orpc/client.ts            # typed browser API client (see ../backend/architecture.md)
 ```
 
 Not every slice needs every file. Start with the route module alone and split it out as it grows.
@@ -40,16 +41,22 @@ Not every slice needs every file. Start with the route module alone and split it
 - **Colocate.** The route module, its exports (`loader`, `action`, `clientLoader`, `clientAction`, `meta`, `headers`,
   `ErrorBoundary`), its `./+types/...` imports, and its private components, hooks, queries, and schemas all live in its
   slice.
-- **Promote only when shared.** Move code to `app/components/shared/`, `app/hooks/`, or `app/lib/` only when multiple routes
-  use it or it clearly belongs to a broader domain. Never import from another route's slice; promote instead.
+- **Promote only when shared.** Move code to `app/components/shared/`, `app/hooks/`, or `app/lib/` only when multiple
+  routes use it or it clearly belongs to a broader domain. Never import from another route's slice; promote instead.
 - **Use generated types.** Type loaders, actions, and components with the route's generated `Route` types instead of
   hand-written ones.
 
 ## Data and the Server Boundary
 
-- **Render-critical data** comes from the route `loader`, so pages render fully on the server.
-- **Client-side interactions** (submitting, refreshing, polling) use the typed oRPC client and its TanStack Query
-  utilities. Never call the API with a hand-written `fetch`.
+- **Render-critical data** comes from the route `loader`, so pages render fully on the server. Loaders and actions
+  call procedures in-process with `createServerClient(request)` (`app/orpc/server-client.server.ts`); errors arrive as
+  `ORPCError` and HTTP status codes don't apply.
+- **Client-side interactions** (submitting, refreshing, polling) use the TanStack Query utilities in
+  `app/orpc/client.ts`, e.g. `useMutation(orpc.note.create.mutationOptions(...))`. Never call the API with a
+  hand-written `fetch`. After a mutation that changes loader data, refresh it with `useRevalidator()` instead of
+  patching local copies.
+- Layout routes guard pages with `requireSession({ roles })` as route middleware
+  (`app/lib/session-guard.server.ts`). Procedures check auth again on their own.
 - **Server-only code** uses the `.server.ts` suffix and is only imported from loaders, actions, or other server
   modules. Secrets and environment values never reach a component.
 - The frontend may import browser-safe backend files (contracts, `constants.ts`, `*.errors.ts`) for types and shared
@@ -76,8 +83,8 @@ Not every slice needs every file. Start with the route module alone and split it
   Do not derive it from backend validation, even when the rules currently match; update both explicitly when a
   requirement changes.
 - Shared option lists (select values, limits) are imported from the feature's browser-safe constants.
-- The server is the final authority. Show its per-field messages next to the matching field and its general errors in
-  a form-level message.
+- The server is the final authority. `describeApiFailure` (`app/lib/api-error.ts`) turns an API error into per-field
+  messages, shown next to the matching fields, and a general message for the form's `FormAlert`.
 - Disable submission while pending and keep the user's input after a failure.
 
 ## Components

@@ -1,6 +1,6 @@
 # Component Conventions
 
-## Where components live
+## Where Components Live
 
 - `app/components/primitive/` holds this app's versions of shadcn components. Every shadcn component the app uses lives here, restyled or not, so all of them manage their classes with `defineStyles`. Each one owns its folder:
 
@@ -17,7 +17,7 @@
 
 Import directly from the owning file. `buttonVariants` and other CVA helpers come from the `*.styles.ts` file.
 
-## Creating a primitive
+## Creating a Primitive
 
 Build the primitive from the shadcn source in `ui/` instead of writing it from memory:
 
@@ -27,7 +27,7 @@ Build the primitive from the shadcn source in `ui/` instead of writing it from m
 4. If it composes other shadcn components, import their primitives, creating them first if they don't exist.
 5. Add `<name>.stories.tsx`.
 
-## Editing styles
+## Editing Styles
 
 Wrap style maps in `defineStyles` from `primitive/styles.ts`. It keeps the classes split into named groups, keeps their keys typed for CVA, and lets Prettier sort the Tailwind classes inside it. It does no merging at runtime.
 
@@ -69,10 +69,10 @@ Export the variant maps as `twVariant`, `twSize`, and so on, so stories can buil
 
 Prefer a CVA variant over `data-[size=…]:` selectors on the element itself. Keep the `data-*` attribute as well when a child or a parent reads it, as CardTitle does with `group-data-[size=sm]/card`.
 
-## Changing a primitive
+## Changing a Primitive
 
 A primitive's styles change every page that uses it, so follow the "Prepare shared pieces" step in [frontend-flow.md](../frontend-flow.md). Before you change a default or add a variant, check the existing consumers and the other primitives that compose it, because some rely on its slots and selectors (`data-slot`, `in-data-[slot=button-group]`, `has-data-[icon=…]`, `aria-invalid`). Then update the story.
 
-## Whole-card links
+## Whole-Card Links
 
 A card that is a link renders as that link: `<Card render={<SiteLink href="…" />}>`. Don't wrap a card in a link or hand-write focus classes around it. The card then gets the card lift and focus ring, and its `CardTitle`, `CardMedia` and any `TextLink` call without `href` react to its hover and keyboard focus (they key off `[a:hover_&]`, so plain cards stay still). Put the image in `CardMedia`, with `fit="top"` or `fit="contain"` for posters.

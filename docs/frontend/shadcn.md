@@ -1,13 +1,11 @@
----
-title: Components
-description: Here you can find all the components available in the library. We are working on adding more components.
----
+# shadcn Components
 
-## New Components
+The shadcn catalogue, for picking the component that fits a standard control (step 5 of
+[frontend-flow.md](../frontend-flow.md)). Each link opens shadcn's page with usage and examples.
 
-- [Questionnaire](https://ui.shadcn.com/docs/components/questionnaire): A multi-step questionnaire with single-choice, multiple-choice, freeform, and skippable questions.
-
-## All Components
+Every component's source is in `app/components/ui/`, but the app only uses primitives from
+`app/components/primitive/<name>/`. If the one you pick has no primitive yet, create it first
+([components.md](./components.md) → Creating a Primitive).
 
 - [Accordion](https://ui.shadcn.com/docs/components/accordion): A vertically stacked set of interactive headings that each reveal a section of content.
 - [Alert](https://ui.shadcn.com/docs/components/alert): Displays a callout for user attention.
@@ -29,8 +27,8 @@ description: Here you can find all the components available in the library. We a
 - [Combobox](https://ui.shadcn.com/docs/components/combobox): Autocomplete input with a list of suggestions.
 - [Command](https://ui.shadcn.com/docs/components/command): Command menu for search and quick actions.
 - [Context Menu](https://ui.shadcn.com/docs/components/context-menu): Displays a menu of actions triggered by a right click.
-- [Data Table](https://ui.shadcn.com/docs/components/data-table): Powerful table and datagrids built using TanStack Table.
-- [Date Picker](https://ui.shadcn.com/docs/components/date-picker): A date picker component with range and presets.
+- [Data Table](https://ui.shadcn.com/docs/components/data-table): Powerful table and datagrids built using TanStack Table. Not in `ui/`: a recipe of `table` and TanStack Table.
+- [Date Picker](https://ui.shadcn.com/docs/components/date-picker): A date picker component with range and presets. Not in `ui/`: a recipe of `popover` and `calendar`.
 - [Dialog](https://ui.shadcn.com/docs/components/dialog): A window overlaid on either the primary window or another dialog window, rendering the content underneath inert.
 - [Direction](https://ui.shadcn.com/docs/components/direction): A provider component that sets the text direction for your application.
 - [Drawer](https://ui.shadcn.com/docs/components/drawer): A drawer component for React.
@@ -72,8 +70,4 @@ description: Here you can find all the components available in the library. We a
 - [Toggle](https://ui.shadcn.com/docs/components/toggle): A two-state button that can be either on or off.
 - [Toggle Group](https://ui.shadcn.com/docs/components/toggle-group): A set of two-state buttons that can be toggled on or off.
 - [Tooltip](https://ui.shadcn.com/docs/components/tooltip): A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it.
-- [Typography](https://ui.shadcn.com/docs/components/typography): Styles for headings, paragraphs, lists, etc.
-
----
-
-Can't find what you need? Try the [registry directory](/docs/directory) for community-maintained components.
+- [Typography](https://ui.shadcn.com/docs/components/typography): Styles for headings, paragraphs, lists, etc. Not in `ui/`: use the type styles in [app-identity.md](./app-identity.md) → Type.

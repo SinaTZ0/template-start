@@ -24,7 +24,7 @@ The `notes` route (`app/routes/notes/`) is the worked example.
 2. **App context**: Read [app-identity.md](./frontend/app-identity.md). Note how this page's copy follows the tone
    rules. Don't create a new mood, tone or theme for one page.
 3. **Content inventory**: before choosing any layout, list what the page really shows, using the real content (the
-   route's `content.ts` or the API data), not placeholder text:
+   page's own copy or the API data), not placeholder text:
    - each image: a photo or an image that contains text (poster, flyer, certificate), and its aspect ratio;
    - how many items each section has, and how long the titles and summaries run;
    - which content is time-sensitive (announcements, deadlines) and which is evergreen.
@@ -50,7 +50,7 @@ The `notes` route (`app/routes/notes/`) is the worked example.
    - **Custom pieces**: build anything more distinctive in the route slice, composing primitives where they fit.
    - **No decorative containers**: add a card, tile or panel only for something you can click or a standalone group of
      content. Whitespace and dividers separate everything else. Items that share a container fill it edge to edge
-     ([app-identity.md](./frontend/app-identity.md) → Containers).
+     ([app-identity.md](./frontend/app-identity.md) → Shape & depth).
 
 ## Build
 
@@ -59,8 +59,10 @@ The `notes` route (`app/routes/notes/`) is the worked example.
    effects. Base styles follow app-identity, never one page's needs, because a change affects every page. Update the
    story and check it in light, dark and side by side (`pnpm storybook`).
 7. **Route and data**: register the route in `routes.ts` and create its flat slice folder
-   ([architecture.md](./frontend/architecture.md) → Route Slices). Load render-critical data in the `loader`; add
-   `meta` and an `ErrorBoundary` where needed.
+   ([architecture.md](./frontend/architecture.md) → Route Slices). Guard it with `requireSession` on a layout route if
+   it needs a signed-in user. Load render-critical data in the `loader` through `createServerClient(request)`; add
+   `meta` and an `ErrorBoundary` where needed ([architecture.md](./frontend/architecture.md) → Data and the Server
+   Boundary).
    - The page's data comes from oRPC procedures. If one it needs doesn't exist yet, add it first with
      [backend-flow.md](./backend-flow.md).
    - Shareable view state (filters, tabs, pagination) goes in the URL through [nuqs](./frontend/nuqs.md); client state
@@ -71,7 +73,8 @@ The `notes` route (`app/routes/notes/`) is the worked example.
    - The app is right-to-left. Use logical utilities (`ms`/`me`, `ps`/`pe`, `start`/`end`, `text-start`), never
      `left`/`right`.
    - Build every state from the brief: loading, empty, error and success.
-9. **Forms**: add the form's `schema.ts` and submit through the oRPC client, showing the server's field errors
+9. **Forms**: add the form's `schema.ts`, submit with `useMutation(orpc.<feature>.<procedure>.mutationOptions())`,
+   show the server's errors through `describeApiFailure`, and revalidate the loader on success
    ([architecture.md](./frontend/architecture.md) → Forms). Image fields follow [media.md](./backend/media.md).
 10. **Promote**: move a custom piece to `components/shared/` (or a hook to `app/hooks/`) once a second route needs it.
 

@@ -123,8 +123,8 @@ properties (never `transition-all`).
 
 These effects belong to primitives and shared components, so routes get them by composing, not by repeating classes.
 
-**Reduced motion**: apply transforms with `motion-safe:` and drop colour transitions with `motion-reduce:transition-none`;
-the end states still apply instantly.
+**Reduced motion**: apply transforms with `motion-safe:` and drop colour transitions with
+`motion-reduce:transition-none`; the end states still apply instantly.
 
 ### Iconography & imagery
 
