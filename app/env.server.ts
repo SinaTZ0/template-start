@@ -11,6 +11,9 @@ dotenv.config({ quiet: true });
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  // A request or query at least this slow is logged as a warning with its timing breakdown (`app/lib/trace.server.ts`).
+  LOG_SLOW_REQUEST_MS: z.coerce.number().int().positive().default(1000),
+  LOG_SLOW_QUERY_MS: z.coerce.number().int().positive().default(200),
   // Accept both URI schemes node-postgres understands; reject anything else early.
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   // Signs session cookies and tokens. Rotating it signs every user out.

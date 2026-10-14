@@ -150,6 +150,8 @@ return { id: result.id };
 - The global error middleware logs every unexpected failure once, with the `errorId` the client receives. Don't log
   and rethrow the same error in services.
 - Production writes JSON lines to stdout; development pretty-prints. `LOG_LEVEL` sets the threshold.
+- Every request logs its duration and time per kind of work. Wrap slow work that isn't timed automatically in
+  `span(...)` from `app/lib/trace.server.ts`. Details, and how to read a slow request's timeline: `docs/logging.md`.
 
 ## Adding a Feature
 

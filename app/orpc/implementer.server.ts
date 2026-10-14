@@ -2,6 +2,7 @@ import { implement } from "@orpc/server";
 
 import { contract } from "~/orpc/contract";
 import { handleErrorsMiddleware } from "~/orpc/middleware/handle-errors/handle-errors.middleware";
+import { traceProcedureMiddleware } from "~/orpc/middleware/trace/trace.middleware";
 
 /*===== Implementer =====*/
 // Undecorated: only assembles the router (`router.ts`). Declares the initial context every
@@ -10,5 +11,6 @@ export const implementer = implement(contract).$context<{ headers: Headers }>();
 
 /*===== Base =====*/
 // Every procedure is built from `base`, so global middleware wraps contract validation exactly
-// once. Never assemble the router from `base`: v2 doesn't dedupe, so it would run twice.
-export const base = implementer.use(handleErrorsMiddleware);
+// once. Never assemble the router from `base`: v2 doesn't dedupe, so it would run twice. Tracing goes first so its
+// span includes the error handling.
+export const base = implementer.use(traceProcedureMiddleware).use(handleErrorsMiddleware);

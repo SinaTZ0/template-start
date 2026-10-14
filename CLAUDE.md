@@ -4,7 +4,7 @@ These instructions apply to the entire repository unless overridden by a more sp
 
 This is a React Router v8 application using Framework Mode, started from the project template. The application's user-facing content is in Persian and right-to-left. Its look and feel is defined in `docs/app-identity.md`.
 
-- Backend: contract-first oRPC (`docs/backend-guideline.md`), Better-Auth email + password with an Altcha sign-up captcha, Drizzle + Postgres, image uploads to S3-compatible storage (`docs/media.md`), and pino logging (`app/lib/logger.server.ts`).
+- Backend: contract-first oRPC (`docs/backend-guideline.md`), Better-Auth email + password with an Altcha sign-up captcha, Drizzle + Postgres, image uploads to S3-compatible storage (`docs/media.md`), and pino logging with per-request timing (`docs/logging.md`).
 - Frontend: flat route slices and primitives (`docs/frontend-guideline.md`, `docs/components.md`).
 - The `note` feature (`app/orpc/note/`, `app/routes/notes/`) is the template's worked example. Copy its shape for new features; delete it once the project has its own.
 

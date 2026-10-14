@@ -8,6 +8,9 @@ import * as schema from "~/db/schema";
 import { env } from "~/env.server";
 import { verifyAltchaPayload } from "~/lib/altcha.server";
 import { ACCOUNT_BLOCKED_CODE, ALTCHA_HEADER, CAPTCHA_FAILED_CODE } from "~/lib/auth-constants";
+import { createLogger } from "~/lib/logger.server";
+
+const log = createLogger("auth");
 
 /*===== Auth Instance =====*/
 /**
@@ -23,6 +26,15 @@ export const auth = betterAuth({
   // Vite moves to the next free port (5174, …) when 5173 is taken, and Better-Auth rejects sign-in
   // and sign-up from any origin other than `baseURL`. Trust every local port in development only.
   trustedOrigins: env.NODE_ENV === "development" ? ["http://localhost:*", "http://127.0.0.1:*"] : [],
+  // Better-Auth logs through `console` by default, with full stacks. Route it through the app's logger, which trims
+  // them and tags the request; `LOG_LEVEL` decides what is written.
+  logger: {
+    level: "debug",
+    log: (level, message, ...args: unknown[]) => {
+      const err = args.find((arg) => arg instanceof Error);
+      log[level](err ? { err } : args.length > 0 ? { details: args } : {}, message);
+    },
+  },
   emailAndPassword: {
     enabled: true,
     // No mail provider in the template: accounts work immediately, and sign-up signs the user in. Turn verification

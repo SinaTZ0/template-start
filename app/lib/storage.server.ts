@@ -1,6 +1,7 @@
 import { DeleteObjectsCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 import { env } from "~/env.server";
+import { span } from "~/lib/trace.server";
 import type { MediaKind } from "~/orpc/media/constants";
 
 /*===== S3 Client =====*/
@@ -18,6 +19,12 @@ function getClient(): S3Client {
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
   });
+  // Every command becomes a `storage` span of the current request (e.g. `PutObject`), retries included.
+  client.middlewareStack.add(
+    (next, context) => (args) =>
+      span({ kind: "storage", name: (context.commandName ?? "S3").replace(/Command$/, "") }, () => next(args)),
+    { step: "initialize", name: "traceStorage" },
+  );
   return client;
 }
 

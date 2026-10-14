@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Database } from "~/db/client.server";
 import { createLogger } from "~/lib/logger.server";
 import { deleteObjects, mediaKey, putObject } from "~/lib/storage.server";
+import { span } from "~/lib/trace.server";
 import type { UserRole } from "~/lib/user-constants";
 import { MEDIA_UPLOAD_KINDS_BY_ROLE, MEDIA_VARIANTS } from "~/orpc/media/constants";
 import type { MediaKind } from "~/orpc/media/constants";
@@ -47,7 +48,8 @@ export async function uploadMedia({
 }): Promise<UploadMediaResult> {
   if (!MEDIA_UPLOAD_KINDS_BY_ROLE[user.role]?.includes(kind)) return { kind: "forbidden" };
 
-  const processed = await processImage({ file, kind });
+  // Resizing and encoding is CPU work no other span covers.
+  const processed = await span({ kind: "task", name: "media.processImage" }, () => processImage({ file, kind }));
   if (processed.kind === "invalid") return { kind: "invalid", fields: { file: processed.message } };
   const { image } = processed;
 
