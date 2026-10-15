@@ -15,6 +15,9 @@ const envSchema = z.object({
   // A request or query at least this slow is logged as a warning with its timing breakdown (`app/lib/trace.server.ts`).
   LOG_SLOW_REQUEST_MS: z.coerce.number().int().positive().default(1000),
   LOG_SLOW_QUERY_MS: z.coerce.number().int().positive().default(200),
+  // Logs a failed query's parameters instead of `(hidden)`. They can hold personal data, so keep it off in production
+  // unless you are chasing a specific bug. `stringbool` reads "false" and "0" as false, unlike `z.coerce.boolean()`.
+  LOG_QUERY_PARAMS: z.stringbool().default(false),
   // Accept both URI schemes node-postgres understands; reject anything else early.
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   // Signs session cookies and tokens. Rotating it signs every user out.

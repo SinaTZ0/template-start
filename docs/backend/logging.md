@@ -46,8 +46,9 @@ The `err` serializer keeps errors short:
 - **Small properties only.** Primitives and objects up to 500 characters of JSON are kept (oRPC's `code` and `data`,
   Postgres's `code` and `constraint`, AWS's `$metadata`). Postgres's internal `file`, `line` and `routine` are dropped.
 - **No query parameters.** Drizzle puts a failed query's parameters in its message and on the error. They can hold
-  personal data, so the message shows `params: (hidden)` and the property is dropped. Long messages are cut at 1000
-  characters.
+  personal data, so the message shows `params: (hidden)` and the property is dropped. Set `LOG_QUERY_PARAMS=true` to
+  keep them in the message while debugging. Long messages are cut at 1000 characters, so a long parameter list can
+  still be cut short.
 - **Non-errors too.** A thrown plain object, or a cause that isn't an `Error`, is serialized the same way without a
   stack, so it can't bypass these limits.
 - **Never throws.** If reading the error fails (a throwing getter, a Proxy), the line is still written with a
@@ -126,6 +127,7 @@ A query slower than `LOG_SLOW_QUERY_MS` also gets its own `slow query` warning, 
 | `LOG_LEVEL`           | `info`  | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent` |
 | `LOG_SLOW_REQUEST_MS` | `1000`  | A request at least this slow is a warning with its timeline  |
 | `LOG_SLOW_QUERY_MS`   | `200`   | A query at least this slow is logged on its own              |
+| `LOG_QUERY_PARAMS`    | `false` | Log a failed query's parameters (may hold personal data)     |
 
 At `LOG_LEVEL=warn`, only the slow, failed and erroring requests are written, which suits a busy production server.
 

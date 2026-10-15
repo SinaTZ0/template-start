@@ -16,8 +16,8 @@ const MAX_TEXT = 1000;
 const MAX_PROP_JSON = 500;
 
 // `cause` and `stack` are handled on their own. Postgres errors carry the C file and routine that raised them, which
-// only matter to Postgres developers. Drizzle copies the query and its parameters onto its errors: the query is
-// already in the message, and the parameters can hold personal data.
+// only matter to Postgres developers. Drizzle copies the query and its parameters onto its errors, but both are already
+// in the message (the parameters only when `LOG_QUERY_PARAMS` is on; they can hold personal data).
 const OMITTED_PROPS = new Set([
   "stack",
   "message",
@@ -43,8 +43,12 @@ function truncate(text: string): string {
   return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}… (${text.length - MAX_TEXT} more chars)` : text;
 }
 
-/** Drizzle's "Failed query" messages end with the query's parameters, which can hold personal data. */
+/**
+ * Drizzle's "Failed query" messages end with the query's parameters, which can hold personal data. `LOG_QUERY_PARAMS`
+ * keeps them for debugging.
+ */
 function hideQueryParams(text: string): string {
+  if (env.LOG_QUERY_PARAMS) return text;
   return text.replace(/\nparams: [\s\S]*$/, "\nparams: (hidden)");
 }
 
