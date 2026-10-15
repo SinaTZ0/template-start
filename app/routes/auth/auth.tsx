@@ -26,9 +26,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { redirectTo };
 }
 
-/** Only same-site paths, so a crafted `?redirectTo=` link can't send someone to another site after signing in. */
+/**
+ * Only same-site paths, so a crafted `?redirectTo=` link can't send someone to another site after signing in.
+ * Backslashes are rejected because browsers read `/\evil.com` as the protocol-relative `//evil.com`.
+ */
 function safeRedirect(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : DEFAULT_REDIRECT;
+  return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : DEFAULT_REDIRECT;
 }
 
 /*===== Page =====*/
