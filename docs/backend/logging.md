@@ -48,6 +48,10 @@ The `err` serializer keeps errors short:
 - **No query parameters.** Drizzle puts a failed query's parameters in its message and on the error. They can hold
   personal data, so the message shows `params: (hidden)` and the property is dropped. Long messages are cut at 1000
   characters.
+- **Non-errors too.** A thrown plain object, or a cause that isn't an `Error`, is serialized the same way without a
+  stack, so it can't bypass these limits.
+- **Never throws.** If reading the error fails (a throwing getter, a Proxy), the line is still written with a
+  placeholder `err`.
 
 ## Request Timing
 

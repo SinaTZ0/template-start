@@ -80,19 +80,37 @@ function isSmallValue(value: unknown): boolean {
   }
 }
 
-/** Serializes an error and its cause chain with trimmed stacks. Non-errors pass through unchanged. */
-function serializeError(value: unknown, depth = 0): unknown {
-  if (!(value instanceof Error)) return value;
+/**
+ * Serializes an error and its cause chain with trimmed stacks. A thrown non-Error object (or such a cause) gets the
+ * same treatment minus the stack, so it can't bypass the size limits or the parameter hiding. Primitives pass through.
+ */
+function describeError(value: unknown, depth: number): unknown {
+  if (typeof value === "string") return truncate(value);
+  if (typeof value !== "object" || value === null) return value;
 
-  const result: Record<string, unknown> = { type: value.name, message: truncate(hideQueryParams(value.message)) };
+  const fields = value as Record<string, unknown>;
+  const result: Record<string, unknown> = { type: value instanceof Error ? value.name : "NonError" };
+  if (typeof fields.message === "string") result.message = truncate(hideQueryParams(fields.message));
   for (const [key, prop] of Object.entries(value)) {
     if (!OMITTED_PROPS.has(key) && isSmallValue(prop)) result[key] = prop;
   }
-  if (value.stack) result.stack = trimStack(value.stack, depth === 0 ? MAX_FRAMES : MAX_CAUSE_FRAMES);
-  if (value.cause !== undefined) {
-    result.cause = depth < MAX_CAUSE_DEPTH ? serializeError(value.cause, depth + 1) : "(deeper causes hidden)";
+  if (value instanceof Error && value.stack) {
+    result.stack = trimStack(value.stack, depth === 0 ? MAX_FRAMES : MAX_CAUSE_FRAMES);
+  }
+  if (fields.cause !== undefined) {
+    result.cause = depth < MAX_CAUSE_DEPTH ? describeError(fields.cause, depth + 1) : "(deeper causes hidden)";
   }
   return result;
+}
+
+/** pino's `err` serializer. Never throws, so a broken error can't take its log line down with it. */
+function serializeError(value: unknown): unknown {
+  try {
+    return describeError(value, 0);
+  } catch {
+    // Don't touch the value again: a throwing getter or a Proxy may be what failed.
+    return { type: "UnknownError", message: "error could not be serialized" };
+  }
 }
 
 /*===== Development Output =====*/
