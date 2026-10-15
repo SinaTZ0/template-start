@@ -41,6 +41,9 @@ Use `Link`, `NavLink`, `Form` and `useNavigate` straight from `react-router`. No
 - The duration lives in `app.css`, on the `page` class and `root`. It is kept short because the page ignores clicks
   while the fade runs.
 - `prefers-reduced-motion: reduce` turns the animation off, so navigation is instant.
+- `app.css` pins the `::view-transition` overlay with `left: 0; right: auto`. React shrinks the overlay to 0×0, and in
+  this RTL document the browser's `inset: 0` then anchors it to the right edge, which paints every snapshot
+  off-screen: the page vanishes and reappears instead of fading. Keep that rule.
 - The header and footer stay in the `root` snapshot. They look the same on both pages, so the cross-fade keeps them
   visually steady.
 

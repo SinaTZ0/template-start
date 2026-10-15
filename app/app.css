@@ -311,6 +311,14 @@
   animation-duration: 200ms;
 }
 
+/* React shrinks the transition overlay to 0×0 so it doesn't block input, but the UA keeps `inset: 0` on it. In an
+   RTL document that over-constrained box drops `left` and anchors to the right edge, which paints every snapshot
+   off-screen: the page just vanishes and reappears. Pin it to the left, where the snapshots are positioned from. */
+::view-transition {
+  left: 0;
+  right: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* Colour transitions and hover lifts are removed entirely */
   *,
