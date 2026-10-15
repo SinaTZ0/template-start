@@ -7,8 +7,9 @@ How the app runs in production: one server, Docker Compose, Caddy in front. Ever
 
 ```text
 internet ──80/443──▶ caddy ──┬── /media/<kind>/<id>/<variant>.webp ──▶ seaweedfs (anonymous read only)
-                             └── everything else ──────────────────▶ app:3000 ──▶ db (Postgres)
-                                                                          └─────▶ seaweedfs (app identity)
+                             ├── everything else ──────────────────▶ app:3000 ──▶ db (Postgres)
+                             │                                            └─────▶ seaweedfs (app identity)
+                             └── $BUGSINK_DOMAIN ──────────────────▶ bugsink:8000 ──▶ bugsink-db (Postgres)
 one-time jobs, before the app starts:  migrate ──▶ db      storage-init ──▶ seaweedfs (admin identity)
 ```
 
@@ -20,6 +21,8 @@ one-time jobs, before the app starts:  migrate ──▶ db      storage-init �
 | `storage-init` | Creates the media bucket if it is missing (`deploy/init-storage.mjs`), then exits              |
 | `db`           | Postgres 17                                                                                    |
 | `seaweedfs`    | S3-compatible image storage with three identities: `anonymous`, `app` and `admin` (below)      |
+| `bugsink`      | Error tracker for the app's server and browser errors and slow requests (Error Tracking below) |
+| `bugsink-db`   | Bugsink's own Postgres 17, kept apart from the app's data and backups                          |
 
 Only Caddy publishes ports. Postgres and SeaweedFS are reachable from inside the stack only. Each container gets just
 the variables it needs, listed in `compose.prod.yaml`. The store's identities (`configs.seaweedfs-s3`) split its
@@ -28,12 +31,13 @@ gets the `admin` key.
 
 ## First Deploy
 
-Needs a server with Docker and Compose 2.23.1 or later, a DNS record for the domain pointing at it, and ports 80 and 443
-open (Caddy proves the domain over them to get its certificate).
+Needs a server with Docker and Compose 2.23.1 or later, DNS records for the domain and the Bugsink subdomain
+(`BUGSINK_DOMAIN`) pointing at it, and ports 80 and 443 open (Caddy proves the domains over them to get its
+certificates).
 
 ```bash
 git clone <repo> app && cd app
-cp .env.production.example .env      # fill in DOMAIN and every secret (`openssl rand -hex 32`)
+cp .env.production.example .env      # fill in the domains, BUGSINK_ADMIN and every secret (`openssl rand -hex 32`)
 docker compose -f compose.prod.yaml up -d --build
 docker compose -f compose.prod.yaml ps   # app should turn "healthy"
 curl https://<domain>/healthz            # {"status":"ok"}
@@ -46,6 +50,19 @@ promote the account:
 docker compose -f compose.prod.yaml exec db \
   psql -U app -d app -c "update \"user\" set role = 'admin' where email = 'you@example.com';"
 ```
+
+## Error Tracking
+
+Bugsink (docs/backend/logging.md) runs at `https://<BUGSINK_DOMAIN>`. It has to be public, because browsers send their
+errors there. Everything but the event intake needs a sign-in. After the first deploy:
+
+1. Sign in with `BUGSINK_ADMIN` and change the password.
+2. Create a team and a project. Copy the project's DSN into `.env` as `SENTRY_DSN`.
+3. Redeploy with `--build`: the server reads the DSN at startup, but the browser bundle has it baked in at build time.
+4. Turn on email alerts in Bugsink's settings if you want them (it needs SMTP settings; see Bugsink's docs).
+
+Until `SENTRY_DSN` is set, nothing is reported; errors are still in the logs. Bugsink keeps its data in the
+`bugsink-pgdata` volume, separate from the app's backups. Losing it loses error history, nothing else.
 
 ## Updating
 
@@ -85,7 +102,8 @@ Logs for morgan's line).
 docker compose -f compose.prod.yaml logs -f app      # one JSON object per line (docs/backend/logging.md)
 ```
 
-Docker rotates every service's log at 10 MB, keeping five files. `react-router-serve` also prints its own short line per
+Errors and slow requests are easier to read in Bugsink (Error Tracking above); the logs keep every request. Docker
+rotates every service's log at 10 MB, keeping five files. `react-router-serve` also prints its own short line per
 request (morgan) next to the app's request log.
 
 ## Backups
@@ -104,7 +122,8 @@ settings and the `/media` proxy target).
 ## Before Going Live
 
 - Turn on email verification and password reset once the project can send email (`app/lib/auth.server.ts`).
-- Add a Content-Security-Policy in the app (the inline theme script in `root.tsx` needs a nonce or hash). Caddy sets
-  the other security headers.
+- Add a Content-Security-Policy in the app (the inline theme script in `root.tsx` needs a nonce or hash). Its
+  `connect-src` must allow `https://<BUGSINK_DOMAIN>`, or browser errors can't be reported. Caddy sets the other
+  security headers.
 - Schedule the orphan-media cleanup if uploads matter (`deleteMedia` in `app/orpc/media/service.ts`).
 - Set up the backups above.

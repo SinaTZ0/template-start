@@ -1,5 +1,5 @@
-# Development services only: Postgres and SeaweedFS (S3-compatible image storage, docs/backend/media.md). The app itself runs
-# on the host with `pnpm dev`. Start with `pnpm services`, which also creates the media bucket
+# Development services only: Postgres, SeaweedFS (S3-compatible image storage, docs/backend/media.md) and Bugsink (error
+# tracker, docs/backend/logging.md). The app itself runs on the host with `pnpm dev`. Start with `pnpm services`, which also creates the media bucket
 # (`deploy/init-storage.mjs`); the values match `.env.example`.
 
 # Pinned so the volumes keep their names even when the folder is renamed. Rename per project.
@@ -33,6 +33,37 @@ services:
     volumes:
       - seaweedfs:/data
 
+  # Error tracker at http://localhost:8000 (sign in as admin@example.com / admin). Create a project there and put its DSN
+  # in `.env` as `SENTRY_DSN`. Bugsink advises against SQLite on a Docker volume, so it gets its own small Postgres.
+  bugsink:
+    image: bugsink/bugsink:2
+    environment:
+      SECRET_KEY: development-only-secret-key-that-is-at-least-fifty-characters-long
+      CREATE_SUPERUSER: admin@example.com:admin
+      PORT: 8000
+      BASE_URL: http://localhost:8000
+      DATABASE_URL: postgresql://bugsink:bugsink@bugsink-db:5432/bugsink
+    ports:
+      - "8000:8000"
+    depends_on:
+      bugsink-db:
+        condition: service_healthy
+
+  bugsink-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: bugsink
+      POSTGRES_PASSWORD: bugsink
+      POSTGRES_DB: bugsink
+    volumes:
+      - bugsink-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bugsink -d bugsink"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
 volumes:
   pgdata:
   seaweedfs:
+  bugsink-pgdata:

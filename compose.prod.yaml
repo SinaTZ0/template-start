@@ -1,5 +1,5 @@
 # Production stack (docs/deployment.md). Caddy is the only service with public ports: it terminates HTTPS and proxies to
-# the app, and serves image variants read-only from SeaweedFS. Before the app starts, two one-time jobs run from the
+# the app and to Bugsink (the error tracker, on its own subdomain), and serves image variants read-only from SeaweedFS. Before the app starts, two one-time jobs run from the
 # app's image: `migrate` applies pending database migrations and `storage-init` creates the media bucket.
 #
 # Configure with a `.env` file next to this one (copy `.env.production.example`). Deploy or update with
@@ -18,7 +18,11 @@ x-logging: &logging # Docker keeps container logs forever by default; rotate the
 
 x-app-image:
   &app-image # The same image runs the app and both jobs. Built once per deploy; the jobs reuse the cached layers.
-  build: .
+  build:
+    context: .
+    # The browser bundle reports its errors to this DSN, inlined at build time (`vite.config.ts`).
+    args:
+      SENTRY_DSN: ${SENTRY_DSN:-}
   image: template-app
   init: true
   logging: *logging
@@ -33,6 +37,7 @@ services:
       - "443:443/udp"
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      BUGSINK_DOMAIN: ${BUGSINK_DOMAIN:?set BUGSINK_DOMAIN in .env}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:?set S3_BUCKET_NAME in .env}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -41,6 +46,7 @@ services:
       - caddy_config:/config
     depends_on:
       - app
+      - bugsink
     logging: *logging
 
   app:
@@ -54,6 +60,8 @@ services:
       LOG_SLOW_REQUEST_MS: ${LOG_SLOW_REQUEST_MS:-1000}
       LOG_SLOW_QUERY_MS: ${LOG_SLOW_QUERY_MS:-200}
       LOG_QUERY_PARAMS: ${LOG_QUERY_PARAMS:-false}
+      # Empty until a Bugsink project exists (docs/deployment.md); reporting is off until then.
+      SENTRY_DSN: ${SENTRY_DSN:-}
       DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/app
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
       BETTER_AUTH_URL: https://${DOMAIN}
@@ -135,6 +143,43 @@ services:
       - seaweedfs:/data
     logging: *logging
 
+  # ------ Error Tracking ------
+  # Bugsink (docs/backend/logging.md), reached through Caddy at https://$BUGSINK_DOMAIN by both the app and browsers.
+  bugsink:
+    image: bugsink/bugsink:2
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${BUGSINK_SECRET_KEY:?set BUGSINK_SECRET_KEY in .env}
+      # Creates the first user when it doesn't exist yet. Change the password in Bugsink afterwards.
+      CREATE_SUPERUSER: ${BUGSINK_ADMIN:?set BUGSINK_ADMIN in .env}
+      PORT: 8000
+      BASE_URL: https://${BUGSINK_DOMAIN}
+      DATABASE_URL: postgresql://bugsink:${BUGSINK_DB_PASSWORD:?set BUGSINK_DB_PASSWORD in .env}@bugsink-db:5432/bugsink
+      # Caddy terminates HTTPS and passes the visitor's address in X-Real-IP (deploy/Caddyfile).
+      BEHIND_HTTPS_PROXY: "true"
+    depends_on:
+      bugsink-db:
+        condition: service_healthy
+    logging: *logging
+
+  # Separate from `db`: Bugsink advises against SQLite on a Docker volume, and its own database keeps the app's backups
+  # and restores free of error events.
+  bugsink-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bugsink
+      POSTGRES_PASSWORD: ${BUGSINK_DB_PASSWORD}
+      POSTGRES_DB: bugsink
+    volumes:
+      - bugsink-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bugsink -d bugsink"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *logging
+
 # ===== Store Identities =====
 # `anonymous` is what Caddy's `/media` reads use; the app may read and write its bucket and nothing else; `admin` is
 # only for `storage-init`.
@@ -160,5 +205,6 @@ configs:
 volumes:
   pgdata:
   seaweedfs:
+  bugsink-pgdata:
   caddy_data:
   caddy_config:

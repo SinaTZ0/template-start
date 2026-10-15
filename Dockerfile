@@ -25,6 +25,8 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 
 # ===== Build =====
 FROM deps AS build
+# Inlined into the browser bundle so it can report errors (`vite.config.ts`). Empty turns browser reporting off.
+ARG SENTRY_DSN=""
 COPY . .
 RUN pnpm build
 
@@ -33,6 +35,8 @@ FROM node:24-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+# Maps error stacks back to the source with the server bundle's source maps, so logs and error reports name real files.
+ENV NODE_OPTIONS=--enable-source-maps
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build

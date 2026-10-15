@@ -1,4 +1,5 @@
-# The public edge of `compose.prod.yaml`: HTTPS (certificates are issued and renewed automatically for $DOMAIN),
+# The public edge of `compose.prod.yaml`: HTTPS (certificates are issued and renewed automatically for $DOMAIN and
+# $BUGSINK_DOMAIN),
 # compression, security headers, the read-only media path, and everything else proxied to the app.
 # `{$VAR}` is read from Caddy's environment when the file loads (set in `compose.prod.yaml`).
 
@@ -48,5 +49,21 @@
 
 	handle {
 		reverse_proxy app:3000
+	}
+}
+
+# Bugsink, the error tracker. Public because browsers send their errors here; signing in protects everything else.
+{$BUGSINK_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	reverse_proxy bugsink:8000 {
+		# Bugsink reads the visitor's address from X-Real-IP by default.
+		header_up X-Real-IP {remote_host}
 	}
 }
