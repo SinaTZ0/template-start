@@ -13,11 +13,15 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   // A request or query at least this slow is logged as a warning with its timing breakdown (`app/lib/trace.server.ts`).
+  // A slow request is also reported to `SENTRY_DSN`.
   LOG_SLOW_REQUEST_MS: z.coerce.number().int().positive().default(1000),
   LOG_SLOW_QUERY_MS: z.coerce.number().int().positive().default(200),
   // Logs a failed query's parameters instead of `(hidden)`. They can hold personal data, so keep it off in production
   // unless you are chasing a specific bug. `stringbool` reads "false" and "0" as false, unlike `z.coerce.boolean()`.
   LOG_QUERY_PARAMS: z.stringbool().default(false),
+  // Where errors and slow requests are reported (Bugsink, docs/backend/logging.md). Unset or empty turns reporting off.
+  // The client bundle reads the same variable at build time (`vite.config.ts`).
+  SENTRY_DSN: z.preprocess((value) => (value === "" ? undefined : value), z.url().optional()),
   // Accept both URI schemes node-postgres understands; reject anything else early.
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   // Signs session cookies and tokens. Rotating it signs every user out.

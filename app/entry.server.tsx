@@ -17,8 +17,9 @@ import type {
 } from "react-router";
 
 import { env } from "~/env.server";
+import { reportSlowRequest } from "~/lib/error-reporting.server";
 import { createLogger } from "~/lib/logger.server";
-import { recordSpan, runWithTrace, traceTimeline, traceTotals } from "~/lib/trace.server";
+import { runWithTrace, span, traceTimeline, traceTotals } from "~/lib/trace.server";
 import type { RequestTrace, SpanKind } from "~/lib/trace.server";
 
 const log = createLogger("http");
@@ -97,46 +98,58 @@ export const handleError: HandleErrorFunction = (error, { request }) => {
 
 /*===== Performance Instrumentation =====*/
 /**
- * Logs one line per request, with its time per kind of work (loaders, procedures, queries, …). A slow or failed
- * request also gets the timeline of its slowest spans, which shows where the time went.
+ * Logs one line per request, with its time per kind of work (loaders, procedures, queries, …). A slow request is also
+ * reported to the error tracker with the timeline of its slowest spans, which shows where the time went.
  */
 function logRequest({
   request,
   result,
   trace,
 }: {
-  request: { method: string; url: string };
+  request: { method: string; path: string };
   result: InstrumentationServerHandlerResult;
   trace: RequestTrace;
 }) {
   const ms = Math.round(performance.now() - trace.start);
   const slow = ms >= env.LOG_SLOW_REQUEST_MS;
   const failed = result.statusCode >= 500;
-  // The path without its query string, which can carry tokens.
-  const path = new URL(request.url).pathname;
   // Docker and uptime monitors poll every few seconds; a healthy probe is noise.
-  if (path === "/healthz" && !slow && !failed) return;
-  const fields = {
-    // `route` is the matched pattern (`/notes/:id`), for grouping requests in production logs.
-    request: { method: request.method, path, status: result.statusCode, ms },
-    route: result.meta?.pattern,
-    timing: traceTotals(trace),
-    ...((slow || failed) && { timeline: traceTimeline(trace) }),
-  };
+  if (request.path === "/healthz" && !slow && !failed) return;
 
-  if (failed) log.error(fields, "request failed");
-  else if (slow) log.warn(fields, "slow request");
-  else log.info(fields, "request");
+  const timing = traceTotals(trace);
+  const breakdown = Object.entries(timing)
+    .map(([kind, total]) => `${kind} ${total.count}×${total.ms}ms`)
+    .join(", ");
+  // `route` is the matched pattern (`/notes/:id`), for grouping requests in production logs.
+  // React Router gives top-level patterns without their leading slash (`notes`).
+  const pattern = result.meta?.pattern;
+  const route = pattern === undefined ? request.path : `/${pattern.replace(/^\//, "")}`;
+  // Nested under `request`, which development hides: the message already says it all (`app/lib/logger.server.ts`).
+  const fields = { request: { ...request, status: result.statusCode, ms, route, timing } };
+  const summary = `${request.method} ${request.path} ${result.statusCode} ${ms}ms${breakdown ? ` (${breakdown})` : ""}`;
+
+  if (failed) log.error(fields, `request failed: ${summary}`);
+  else if (slow) log.warn(fields, `slow request: ${summary}`);
+  else log.info(fields, summary);
+
+  if (slow) reportSlowRequest({ method: request.method, route, ms, breakdown, timeline: traceTimeline(trace) });
 }
 
-/** Times a route's handler as a span named after the route (e.g. `routes/notes/notes`). */
+/**
+ * Times a route's handler as a span named after the route (e.g. `routes/notes/notes`). The handler runs inside the
+ * span, so the procedures and queries it starts become its children in the timeline.
+ */
 function timeRouteHandler({ kind, routeId }: { kind: SpanKind; routeId: string }) {
   return async (handler: () => Promise<InstrumentationHandlerResult>) => {
-    const start = performance.now();
-    const result = await handler();
-    // A thrown redirect or `data()` response is control flow, not a failure.
-    const failed = result.status === "error" && !((result.error as unknown) instanceof Response);
-    recordSpan({ kind, name: routeId, start, failed });
+    await span(
+      {
+        kind,
+        name: routeId,
+        // A thrown redirect or `data()` response is control flow, not a failure.
+        isFailure: (result) => result.status === "error" && !((result.error as unknown) instanceof Response),
+      },
+      handler,
+    );
   };
 }
 
@@ -146,11 +159,14 @@ export const instrumentations: ServerInstrumentation[] = [
       handler.instrument({
         // Everything the request runs, down to its queries, records into this trace. The time ends when the response
         // starts: streamed content that resolves later isn't counted.
-        request: (handle, { request }) =>
-          runWithTrace(async (trace) => {
+        request: (handle, { request }) => {
+          // The path without its query string, which can carry tokens.
+          const line = { method: request.method, path: new URL(request.url).pathname };
+          return runWithTrace(line, async (trace) => {
             const result = await handle();
-            logRequest({ request, result, trace });
-          }),
+            logRequest({ request: line, result, trace });
+          });
+        },
       });
     },
     route(route) {

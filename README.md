@@ -3,7 +3,8 @@
 A starting point for full-stack React Router v8 apps, in Persian and right-to-left.
 
 - **Backend:** contract-first [oRPC](https://orpc.dev) v2, Drizzle + Postgres, Better-Auth (email + password, Altcha
-  captcha on sign-up), image uploads processed with sharp into S3-compatible storage, and pino logging.
+  captcha on sign-up), image uploads processed with sharp into S3-compatible storage, pino logging, and error tracking
+  with a self-hosted Bugsink.
 - **Frontend:** flat route slices, shadcn components rebuilt as `primitive/`s on Base UI, Tailwind v4 tokens with
   light/dark themes, TanStack Query, nuqs, Jotai and Storybook.
 - **Example feature:** notes (`app/orpc/note/`, `app/routes/notes/`) shows the whole path: a guarded page, a loader,

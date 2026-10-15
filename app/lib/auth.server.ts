@@ -26,8 +26,8 @@ export const auth = betterAuth({
   // Vite moves to the next free port (5174, …) when 5173 is taken, and Better-Auth rejects sign-in
   // and sign-up from any origin other than `baseURL`. Trust every local port in development only.
   trustedOrigins: env.NODE_ENV === "development" ? ["http://localhost:*", "http://127.0.0.1:*"] : [],
-  // Better-Auth logs through `console` by default, with full stacks. Route it through the app's logger, which trims
-  // them and tags the request; `LOG_LEVEL` decides what is written.
+  // Better-Auth logs through `console` by default. Route it through the app's logger, which tags the request and
+  // reports errors to the tracker; `LOG_LEVEL` decides what is written.
   logger: {
     level: "debug",
     log: (level, message, ...args: unknown[]) => {

@@ -7,7 +7,7 @@ import type { PoolClient } from "pg";
 import { env } from "~/env.server";
 import * as schema from "~/db/schema";
 import { createLogger } from "~/lib/logger.server";
-import { currentTrace, recordSpan } from "~/lib/trace.server";
+import { currentSpanId, currentTrace, recordSpan } from "~/lib/trace.server";
 
 const log = createLogger("db");
 
@@ -16,12 +16,24 @@ const MAX_SQL_LENGTH = 300;
 
 type QueryFunction = (...args: unknown[]) => unknown;
 
-/** Drizzle passes `{ text }` query configs; raw callers may pass the SQL string. Parameters are never logged. */
+/**
+ * The query's shape, short enough to read in a timeline: identifier quotes and column lists are dropped, the tables,
+ * joins and conditions stay. `select "note"."id", … from "note" where "note"."owner_id" = $1` becomes
+ * `select … from note where note.owner_id = $1`. Parameters are never included.
+ */
 function sqlText(input: unknown): string {
   const text = typeof input === "string" ? input : (input as { text?: unknown } | null)?.text;
   if (typeof text !== "string") return "(unknown query)";
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > MAX_SQL_LENGTH ? `${flat.slice(0, MAX_SQL_LENGTH)}…` : flat;
+  const short = text
+    .replace(/\s+/g, " ")
+    .replaceAll('"', "")
+    // The first `from` ends the column list. A subquery in it would end the list early, which still reads fine.
+    .replace(/^select (distinct )?.+? from /i, "select $1… from ")
+    .replace(/ returning .+$/i, " returning …")
+    .replace(/^insert into (\S+) \(.+?\) values .+?( on conflict| returning|$)/i, "insert into $1 …$2")
+    .replace(/ set .+? where /i, " set … where ")
+    .trim();
+  return short.length > MAX_SQL_LENGTH ? `${short.slice(0, MAX_SQL_LENGTH)}…` : short;
 }
 
 /** Wraps `query` so every call becomes a `db` span of the current request, and a slow one is logged on its own. */
@@ -29,6 +41,7 @@ function traceQuery(query: QueryFunction): QueryFunction {
   return (...args) => {
     // Taken at call time, when Drizzle is still running in the request's async context.
     const trace = currentTrace();
+    const parent = currentSpanId();
     const start = performance.now();
     const result = query(...args);
 
@@ -37,7 +50,7 @@ function traceQuery(query: QueryFunction): QueryFunction {
     if (result instanceof Promise) {
       const finish = (failed: boolean) => {
         const sql = sqlText(args[0]);
-        const ms = recordSpan({ trace, kind: "db", name: sql, start, failed });
+        const ms = recordSpan({ trace, parent, kind: "db", name: sql, start, failed });
         if (ms >= env.LOG_SLOW_QUERY_MS) log.warn({ sql, ms: Math.round(ms) }, "slow query");
       };
       result.then(

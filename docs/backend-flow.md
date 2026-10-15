@@ -6,7 +6,7 @@ step links to the doc that holds its rules. Read that doc when you reach the ste
 | Doc                                                  | Covers                                                                               |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | [backend/architecture.md](./backend/architecture.md) | Structure, layers, contracts, validation, errors, middleware, auth, database, naming |
-| [backend/logging.md](./backend/logging.md)           | Writing logs, request timing, reading a slow request's timeline                      |
+| [backend/logging.md](./backend/logging.md)           | Writing logs, error reporting (Bugsink), request timing, slow-request reports        |
 | [backend/media.md](./backend/media.md)               | Image uploads, processing, storage and rendering                                     |
 | [deployment.md](./deployment.md)                     | Production stack, deploying, migrations in production, health check, backups         |
 
@@ -43,8 +43,9 @@ The `note` feature (`app/orpc/note/`) is the worked example. Copy its shape.
 
 ## Check
 
-9. **Logging**: log through `createLogger`, never `console`, and wrap slow work that isn't timed automatically in
-   `span(...)` ([logging.md](./backend/logging.md)).
+9. **Logging**: log through `createLogger`, never `console`. Log errors as `log.error({ err }, …)`, which also reports
+   them to Bugsink, and wrap slow work that isn't timed automatically in `span(...)`
+   ([logging.md](./backend/logging.md)).
 10. **Test**: add an `integration.test.ts` if the behavior is consequential: a success case and the failures that
     matter ([architecture.md](./backend/architecture.md) → Testing). Run `pnpm lint` and `pnpm typecheck`, and the
     test itself if the database is running.
