@@ -11,15 +11,15 @@ These are the rules. The steps for adding a feature are in [backend-flow.md](../
 app/orpc/
   contract.ts               # composes feature contracts into the API contract
   router.ts                 # composes feature procedures into the API router
-  implementer.server.ts     # implements the contract, declares base context, applies global middleware
-  handler.server.ts         # HTTP adapter: RPC handler, plugins, status codes, allowed methods
+  implementer.server.ts     # `implementer` (assembles the router) and `base` (global middleware, builds procedures)
+  handler.server.ts         # HTTP adapter: RPC handler, status map, interceptor for pre-procedure failures
   client.ts                 # typed browser client and TanStack Query utils, built from the contract only
   server-client.server.ts   # in-process client for loaders and actions, created per request
   errors.ts                 # shared error data shape, common errors, error-code → HTTP status map
   middleware/
     <name>/
       <name>.middleware.ts  # one reusable concern: a guard, a dependency, or error translation
-      <name>.errors.ts      # the errors it can throw (browser-safe)
+      <name>.errors.ts      # only if it throws its own errors (browser-safe)
   <feature>/
     contract.ts             # required
     procedure.ts            # required
@@ -34,8 +34,9 @@ app/orpc/
 ```
 
 Shared infrastructure (database client and schema, storage, crypto, generic helpers) lives outside `app/orpc/`, e.g. in
-`app/db/` and `app/lib/`. A single resource route mounts the RPC handler. Keep feature folders flat and add files only
-when they earn their place. Promote code out of a feature only when a second consumer needs it.
+`app/db/` and `app/lib/`. A single resource route (`app/routes/rpc/`) mounts the RPC handler at `/rpc/*`. Keep feature
+folders flat and add files only when they earn their place. Promote code out of a feature only when a second consumer
+needs it. A feature may call another feature's service (`note` calls `attachMedia` from `media`), never its procedure.
 
 ## Layers
 
@@ -43,7 +44,7 @@ when they earn their place. Promote code out of a feature only when a second con
 | -------------- | ----------------------------------------------------------------------- | ------------------------------------------------------- |
 | **Contract**   | Public input/output schemas and every error the procedure may return.   | Import server code, touch the database, hold rules.     |
 | **Procedure**  | Choosing middleware, calling the service, mapping outcomes to errors.   | Contain business rules or queries.                      |
-| **Service**    | Business rules, normalization, orchestration, and side-effect ordering. | Import oRPC, throw API/HTTP errors, know the transport. |
+| **Service**    | Business rules, normalization, orchestration, and side-effect ordering. | Import `@orpc/*`, throw API errors, know the transport. |
 | **Repository** | Focused reads and writes, one operation per function.                   | Make business decisions or know about oRPC/API errors.  |
 | **Mapper**     | Converting internal records into stable public DTOs.                    | Perform I/O.                                            |
 | **Middleware** | One cross-cutting concern applied to many procedures.                   | Import a feature's contract, service, or repository.    |
@@ -52,7 +53,8 @@ when they earn their place. Promote code out of a feature only when a second con
 route → handler → global middleware → contract validation → procedure (+ feature middleware) → service → repository → db
 ```
 
-Dependency direction: `procedure → service → repository → infrastructure`. Never import upward.
+Dependency direction: `procedure → service → repository → infrastructure`. Never import upward. Services and mappers may
+import their contract's types (`Note`, `Media`), because the contract is the public shape they produce.
 
 ## Rules
 
@@ -96,7 +98,8 @@ return { id: result.id };
 
 ### Errors are uniform and safe
 
-- All errors share one data shape (general errors plus per-field messages) and one code → HTTP status map.
+- All errors share one data shape (general errors plus per-field messages) and one code → HTTP status map: oRPC's
+  `COMMON_ERROR_STATUS_MAP` plus `ERROR_STATUS_MAP` in `errors.ts` for this app's own codes (`INVALID_INPUT` → 422).
 - A global error middleware normalizes every failure. Server errors (5xx) never expose internal messages; they carry an
   ID that correlates with the full error in the server logs.
 - Field messages are user-facing; diagnostics are for developers.
@@ -114,9 +117,9 @@ return { id: result.id };
 
 ### Middleware
 
-- **Global** middleware (procedure timing, then error normalization and its logging) is applied once in the
-  implementer, so it wraps validation too.
-  The router is assembled with the undecorated implementer, so global middleware never runs twice.
+- **Global** middleware (procedure timing, then error normalization and its logging) is applied once on `base`, so it
+  wraps validation too. Every procedure starts from `base.<feature>.<procedure>`. The router is assembled with the
+  undecorated `implementer`, because oRPC v2 doesn't dedupe middleware and would otherwise run it twice.
 - **Feature-level** middleware is opt-in per procedure with `.use()`. It provides dependencies (`provideDbMiddleware`)
   or enforces guards (`requireUserMiddleware`, origin checks) and passes results through `context`.
 - Each middleware lives in its own folder with its errors, and stays generic: it may depend on the shape of the input
@@ -125,36 +128,49 @@ return { id: result.id };
 
 ### Explicit dependencies
 
-- Services and repositories receive their dependencies (`db`, storage, clock, request utilities) through a single object
-  parameter instead of importing singletons. This keeps them reusable outside oRPC and easy to test.
-- The procedure is where context is unpacked and passed down.
+- Services and repositories receive `db` and the request's facts (the user's ID, the input) through a single object
+  parameter, never from `context` or a session lookup. A test can then call them with the real database and made-up
+  users, as `note/integration.test.ts` does.
+- The procedure is where context is unpacked and passed down. `db` arrives in `context` from `provideDbMiddleware`.
+- Stateless infrastructure modules (`storage.server.ts`, the logger, `span`) are imported directly. Pass one in only
+  when a test needs to replace it.
 
 ### Auth
 
 - Better-Auth (`app/lib/auth.server.ts`) owns sign-up, sign-in and sessions at `/api/auth/*`. The sign-up captcha
   (Altcha) is a `before` hook there; the browser gets its challenge from `captcha.createChallenge`.
 - `requireUserMiddleware` puts the signed-in user in `context.user`; `requireRoleMiddleware(...roles)` also checks the
-  role. Declare `authErrors` (and `roleErrors`) on their contracts.
+  role. Declare `authErrors` (and `roleErrors`) on their contracts. A procedure with neither is public.
+- **Ownership is checked in the data layer.** A user's records are read with the owner in the query
+  (`findOwnedNote({ id, ownerId })`), so another user's record looks exactly like a missing one (`NOT_FOUND`), never
+  `FORBIDDEN`.
 - Pages are guarded separately with `requireSession({ roles })` on a layout route (`app/lib/session-guard.server.ts`).
   The UI guard is never the only check.
 
+### Database
+
+- Drizzle tables live in `app/db/schema.ts`, Better-Auth's tables included. A change to Better-Auth's user fields
+  (`additionalFields` in `auth.server.ts`) needs the matching column there.
+- While building, sync the local database with `pnpm db:push`. Before committing, run
+  `pnpm db:generate --name <what-changed>`, review the SQL in `drizzle/`, and commit it with the schema change.
+  Production only runs those files. The details, including renames and changes that span two deploys, are in
+  [deployment.md](../deployment.md) → Database Changes.
+- Back what a query filters and sorts by with an index (`note_owner_id_created_at_idx`).
+
 ### Testing
 
-- Test consequential behavior end-to-end through the public handler or a contract-typed client: a representative
-  success case and the failures that matter (rejection, idempotency, security, cleanup).
-- Shared middleware is covered through feature tests rather than its own suite, unless a behavior cannot be reached that
-  way.
+- Test consequential behavior against the real database (`DATABASE_URL`): a representative success case and the
+  failures that matter (rejection, ownership, idempotency, cleanup). Call the service directly; it takes `db` as a
+  parameter, so no HTTP or session is needed.
+- Test through `createServerClient` or the RPC handler only when the behavior lives above the service: auth middleware,
+  the error shape, status codes.
+- Each test creates its own rows with a per-run ID and deletes them afterwards, so it can run against a development
+  database.
 
 ### Logging
 
-- Server code logs through a tagged pino child (`createLogger("media")` from `app/lib/logger.server.ts`), never
-  `console`. Errors go under the `err` key.
-- The global error middleware logs every unexpected failure once, with the `errorId` the client receives. Don't log
-  and rethrow the same error in services.
-- Wrap slow work that isn't timed automatically in `span(...)` from `app/lib/trace.server.ts`.
-
-How to write logs, what each request's timing line means, and how to read a slow request's timeline:
-[logging.md](./logging.md).
+Log through `createLogger`, never `console`, and wrap slow work in `span(...)`. The rules, the timing line and how to
+read a slow request are in [logging.md](./logging.md).
 
 ## Naming
 

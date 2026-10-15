@@ -56,7 +56,8 @@ Not every slice needs every file. Start with the route module alone and split it
   hand-written `fetch`. After a mutation that changes loader data, refresh it with `useRevalidator()` instead of
   patching local copies.
 - Layout routes guard pages with `requireSession({ roles })` as route middleware
-  (`app/lib/session-guard.server.ts`). Procedures check auth again on their own.
+  (`app/lib/session-guard.server.ts`). It puts the session in the router context, so loaders below it read
+  `context.get(sessionContext)` instead of fetching the session again. Procedures check auth again on their own.
 - **Server-only code** uses the `.server.ts` suffix and is only imported from loaders, actions, or other server
   modules. Secrets and environment values never reach a component.
 - The frontend may import browser-safe backend files (contracts, `constants.ts`, `*.errors.ts`) for types and shared
@@ -79,6 +80,7 @@ Not every slice needs every file. Start with the route module alone and split it
 
 ## Forms
 
+- Forms use `react-hook-form` with `zodResolver` and the `Field` primitives (`Field`, `FieldLabel`, `FieldError`).
 - Each form has its own schema in its route's `schema.ts`, written for user experience (messages, when to validate).
   Do not derive it from backend validation, even when the rules currently match; update both explicitly when a
   requirement changes.
@@ -90,10 +92,13 @@ Not every slice needs every file. Start with the route module alone and split it
 ## Components
 
 - One component per file. File names are kebab-case; component names are PascalCase.
-- Components receive data through props. Fetching and mutation belong to the route module or its hooks, which keeps
-  components easy to reuse and preview.
-- Shared components are documented with Storybook stories. Stories are maintained UI documentation; keep them in sync
-  with the component.
+- Shared components (`app/components/`) receive page data and callbacks through props and don't fetch, read route
+  atoms or URL state, which keeps them reusable and easy to preview. The exception is an app-wide action with one
+  meaning everywhere, through a hook in `app/hooks/` (the header's `useSignOut`, the toggle's `useTheme`).
+- Inside a route slice, loading stays in the route module. A slice component may own the mutation it triggers (the
+  note form calls `useMutation` itself) and tells the page through a callback such as `onCreated`.
+- Primitives and visible shared components have Storybook stories. Stories are maintained UI documentation; keep them
+  in sync with the component.
 - Handle every state a user can see: loading, empty, error, and success.
 
 ## Persian, RTL, and Accessibility
@@ -102,8 +107,9 @@ Not every slice needs every file. Start with the route module alone and split it
   diagnostics stay in English.
 - Use logical directions, never physical ones: Tailwind `ms-`/`me-`, `ps-`/`pe-`, `start-`/`end-`, `text-start`
   instead of `ml-`, `pl-`, `left-`, `text-left`. Mirror directional icons.
-- Format numbers and dates with `Intl` and the `fa-IR` locale. Inputs that accept numbers must accept Persian and
-  Arabic digits.
+- Format numbers with `formatNumberFa` and dates with `Intl` and the `fa-IR` locale. Inputs that accept numbers must
+  accept Persian and Arabic digits: normalize them with `toLatinDigits` before parsing. Both helpers are in
+  `app/lib/digits.ts`.
 - Use semantic elements and native controls first. Every input has a label, every action is keyboard-reachable, and
   errors are announced to assistive technology.
 

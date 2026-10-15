@@ -32,7 +32,8 @@ The `notes` route (`app/routes/notes/`) is the worked example.
    The inventory decides the layout: posters never get text laid over them, three items don't get a layout built for
    six, and a short list shares a band with something else instead of filling one alone.
 
-4. **Page brief**: this is where the page is designed.
+4. **Page brief**: this is where the page is designed. Write it in the plan or the commit description, not in the repo;
+   step 11's review checks the page against it.
    - `role`: where the page sits in the flow (entry, list, detail, form, settings…) and where the user goes next.
    - `structure`: the sections from top to bottom, with what each one contains. Include the empty, loading and error
      states.
@@ -59,10 +60,11 @@ The `notes` route (`app/routes/notes/`) is the worked example.
    effects. Base styles follow app-identity, never one page's needs, because a change affects every page. Update the
    story and check it in light, dark and side by side (`pnpm storybook`).
 7. **Route and data**: register the route in `routes.ts` and create its flat slice folder
-   ([architecture.md](./frontend/architecture.md) → Route Slices). Guard it with `requireSession` on a layout route if
-   it needs a signed-in user. Load render-critical data in the `loader` through `createServerClient(request)`; add
-   `meta` and an `ErrorBoundary` where needed ([architecture.md](./frontend/architecture.md) → Data and the Server
-   Boundary).
+   ([architecture.md](./frontend/architecture.md) → Route Slices). If it needs a signed-in user, put it under a layout
+   route guarded by `requireSession`, and read the user in its loader with `context.get(sessionContext)`. Load
+   render-critical data in the `loader` through `createServerClient(request)`. Set the title in `meta` with
+   `pageTitle(...)` (`app/lib/site.ts`), and add an `ErrorBoundary` where a failure shouldn't take the whole layout
+   down ([architecture.md](./frontend/architecture.md) → Data and the Server Boundary).
    - The page's data comes from oRPC procedures. If one it needs doesn't exist yet, add it first with
      [backend-flow.md](./backend-flow.md).
    - Shareable view state (filters, tabs, pagination) goes in the URL through [nuqs](./frontend/nuqs.md); client state
@@ -73,9 +75,11 @@ The `notes` route (`app/routes/notes/`) is the worked example.
    - The app is right-to-left. Use logical utilities (`ms`/`me`, `ps`/`pe`, `start`/`end`, `text-start`), never
      `left`/`right`.
    - Build every state from the brief: loading, empty, error and success.
-9. **Forms**: add the form's `schema.ts`, submit with `useMutation(orpc.<feature>.<procedure>.mutationOptions())`,
-   show the server's errors through `describeApiFailure`, and revalidate the loader on success
-   ([architecture.md](./frontend/architecture.md) → Forms). Image fields follow [media.md](./backend/media.md).
+9. **Forms**: add the form's `schema.ts`, run it with `react-hook-form` and `zodResolver`, and lay fields out with the
+   `Field` primitives. Submit with `useMutation(orpc.<feature>.<procedure>.mutationOptions())`, show the server's
+   errors through `describeApiFailure`, and revalidate the loader on success. `note-form.tsx` in the notes slice does
+   all of this ([architecture.md](./frontend/architecture.md) → Forms). Image fields follow
+   [media.md](./backend/media.md).
 10. **Promote**: move a custom piece to `components/shared/` (or a hook to `app/hooks/`) once a second route needs it.
 
 ## Check
@@ -84,4 +88,5 @@ The `notes` route (`app/routes/notes/`) is the worked example.
     and desktop widths, in light and dark, and against `WCAG 2.2 AA`. Then check a full-page screenshot: photos
     clearly visible, no text over posters, no boxes that do nothing, no band that looks empty. Hover and tab through
     every clickable thing: each one responds, nothing moves the layout, and reduced motion turns the movement off.
-12. **Test**: add a Playwright smoke test if the flow is consequential (forms, critical navigation). Run `pnpm lint`.
+12. **Test**: add a Playwright smoke test if the flow is consequential (forms, critical navigation). Run `pnpm lint`
+    and `pnpm typecheck`.

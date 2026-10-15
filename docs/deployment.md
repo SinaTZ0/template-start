@@ -56,13 +56,13 @@ docker compose -f compose.prod.yaml up -d --build
 
 Compose builds the new image, runs `migrate` and `storage-init`, and starts the new app container only once both have
 succeeded. A failing migration stops the deploy there: the database is unchanged (pending migrations run in one
-transaction), and the app isn't started on the new image. There is a few seconds of downtime while the app container is
+transaction), and the app isn't started on the new image. Expect a few seconds of downtime while the app container is
 replaced.
 
 ## Database Changes
 
-Every schema change ships as a migration in `drizzle/`, generated, applied locally with `pnpm db:migrate`, and
-committed with the code that needs it. The rules are in [backend/architecture.md](./backend/architecture.md) →
+Every schema change ships as a migration: generate it into `drizzle/`, apply it locally with `pnpm db:migrate`, and
+commit it with the code that needs it. The rules are in [backend/architecture.md](./backend/architecture.md) →
 Database. Production runs exactly these files, through the `migrate` job.
 
 Generated SQL can't move data, so for a rename or a backfill, edit the generated file before committing it (or start an
@@ -76,7 +76,8 @@ such changes over two deploys: first add the new shape and ship code that uses i
 
 `GET /healthz` (`app/routes/healthz/`) answers 200 when the app can query Postgres and 503 otherwise, with a 2-second
 limit. Docker polls it every 10 seconds; point an uptime monitor at it too. Storage isn't part of the check: an S3
-problem only breaks uploads, and a restart wouldn't fix it. Healthy probes are left out of the request log.
+problem only breaks uploads, and a restart wouldn't fix it. Healthy probes are left out of the app's request log (see
+Logs for morgan's line).
 
 ## Logs
 
@@ -93,7 +94,7 @@ Not automated by the stack. At least, dump the database daily to somewhere off t
 
 ```bash
 docker compose -f compose.prod.yaml exec -T db pg_dump -U app -Fc app > "backup-$(date +%F).dump"
-# restore into an empty database:
+# restore (drops and recreates every object in the dump):
 docker compose -f compose.prod.yaml exec -T db pg_restore -U app -d app --clean --if-exists < backup.dump
 ```
 
