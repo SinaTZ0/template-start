@@ -112,10 +112,13 @@ function logRequest({
   const ms = Math.round(performance.now() - trace.start);
   const slow = ms >= env.LOG_SLOW_REQUEST_MS;
   const failed = result.statusCode >= 500;
+  // The path without its query string, which can carry tokens.
+  const path = new URL(request.url).pathname;
+  // Docker and uptime monitors poll every few seconds; a healthy probe is noise.
+  if (path === "/healthz" && !slow && !failed) return;
   const fields = {
-    // The path without its query string, which can carry tokens. `route` is the matched pattern (`/notes/:id`), for
-    // grouping requests in production logs.
-    request: { method: request.method, path: new URL(request.url).pathname, status: result.statusCode, ms },
+    // `route` is the matched pattern (`/notes/:id`), for grouping requests in production logs.
+    request: { method: request.method, path, status: result.statusCode, ms },
     route: result.meta?.pattern,
     timing: traceTotals(trace),
     ...((slow || failed) && { timeline: traceTimeline(trace) }),

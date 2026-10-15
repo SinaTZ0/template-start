@@ -10,4 +10,5 @@ export default [
   /*===== Resource Routes =====*/
   route("api/auth/*", "routes/api_auth/api-auth.ts"),
   route("rpc/*", "routes/rpc/rpc.ts"),
+  route("healthz", "routes/healthz/healthz.ts"),
 ] satisfies RouteConfig;

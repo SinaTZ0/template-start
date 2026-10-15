@@ -1,0 +1,52 @@
+# The public edge of `compose.prod.yaml`: HTTPS (certificates are issued and renewed automatically for $DOMAIN),
+# compression, security headers, the read-only media path, and everything else proxied to the app.
+# `{$VAR}` is read from Caddy's environment when the file loads (set in `compose.prod.yaml`).
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Above the app's 10 MB image limit (`MEDIA_MAX_BYTES`), plus room for the multipart encoding.
+	request_body {
+		max_size 12MB
+	}
+
+	# CSP stays in the app, which knows its inline scripts. `-Server` hides the proxy's name and version.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# The S3 store publishes no ports; this is its only public path, and only for image variants
+	# (`{kind}/{mediaId}/{variant}.webp`, see `mediaKey` in `app/lib/storage.server.ts`). The fixed shape is what blocks
+	# listing and every other S3 operation, so new media kinds need no change here.
+	@media path /media /media/*
+	handle @media {
+		@image {
+			method GET HEAD
+			path_regexp image ^/media/([a-z][a-z0-9-]*/[0-9a-f-]{36}/[a-z][a-z0-9-]*\.webp)$
+		}
+		handle @image {
+			# The trailing `?` drops the query string, so callers can't pick S3 operations (`?acl`, `?list-type`, ...).
+			rewrite * /{$S3_BUCKET_NAME}/{re.image.1}?
+			reverse_proxy seaweedfs:8333 {
+				# Reads go through the store's anonymous identity: never forward the visitor's credentials or cookies.
+				header_up Host seaweedfs:8333
+				header_up -Authorization
+				header_up -Cookie
+				header_down -x-amz-request-id
+				header_down -x-amz-id-2
+			}
+		}
+		handle {
+			respond 404
+		}
+	}
+
+	handle {
+		reverse_proxy app:3000
+	}
+}

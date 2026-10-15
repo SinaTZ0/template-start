@@ -6,7 +6,7 @@ import { auth } from "~/lib/auth.server";
 
 /*===== Seed =====*/
 // Creates the first admin from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD. Idempotent: an existing account with that email
-// is only promoted, never changed otherwise. Run with `pnpm db:seed` after `pnpm db:push`.
+// is only promoted, never changed otherwise. Run with `pnpm db:seed` after `pnpm db:migrate`.
 
 const email = process.env.SEED_ADMIN_EMAIL?.toLowerCase();
 const password = process.env.SEED_ADMIN_PASSWORD;

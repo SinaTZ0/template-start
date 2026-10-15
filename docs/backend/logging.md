@@ -131,5 +131,7 @@ At `LOG_LEVEL=warn`, only the slow, failed and erroring requests are written, wh
 - The request summary is structured for log queries: `request.{method,path,status,ms}`, `route` (the matched pattern,
   e.g. `/notes/:id`, for grouping), `timing.<kind>.{count,ms}`, and `timeline` on slow or failed requests.
 - Paths are logged without their query string, which can carry tokens.
+- A healthy `/healthz` probe writes no request line, because Docker and uptime monitors poll it every few seconds. A
+  slow or failing probe is logged like any other request.
 - `react-router-serve` also writes its own plain-text access line for each request. Moving to a custom Express server
   would remove it.

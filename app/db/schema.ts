@@ -2,7 +2,8 @@ import { boolean, index, integer, pgTable, text, timestamp, uuid } from "drizzle
 
 /*===== Database Schema =====*/
 // Single source of truth for tables, read by Drizzle Kit (`drizzle.config.ts`) and the
-// runtime client (`client.server.ts`). Apply changes with `npm run db:push`.
+// runtime client (`client.server.ts`). Every change ships as a migration: `pnpm db:generate --name <what-changed>`, then
+// `pnpm db:migrate` (docs/backend/architecture.md, Database).
 
 /*===== Auth (Better-Auth) =====*/
 // Mirrors Better-Auth's core tables. Table and column names must match its model and field

@@ -1,0 +1,163 @@
+# Production stack (docs/deployment.md). Caddy is the only service with public ports: it terminates HTTPS and proxies to
+# the app, and serves image variants read-only from SeaweedFS. Before the app starts, two one-time jobs run from the
+# app's image: `migrate` applies pending database migrations and `storage-init` creates the media bucket.
+#
+# Configure with a `.env` file next to this one (copy `.env.production.example`). Deploy or update with
+#   docker compose -f compose.prod.yaml up -d --build
+# Needs Docker Compose 2.23.1 or later (inline `configs`).
+
+# Pinned so the volumes keep their names even when the folder is renamed. Rename per project.
+name: template
+
+# ===== Shared =====
+x-logging: &logging # Docker keeps container logs forever by default; rotate them.
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
+x-app-image:
+  &app-image # The same image runs the app and both jobs. Built once per deploy; the jobs reuse the cached layers.
+  build: .
+  image: template-app
+  init: true
+  logging: *logging
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:?set S3_BUCKET_NAME in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and their keys: keep this volume, or every restart requests new ones (and hits rate limits).
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    logging: *logging
+
+  app:
+    <<: *app-image
+    restart: unless-stopped
+    # Listed one by one, so each container gets only its own secrets (never the store's admin key). A variable added to
+    # `app/env.server.ts` must be added here too.
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_SLOW_REQUEST_MS: ${LOG_SLOW_REQUEST_MS:-1000}
+      LOG_SLOW_QUERY_MS: ${LOG_SLOW_QUERY_MS:-200}
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/app
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: https://${DOMAIN}
+      ALTCHA_HMAC_KEY: ${ALTCHA_HMAC_KEY:?set ALTCHA_HMAC_KEY in .env}
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
+      MEDIA_PUBLIC_URL: /media
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      storage-init:
+        condition: service_completed_successfully
+
+  # ------ One-time Jobs ------
+  migrate:
+    <<: *app-image
+    command: ["node", "deploy/migrate.mjs"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD}@db:5432/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  storage-init:
+    <<: *app-image
+    command: ["node", "deploy/init-storage.mjs"]
+    restart: "no"
+    # The admin identity: creating a bucket is the one thing the app's own identity can't do.
+    environment:
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      S3_ACCESS_KEY: ${S3_ADMIN_ACCESS_KEY:?set S3_ADMIN_ACCESS_KEY in .env}
+      S3_SECRET_KEY: ${S3_ADMIN_SECRET_KEY:?set S3_ADMIN_SECRET_KEY in .env}
+    depends_on:
+      - seaweedfs
+
+  # ------ Data ------
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: app
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *logging
+
+  # S3 with authentication (`configs.seaweedfs-s3`), reachable only inside this stack. Small volumes for the same
+  # reason as in `compose.dev.yaml`: the volume count is derived from free disk / volume size.
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.99
+    restart: unless-stopped
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=1024
+    configs:
+      - source: seaweedfs-s3
+        target: /etc/seaweedfs/s3.json
+    volumes:
+      - seaweedfs:/data
+    logging: *logging
+
+# ===== Store Identities =====
+# `anonymous` is what Caddy's `/media` reads use; the app may read and write its bucket and nothing else; `admin` is
+# only for `storage-init`.
+configs:
+  seaweedfs-s3:
+    content: |
+      {
+        "identities": [
+          { "name": "anonymous", "actions": ["Read:${S3_BUCKET_NAME}"] },
+          {
+            "name": "app",
+            "credentials": [{ "accessKey": "${S3_ACCESS_KEY}", "secretKey": "${S3_SECRET_KEY}" }],
+            "actions": ["Read:${S3_BUCKET_NAME}", "Write:${S3_BUCKET_NAME}"]
+          },
+          {
+            "name": "admin",
+            "credentials": [{ "accessKey": "${S3_ADMIN_ACCESS_KEY}", "secretKey": "${S3_ADMIN_SECRET_KEY}" }],
+            "actions": ["Admin"]
+          }
+        ]
+      }
+
+volumes:
+  pgdata:
+  seaweedfs:
+  caddy_data:
+  caddy_config:

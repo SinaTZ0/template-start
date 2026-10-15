@@ -8,6 +8,7 @@ The docs have two entry points. Start backend work at `docs/backend-flow.md` and
 
 - Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing (`docs/backend/logging.md`).
 - Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`).
+- Production: Docker Compose with Caddy in front, migrations applied before each deploy, and a `/healthz` check (`docs/deployment.md`).
 - The `note` feature (`app/orpc/note/`, `app/routes/notes/`) is the template's worked example. Copy its shape for new features; delete it once the project has its own.
 
 ## Working Directory
@@ -15,6 +16,7 @@ The docs have two entry points. Start backend work at `docs/backend-flow.md` and
 - Run project commands from the repository root.
 - After making code changes, run `pnpm lint` and fix all errors.
 - Do not create, switch to, or push branches, worktrees, or tags. All work is committed directly on `main`; if a task seems to need a branch, ask the user first.
+- Commit messages follow Conventional Commits (`feat: …`, `fix(note): …`, lowercase subject); the `commit-msg` hook rejects anything else. Never bypass the hooks with `--no-verify`.
 - Put temporary scripts, diagnostics, experiments, and logs in `./.tmp-claude/`.
 - Create `./.tmp-claude/` as needed. It is gitignored and must never contain deliverable source files.
 

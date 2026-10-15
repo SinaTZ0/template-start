@@ -6,7 +6,7 @@ How the app stores, processes and serves uploaded images.
 
 ```text
 upload:  browser ──multipart──▶ React Router (oRPC media.upload) ──sharp──▶ WebP variants ──S3 PUT──▶ bucket
-serve:   browser ──GET <MEDIA_PUBLIC_URL>/…──▶ (production: nginx) ──▶ bucket (read-only, files only)
+serve:   browser ──GET <MEDIA_PUBLIC_URL>/…──▶ (production: Caddy) ──▶ bucket (read-only, files only)
 ```
 
 - **Any S3-compatible store.** Development uses SeaweedFS from `compose.dev.yaml`. The code only speaks the S3 API
@@ -81,31 +81,22 @@ its background. `alt` text is required.
 
 ## Production
 
-Serve the bucket read-only behind the app's own origin, e.g. with nginx:
+`compose.prod.yaml` runs SeaweedFS with no published ports and serves the bucket read-only behind the app's own origin
+through Caddy (`deploy/Caddyfile`, docs/deployment.md):
 
-```nginx
-# `proxy_pass` with a variable resolves the host per request, so nginx needs Docker's DNS.
-resolver 127.0.0.11 valid=30s;
-
-# Only image files: blocks bucket listing and every write method.
-location ~ ^/media/([a-z]+/[0-9a-f-]{36}/[a-z]+\.webp)$ {
-  limit_except GET HEAD { deny all; }
-  proxy_pass http://seaweedfs:8333/<bucket>/$1;
-  proxy_hide_header x-amz-request-id;
-  proxy_hide_header x-amz-id-2;
-  add_header Cache-Control "public, max-age=31536000, immutable";
-}
-location /media/ { return 404; }
-```
-
-In production the store should publish no ports, give the app its own S3 identity (read and write on the bucket) and
-allow anonymous reads only, and pin an image version.
+- Only `GET`/`HEAD` of a path shaped like `/media/{kind}/{mediaId}/{variant}.webp` reaches the store. That shape blocks
+  bucket listing and every other S3 operation, and the query string is dropped. Anything else under `/media` is a 404.
+- Visitors' `Authorization` and `Cookie` headers are never forwarded. Reads use the store's `anonymous` identity, which
+  may only read the bucket.
+- The app writes with its own identity (read and write on its bucket only). Creating the bucket needs the `admin`
+  identity, which only the one-time `storage-init` job gets.
+- Files keep the `Cache-Control: immutable` they were uploaded with: a media key never changes content.
 
 ## Configuration
 
 | Variable           | Development (`compose.dev.yaml`)  | Production                |
 | ------------------ | --------------------------------- | ------------------------- |
-| `S3_ENDPOINT`      | `http://localhost:8333`           | the store's internal URL  |
+| `S3_ENDPOINT`      | `http://localhost:8333`           | `http://seaweedfs:8333`   |
 | `S3_BUCKET_NAME`   | `app-media`                       | the project's bucket      |
 | `S3_ACCESS_KEY`    | any (S3 auth is off locally)      | the app's identity key    |
 | `S3_SECRET_KEY`    | any                               | the app's identity secret |

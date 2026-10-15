@@ -1,3 +1,5 @@
 allowBuilds:
   esbuild: true
+  # Its postinstall installs the git hooks; the `prepare` script does that explicitly instead.
+  lefthook: false
   sharp: true

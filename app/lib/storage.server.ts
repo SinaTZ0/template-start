@@ -34,7 +34,7 @@ export function mediaKey({ kind, mediaId, variant }: { kind: MediaKind; mediaId:
   return `${kind}/${mediaId}/${variant}.webp`;
 }
 
-/** The public URL of one variant, under `MEDIA_PUBLIC_URL` (SeaweedFS in development, nginx's `/media` in production). */
+/** The public URL of one variant, under `MEDIA_PUBLIC_URL` (SeaweedFS in development, Caddy's `/media` in production). */
 export function mediaUrl({ kind, mediaId, variant }: { kind: MediaKind; mediaId: string; variant: string }): string {
   return `${env.MEDIA_PUBLIC_URL.replace(/\/+$/, "")}/${mediaKey({ kind, mediaId, variant })}`;
 }

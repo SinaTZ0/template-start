@@ -1,0 +1,13 @@
+# Only what the image build needs; secrets and local state never enter the build context.
+.git
+.env
+.env.*
+node_modules
+build
+.react-router
+.tmp-claude
+.claude
+.agents
+playwright-report
+test-results
+storybook-static

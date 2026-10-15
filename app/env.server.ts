@@ -7,7 +7,8 @@ import { z } from "zod";
 dotenv.config({ quiet: true });
 
 /*===== Schema =====*/
-// Single source of truth for server env vars. Add new variables here and to `.env.example`.
+// Single source of truth for server env vars. Add new variables here, to `.env.example`, and to the `app` service in
+// `compose.prod.yaml` (plus `.env.production.example` when the value is per deployment).
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
