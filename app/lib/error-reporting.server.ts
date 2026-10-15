@@ -23,10 +23,10 @@ function scrubEvent(event: ErrorEvent): ErrorEvent {
 }
 
 /*===== Setup =====*/
-// The tracker (Bugsink, docs/backend/logging.md) speaks Sentry's protocol. Without `SENTRY_DSN` nothing is sent and
-// every function below is a no-op, so development and tests need no tracker. Only errors and messages are sent:
-// tracing stays off (no `tracesSampleRate`), since Bugsink ignores it. The dev server re-evaluates this module on
-// reload, hence the guard.
+// The error viewer (tools/error-viewer, docs/backend/logging.md) speaks Sentry's protocol. Without `SENTRY_DSN` nothing
+// is sent and every function below is a no-op, so development and tests need no tracker. Only errors and messages are
+// sent: tracing stays off (no `tracesSampleRate`), since the viewer ignores it. The dev server re-evaluates this module
+// on reload, hence the guard.
 if (env.SENTRY_DSN && !Sentry.isInitialized()) {
   Sentry.init({
     dsn: env.SENTRY_DSN,
@@ -84,8 +84,9 @@ export function reportError({
 }
 
 /**
- * Reports a request slower than `LOG_SLOW_REQUEST_MS` as a warning. Reports are grouped by method and route pattern,
- * so every slow hit on `/notes/:id` lands in one issue with a count, not one issue per URL.
+ * Reports a request slower than `LOG_SLOW_REQUEST_MS` as a warning. The fingerprint starts with `slow-request`, which
+ * is how the error viewer tells these apart from errors; a grouping tracker (Bugsink, Sentry) would also group them by
+ * method and route pattern.
  *
  * @param breakdown Time per kind of work: `loader 1×3008ms, procedure 1×3004ms, db 1×3ms`.
  * @param timeline The request's spans as a tree (`traceTimeline`).

@@ -11,3 +11,5 @@ build
 playwright-report
 test-results
 storybook-static
+# The error viewer builds from its own folder (tools/error-viewer/Dockerfile).
+tools

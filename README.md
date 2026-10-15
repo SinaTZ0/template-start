@@ -4,7 +4,7 @@ A starting point for full-stack React Router v8 apps, in Persian and right-to-le
 
 - **Backend:** contract-first [oRPC](https://orpc.dev) v2, Drizzle + Postgres, Better-Auth (email + password, Altcha
   captcha on sign-up), image uploads processed with sharp into S3-compatible storage, pino logging, and error tracking
-  with a self-hosted Bugsink.
+  with a small self-hosted error viewer (`tools/error-viewer`, Go + SQLite).
 - **Frontend:** flat route slices, shadcn components rebuilt as `primitive/`s on Base UI, Tailwind v4 tokens with
   light/dark themes, TanStack Query, nuqs, Jotai and Storybook.
 - **Example feature:** notes (`app/orpc/note/`, `app/routes/notes/`) shows the whole path: a guarded page, a loader,
@@ -17,7 +17,7 @@ Requirements: Node 24, pnpm, Docker (for the dev services).
 ```bash
 pnpm install
 cp .env.example .env          # then set the two secrets
-pnpm services                 # Postgres on 5432, SeaweedFS (S3) on 8333, creates the media bucket
+pnpm services                 # Postgres on 5432, SeaweedFS (S3) on 8333, error viewer on 8000, media bucket
 pnpm db:migrate               # create the tables
 pnpm db:seed                  # optional: the admin from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
 pnpm dev                      # http://localhost:5173

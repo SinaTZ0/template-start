@@ -19,8 +19,8 @@ const envSchema = z.object({
   // Logs a failed query's parameters instead of `(hidden)`. They can hold personal data, so keep it off in production
   // unless you are chasing a specific bug. `stringbool` reads "false" and "0" as false, unlike `z.coerce.boolean()`.
   LOG_QUERY_PARAMS: z.stringbool().default(false),
-  // Where errors and slow requests are reported (Bugsink, docs/backend/logging.md). Unset or empty turns reporting off.
-  // The client bundle reads the same variable at build time (`vite.config.ts`).
+  // Where errors and slow requests are reported (the error viewer, docs/backend/logging.md). Unset or empty turns
+  // reporting off. The client bundle reads the same variable at build time (`vite.config.ts`).
   SENTRY_DSN: z.preprocess((value) => (value === "" ? undefined : value), z.url().optional()),
   // Accept both URI schemes node-postgres understands; reject anything else early.
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),

@@ -1,0 +1,12 @@
+{{define "content"}}
+  <form class="card login" method="post" action="/login">
+    <h1>Sign in</h1>
+    {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+    <input type="hidden" name="next" value="{{.Next}}" />
+    <label>
+      Password
+      <input type="password" name="password" autocomplete="current-password" required autofocus />
+    </label>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+{{end}}

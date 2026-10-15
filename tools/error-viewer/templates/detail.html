@@ -1,0 +1,157 @@
+{{define "content"}}
+  {{if .Missing}}
+    <section class="card">
+      <h1>Event not found</h1>
+      <p>It was deleted, or removed by retention. <a href="/">Back to the list</a></p>
+    </section>
+  {{else}}
+    {{with .Event}}
+      {{/*===== Header =====*/}}
+      <section class="detail-head">
+        <p class="crumbs"><a href="/">← Events</a></p>
+        <h1>{{.Title}}</h1>
+        <p class="meta">
+          <span class="badge level {{.Level}}">{{.Level}}</span>
+          <span class="badge kind">{{.KindLabel}}</span>
+          <time datetime="{{iso .ReceivedAt}}" title="Received {{exact .ReceivedAt}}" data-ago>{{ago .ReceivedAt}}</time>
+          <span>received {{exact .ReceivedAt}}</span>
+          {{if .OccurredAt}}<span>occurred {{exact .OccurredAt}}</span>{{end}}
+          {{if .Environment}}<span>env <b>{{.Environment}}</b></span>{{end}}
+          {{if .Platform}}<span>platform <b>{{.Platform}}</b></span>{{end}}
+        </p>
+        <form
+          class="delete-one"
+          method="post"
+          action="/events/{{.ID}}/delete"
+          hx-post="/events/{{.ID}}/delete"
+          hx-confirm="Delete this event?"
+        >
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </section>
+    {{end}}
+
+    {{if .Message}}
+      <section class="card">
+        <h2>Message</h2>
+        <pre class="block">{{.Message}}</pre>
+      </section>
+    {{end}}
+
+    {{/*===== Tags =====*/}}
+    {{if .Tags}}
+      <section class="card">
+        <h2>Tags</h2>
+        <table class="kv">
+          {{range .Tags}}
+            <tr>
+              <th scope="row">{{.Key}}</th>
+              <td class="mono">
+                {{if .Link}}<a href="{{.Link}}" title="Every event with this {{.Key}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}
+                <button type="button" class="copy" data-copy="{{.Value}}" aria-label="Copy {{.Key}}">Copy</button>
+              </td>
+            </tr>
+          {{end}}
+        </table>
+      </section>
+    {{end}}
+
+    {{/*===== Exceptions =====*/}}
+    {{range .Exceptions}}
+      <section class="card exception">
+        <h2>{{if .CausedBy}}Caused by{{else}}Exception{{end}}</h2>
+        <p class="mono ex-title"><b>{{.Type}}</b>{{if .Mechanism}} <span class="muted">· {{.Mechanism}}</span>{{end}}</p>
+        {{if .Value}}<pre class="block">{{.Value}}</pre>{{end}}
+        {{range .Groups}}
+          {{if .InApp}}
+            <ol class="frames">
+              {{range .Frames}}{{template "frame" .}}{{end}}
+            </ol>
+          {{else}}
+            <details class="library">
+              <summary>{{len .Frames}} library frame{{if gt (len .Frames) 1}}s{{end}}</summary>
+              <ol class="frames">
+                {{range .Frames}}{{template "frame" .}}{{end}}
+              </ol>
+            </details>
+          {{end}}
+        {{end}}
+      </section>
+    {{end}}
+
+    {{/*===== Timeline =====*/}}
+    {{with .Timeline}}
+      <section class="card">
+        <h2>Timeline</h2>
+        {{if .Breakdown}}<p class="mono">{{.Breakdown}}</p>{{end}}
+        {{if .Spans}}<pre class="block timeline">{{.Spans}}</pre>{{end}}
+        <p class="hint">
+          Each line is a span's duration, kind and name. <code>@</code> is when it started, counted from the start of the
+          request. Children are indented under the span they ran inside; follow the slowest line at each level.
+        </p>
+      </section>
+    {{end}}
+
+    {{/*===== Log Context =====*/}}
+    {{if or .LogMessage .LogFields}}
+      <section class="card">
+        <h2>Log</h2>
+        {{if .LogMessage}}<p class="mono">{{.LogMessage}}</p>{{end}}
+        {{if .LogFields}}{{template "fields" .LogFields}}{{end}}
+      </section>
+    {{end}}
+
+    {{/*===== Request and Browser =====*/}}
+    {{if or .Request .Browser .Component}}
+      <section class="card">
+        <h2>{{if .Browser}}Browser{{else}}Request{{end}}</h2>
+        <table class="kv">
+          {{if .Request}}<tr><th scope="row">Request</th><td class="mono">{{.Request}}</td></tr>{{end}}
+          {{range .Browser}}<tr><th scope="row">{{.Key}}</th><td>{{.Value}}</td></tr>{{end}}
+        </table>
+        {{if .Component}}
+          <h3>React component stack</h3>
+          <pre class="block">{{.Component}}</pre>
+        {{end}}
+      </section>
+    {{end}}
+
+    {{/*===== Other Contexts =====*/}}
+    {{range .Contexts}}
+      <section class="card">
+        <h2>{{.Name}}</h2>
+        {{template "fields" .Fields}}
+      </section>
+    {{end}}
+
+    {{/*===== Raw JSON =====*/}}
+    <section class="card">
+      <details>
+        <summary>Raw JSON</summary>
+        <button type="button" class="copy" data-copy-from="#raw-json">Copy JSON</button>
+        <pre id="raw-json" class="block">{{.RawJSON}}</pre>
+      </details>
+    </section>
+  {{end}}
+{{end}}
+
+{{define "frame"}}
+  <li class="frame">
+    <p class="mono"><b>{{.Function}}</b> <span class="muted">{{.Location}}</span></p>
+    {{if .Lines}}
+      {{/* Each line is a block, so no newline between them (a <pre> would show it as an empty line). */}}
+      <pre class="source">{{range .Lines}}<span class="line{{if .Current}} current{{end}}"><span class="no">{{.Number}}</span>{{.Text}}</span>{{end}}</pre>
+    {{end}}
+  </li>
+{{end}}
+
+{{define "fields"}}
+  <table class="kv">
+    {{range .}}
+      <tr>
+        <th scope="row">{{.Key}}</th>
+        <td class="mono pre">{{.Value}}</td>
+      </tr>
+    {{end}}
+  </table>
+{{end}}

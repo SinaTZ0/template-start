@@ -1,6 +1,5 @@
 # The public edge of `compose.prod.yaml`: HTTPS (certificates are issued and renewed automatically for $DOMAIN and
-# $BUGSINK_DOMAIN),
-# compression, security headers, the read-only media path, and everything else proxied to the app.
+# $ERRORS_DOMAIN), compression, security headers, the read-only media path, and everything else proxied to the app.
 # `{$VAR}` is read from Caddy's environment when the file loads (set in `compose.prod.yaml`).
 
 {$DOMAIN} {
@@ -52,8 +51,9 @@
 	}
 }
 
-# Bugsink, the error tracker. Public because browsers send their errors here; signing in protects everything else.
-{$BUGSINK_DOMAIN} {
+# The error viewer (tools/error-viewer). Public because browsers send their errors here; everything but the event
+# intake and /healthz needs a sign-in. It sets its own CSP and framing headers.
+{$ERRORS_DOMAIN} {
 	encode zstd gzip
 
 	header {
@@ -62,8 +62,8 @@
 		-Server
 	}
 
-	reverse_proxy bugsink:8000 {
-		# Bugsink reads the visitor's address from X-Real-IP by default.
+	reverse_proxy error-viewer:8000 {
+		# The viewer rate-limits by the visitor's address, which it reads from X-Real-IP.
 		header_up X-Real-IP {remote_host}
 	}
 }

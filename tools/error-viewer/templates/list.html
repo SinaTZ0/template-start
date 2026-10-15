@@ -1,0 +1,119 @@
+{{define "content"}}
+  {{/*===== Filters =====*/}}
+  {{/* A plain GET form: it works without htmx, and every view is a bookmarkable URL. htmx swaps only the results and
+       pushes the URL, so the back button still works. */}}
+  <section class="toolbar">
+    <form
+      id="filters"
+      class="filters"
+      method="get"
+      action="/"
+      hx-get="/"
+      hx-target="#results"
+      hx-swap="outerHTML"
+      hx-push-url="true"
+      hx-trigger="input changed delay:300ms from:#q, change, submit"
+      hx-indicator="#results"
+    >
+      <input
+        id="q"
+        class="search mono"
+        type="search"
+        name="q"
+        value="{{.Query.Q}}"
+        placeholder="errorId, reqId, path:/notes, route:…, module:…, or text in the title"
+        aria-label="Search"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <select name="level" aria-label="Level">
+        <option value="">All levels</option>
+        {{range .Levels}}<option value="{{.}}" {{if eq . $.Query.Level}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <select name="kind" aria-label="Kind">
+        <option value="">All kinds</option>
+        {{range .Kinds}}<option value="{{.}}" {{if eq . $.Query.Kind}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <select name="platform" aria-label="Platform">
+        <option value="">All platforms</option>
+        {{range .Platforms}}<option value="{{.}}" {{if eq . $.Query.Platform}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <select name="env" aria-label="Environment">
+        <option value="">All environments</option>
+        {{range .Environments}}<option value="{{.}}" {{if eq . $.Query.Env}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <select name="range" aria-label="Time range">
+        <option value="">All time</option>
+        <option value="hour" {{if eq .Query.Range "hour"}}selected{{end}}>Last hour</option>
+        <option value="day" {{if eq .Query.Range "day"}}selected{{end}}>Last day</option>
+        <option value="week" {{if eq .Query.Range "week"}}selected{{end}}>Last week</option>
+      </select>
+      <label class="toggle">
+        <input type="checkbox" name="auto" value="1" {{if .Query.Auto}}checked{{end}} />
+        Auto-refresh
+      </label>
+      <button type="submit" class="ghost">Search</button>
+    </form>
+
+    {{/*------ Count by Day ------*/}}
+    {{if .Days}}
+      <figure class="days">
+        <svg viewBox="0 0 207 32" width="207" height="32" role="img" aria-label="Events per day, last 14 days">
+          {{range .Days}}
+            <rect x="{{.X}}" y="{{.Y}}" width="12" height="{{.Height}}" rx="1"><title>{{.Label}}: {{.Count}}</title></rect>
+          {{end}}
+        </svg>
+        <figcaption>14 days</figcaption>
+      </figure>
+    {{end}}
+  </section>
+
+  {{template "results" .}}
+{{end}}
+
+{{/*===== Results =====*/}}
+{{/* The part the filter form swaps. */}}
+{{define "results"}}
+  <section id="results" class="results">
+    <div class="table-wrap">
+      <table class="events">
+        <thead>
+          <tr>
+            <th scope="col">Time</th>
+            <th scope="col">Level</th>
+            <th scope="col">Kind</th>
+            <th scope="col">Title</th>
+            <th scope="col">Path</th>
+            <th scope="col">errorId</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          {{template "rows" .Rows}}
+        </tbody>
+      </table>
+    </div>
+    {{if and .Rows.First (not .Rows.Events)}}
+      <p class="empty">No events{{if .Query.Filtered}} match these filters{{end}}.</p>
+    {{end}}
+    {{template "poller" .Poller}}
+
+    {{/*------ Delete All Matching ------*/}}
+    {{if and .Query.Filtered .Rows.Events}}
+      <form
+        class="delete-matching"
+        method="post"
+        action="/events/delete"
+        hx-post="/events/delete"
+        hx-confirm="Delete every event that matches these filters, not only the ones shown?"
+      >
+        <input type="hidden" name="q" value="{{.Query.Q}}" />
+        <input type="hidden" name="level" value="{{.Query.Level}}" />
+        <input type="hidden" name="kind" value="{{.Query.Kind}}" />
+        <input type="hidden" name="platform" value="{{.Query.Platform}}" />
+        <input type="hidden" name="env" value="{{.Query.Env}}" />
+        <input type="hidden" name="range" value="{{.Query.Range}}" />
+        <button type="submit" class="danger">Delete all matching</button>
+      </form>
+    {{end}}
+  </section>
+{{end}}

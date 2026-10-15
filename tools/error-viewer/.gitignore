@@ -1,0 +1,4 @@
+# Local builds, `go run` data and `go mod vendor` output (see Dockerfile).
+/error-viewer
+/data/
+/vendor/

@@ -1,0 +1,30 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+    {{/* No injected <style> (the CSP blocks inline styles; app.css styles the indicators) and no eval. */}}
+    <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}' />
+    <title>{{.Title}} · Error viewer</title>
+    <link rel="stylesheet" href="{{asset "app.css"}}" />
+    <script src="{{asset "htmx.min.js"}}" defer></script>
+    <script src="{{asset "app.js"}}" defer></script>
+  </head>
+  <body>
+    {{/*===== Header =====*/}}
+    <header class="topbar">
+      <a class="brand" href="/">Error viewer</a>
+      {{if .SignedIn}}
+        <form method="post" action="/logout">
+          <button type="submit" class="ghost">Sign out</button>
+        </form>
+      {{end}}
+    </header>
+
+    {{/*===== Page =====*/}}
+    <main>{{template "content" .Body}}</main>
+  </body>
+</html>
+{{end}}

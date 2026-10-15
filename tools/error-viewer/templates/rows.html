@@ -1,0 +1,54 @@
+{{/*===== Rows =====*/}}
+{{/* A run of rows, then "Load more" when older events exist. The link works as a plain page link; htmx swaps the
+     next rows in place of it instead. */}}
+{{define "rows"}}
+  {{range .Events}}{{template "row" .}}{{end}}
+  {{if .More}}
+    <tr id="more" class="more">
+      <td colspan="6">
+        <a class="button" href="{{.MoreURL}}" hx-get="{{.MoreRowsURL}}" hx-target="#more" hx-swap="outerHTML">
+          Load more <span class="htmx-indicator spinner" aria-hidden="true"></span>
+        </a>
+      </td>
+    </tr>
+  {{end}}
+{{end}}
+
+{{define "row"}}
+  <tr class="level-{{.Level}}">
+    <td class="time"><time datetime="{{iso .ReceivedAt}}" title="{{exact .ReceivedAt}}" data-ago>{{ago .ReceivedAt}}</time></td>
+    <td><span class="badge level {{.Level}}">{{.Level}}</span></td>
+    <td><span class="badge kind">{{.KindLabel}}</span></td>
+    <td class="title"><a href="/events/{{.ID}}">{{.Title}}</a></td>
+    <td class="path mono">{{if .Method}}<span class="method">{{.Method}}</span> {{end}}{{.Path}}</td>
+    <td class="id mono">
+      {{if .ErrorID}}
+        <span title="{{.ErrorID}}">{{short .ErrorID}}</span>
+        <button type="button" class="copy" data-copy="{{.ErrorID}}" aria-label="Copy errorId">Copy</button>
+      {{end}}
+    </td>
+  </tr>
+{{end}}
+
+{{/*===== Auto-refresh =====*/}}
+{{/* Polls for newer rows. The response replaces this element with one that starts from the new newest row. */}}
+{{define "poller"}}
+  {{if .On}}
+    <div id="poller" hx-get="{{.URL}}" hx-trigger="every 10s" hx-swap="outerHTML"></div>
+  {{else}}
+    <div id="poller"></div>
+  {{end}}
+{{end}}
+
+{{/* Newer rows go to the top of the table out of band; the poller itself is the main swap. The <template> keeps the
+     <tbody> intact: after the poller's <div>, the HTML parser would drop a bare one (htmx unwraps it again). */}}
+{{define "newer"}}
+  {{template "poller" .Poller}}
+  {{if .Events}}
+    <template>
+      <tbody hx-swap-oob="afterbegin:#rows">
+        {{range .Events}}{{template "row" .}}{{end}}
+      </tbody>
+    </template>
+  {{end}}
+{{end}}
