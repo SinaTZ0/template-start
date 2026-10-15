@@ -12,15 +12,16 @@ A starting point for full-stack React Router v8 apps, in Persian and right-to-le
 
 ## Getting Started
 
-Requirements: Node 24, pnpm, Docker (for the dev services).
+Requirements: Node 24, pnpm, Docker (for the dev services), Go 1.26+ (for the error viewer).
 
 ```bash
 pnpm install
 cp .env.example .env          # then set the two secrets
-pnpm services                 # Postgres on 5432, SeaweedFS (S3) on 8333, error viewer on 8000, media bucket
+pnpm services                 # Postgres on 5432, SeaweedFS (S3) on 8333, media bucket
 pnpm db:migrate               # create the tables
 pnpm db:seed                  # optional: the admin from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
 pnpm dev                      # http://localhost:5173
+pnpm errors                   # optional, in a second terminal: error viewer on http://localhost:8000
 ```
 
 Generate the secrets with `openssl rand -base64 32`. `pnpm install` also installs the git hooks: staged files are
@@ -39,6 +40,7 @@ linted and formatted before each commit, and commit messages must follow
 | `pnpm storybook`                  | Component previews on port 6006                  |
 | `pnpm db:generate` / `db:migrate` | Record a schema change as a migration; apply it  |
 | `pnpm services`                   | Starts `compose.dev.yaml` and creates the bucket |
+| `pnpm errors`                     | The error viewer on port 8000, with `go run`     |
 
 ## Layout
 

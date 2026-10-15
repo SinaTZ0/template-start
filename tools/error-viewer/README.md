@@ -10,16 +10,9 @@ It has no dependency on the app: its own process, its own database file.
 
 ## Running It
 
-With the other dev services (`pnpm services`, from `compose.dev.yaml`): http://localhost:8000, password `admin`, DSN
-`http://developmentkey@localhost:8000/1`.
-
-Without Docker (Go 1.26+):
-
-```bash
-cd tools/error-viewer
-PUBLIC_KEY=developmentkey ADMIN_PASSWORD=admin SESSION_SECRET=development-only-session-secret-at-least-32-characters \
-  ALLOWED_ORIGIN=http://localhost:5173 BASE_URL=http://localhost:8000 DATA_DIR=./data go run .
-```
+In development, `pnpm errors` from the repository root (Go 1.26+): http://localhost:8000, password `admin`, DSN
+`http://developmentkey@localhost:8000/1`. It is `go run .` with fixed development settings and `DATA_DIR=./data`, so
+there is nothing to build: each start compiles the current source. Restart it after changing the code.
 
 At startup it logs the DSN to put in the app's `SENTRY_DSN`. `PUBLIC_KEY` may hold only letters, digits and `_`: the
 Sentry SDKs reject a DSN with any other character in its key and silently send nothing, so the viewer refuses to start
@@ -28,7 +21,8 @@ with one.
 **Where Google is blocked.** The image is built from Docker Hub only (`golang`, then `scratch`), but the build
 downloads Go modules from `proxy.golang.org`. Without access to it, either pass a mirror as the `GOPROXY` build argument
 (the compose files read it from `.env`), or run `go mod vendor` here first: the build uses a `vendor/` folder when there
-is one, and needs no network for modules.
+is one, and needs no network for modules. `pnpm errors` downloads them once into Go's module cache; for a mirror there,
+run `go env -w GOPROXY=<mirror>,direct` once.
 
 Checks: `go vet ./...`, `gofmt -l .` and `go test ./...` in this folder.
 

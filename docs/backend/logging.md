@@ -18,7 +18,7 @@ log.error({ err }) ──▶ log line + error viewer event      browser error �
 - **Errors go to the error viewer.** `tools/error-viewer` is a small Go service of this repo that speaks Sentry's
   protocol, so the app uses the official Sentry SDKs (`@sentry/node`, `@sentry/browser`) pointed at it. It stores each
   event with its stack and context in SQLite and lists them for searching. It doesn't group, alert or email. Development
-  runs it from `compose.dev.yaml`, production from `compose.prod.yaml`.
+  runs it with `pnpm errors` (`go run`), production from `compose.prod.yaml`.
 - **One trace per request.** `app/lib/trace.server.ts` keeps the request's timings in `AsyncLocalStorage`, so a query
   deep inside a service lands in the right request without anything being passed down. Slow requests are reported to
   the error viewer with the trace's timeline.
@@ -167,7 +167,7 @@ isn't reported to the error viewer: the slow request it belongs to is.
 ## The Error Viewer
 
 `tools/error-viewer` receives Sentry envelopes at `/api/1/envelope/`, keeps their `event` items in SQLite and shows
-them on a dashboard. It runs as its own container with its own database, so it keeps working when the app or Postgres
+them on a dashboard. It runs as its own process with its own database, so it keeps working when the app or Postgres
 is down. Its settings and internals are in [its README](../../tools/error-viewer/README.md).
 
 - **List** (`/`): newest first, with filters for level, kind (`error`, `slow`, `message`, `browser`), platform,
@@ -180,8 +180,10 @@ is down. Its settings and internals are in [its README](../../tools/error-viewer
 
 ### Development
 
-`pnpm services` starts it with the other services, at http://localhost:8000 (password `admin`). Its key is fixed, so
-put `SENTRY_DSN=http://developmentkey@localhost:8000/1` in `.env` and restart `pnpm dev`.
+`pnpm errors` runs it next to `pnpm dev`, at http://localhost:8000 (password `admin`). It needs Go 1.26+ and no build
+step: `go run` compiles the current source on each start (cached, so a restart takes a moment), so restart it after
+changing the viewer's code. Events are kept in `tools/error-viewer/data/` (gitignored). Its key is fixed, so put
+`SENTRY_DSN=http://developmentkey@localhost:8000/1` in `.env` and restart `pnpm dev`.
 
 ### Production
 

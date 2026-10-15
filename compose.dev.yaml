@@ -1,6 +1,7 @@
-# Development services only: Postgres, SeaweedFS (S3-compatible image storage, docs/backend/media.md) and the error
-# viewer (tools/error-viewer, docs/backend/logging.md). The app itself runs on the host with `pnpm dev`. Start with `pnpm services`, which also creates the media bucket
-# (`deploy/init-storage.mjs`); the values match `.env.example`.
+# Development services only: Postgres and SeaweedFS (S3-compatible image storage, docs/backend/media.md). The app runs
+# on the host with `pnpm dev`, and the error viewer (tools/error-viewer, docs/backend/logging.md) with `pnpm errors`.
+# Start with `pnpm services`, which also creates the media bucket (`deploy/init-storage.mjs`); the values match
+# `.env.example`.
 
 # Pinned so the volumes keep their names even when the folder is renamed. Rename per project.
 name: template-dev
@@ -33,27 +34,6 @@ services:
     volumes:
       - seaweedfs:/data
 
-  # Error viewer at http://localhost:8000 (password `admin`), built from tools/error-viewer. The key is fixed, so the DSN
-  # in `.env.example` works as is: http://developmentkey@localhost:8000/1.
-  error-viewer:
-    build:
-      context: tools/error-viewer
-      # A Go module mirror, if proxy.golang.org is out of reach (tools/error-viewer/README.md). Read from `.env`.
-      args:
-        GOPROXY: ${GOPROXY:-}
-    environment:
-      PUBLIC_KEY: developmentkey
-      ADMIN_PASSWORD: admin
-      SESSION_SECRET: development-only-session-secret-at-least-32-characters
-      # The app's pages send browser errors here: `pnpm dev` and `pnpm start`.
-      ALLOWED_ORIGIN: http://localhost:5173,http://localhost:3000
-      BASE_URL: http://localhost:8000
-    ports:
-      - "8000:8000"
-    volumes:
-      - error-viewer-data:/data
-
 volumes:
   pgdata:
   seaweedfs:
-  error-viewer-data:
