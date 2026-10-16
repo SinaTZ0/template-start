@@ -1,4 +1,5 @@
 import { cn } from "cn";
+import type { CSSProperties } from "react";
 import { getMediaVariantSize, getMediaVariantSpec } from "~/orpc/media/constants";
 import type { Media } from "~/orpc/media/contract";
 
@@ -43,9 +44,10 @@ export function MediaImage({
       loading={priority ? undefined : "lazy"}
       fetchPriority={priority ? "high" : undefined}
       decoding="async"
-      // The placeholder is a 16 px WebP stretched to fill the box, which is what makes it look blurred.
-      style={{ backgroundImage: `url("${media.placeholder}")`, backgroundSize: "cover" }}
-      className={cn("object-cover", className)}
+      // The placeholder is a 16 px WebP stretched to fill the box, which is what makes it look blurred. Only its URL
+      // is dynamic, so it travels as a custom property and the classes do the styling.
+      style={{ "--placeholder": `url("${media.placeholder}")` } as CSSProperties}
+      className={cn("bg-(image:--placeholder) bg-cover object-cover", className)}
     />
   );
 }

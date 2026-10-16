@@ -29,9 +29,9 @@ export default function NotesPage({ loaderData }: Route.ComponentProps) {
   const refresh = () => void revalidator.revalidate();
 
   return (
-    <div className="mx-auto grid max-w-site gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[22rem_1fr]">
+    <div className="mx-auto grid max-w-site gap-8 px-4 py-10 sm:px-6 lg:flex">
       {/*===== New Note =====*/}
-      <Card className="self-start">
+      <Card className="self-start lg:w-88 lg:shrink-0">
         <CardHeader>
           <CardTitle>
             <h1 className="text-h3">یادداشت تازه، {userName}</h1>
@@ -43,7 +43,7 @@ export default function NotesPage({ loaderData }: Route.ComponentProps) {
       </Card>
 
       {/*===== List =====*/}
-      <section aria-label="یادداشت‌های شما">
+      <section aria-label="یادداشت‌های شما" className="min-w-0 flex-1">
         {notes.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-16 text-center text-muted-foreground">
             <NotebookPenIcon className="size-8" />

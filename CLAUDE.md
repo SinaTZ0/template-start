@@ -56,6 +56,7 @@ Preserve established local conventions unless a rule below explicitly says other
 - Write style maps with `defineStyles` and the shared group names; join them with `joinStyles` / `composeStyles`.
 - If a shadcn component has no primitive yet, create one from its `ui/` source, keeping shadcn's API and `data-slot`s.
 - App-made components with no shadcn original (e.g. `form-alert`, `site-link`) live in `app/components/shared/<name>/` once more than one route uses them.
+- When `shadcn/*` lint flags a class, fix it in this order: an existing variant or size, then layout on the parent, then a new or changed variant in the primitive (`docs/frontend/components.md#fixing-a-lint-error`). Never work around it with a disable comment, a restyled wrapper element, or a raw element in place of the primitive.
 
 ### Imports
 

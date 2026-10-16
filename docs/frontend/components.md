@@ -69,6 +69,27 @@ Export the variant maps as `twVariant`, `twSize`, and so on, so stories can buil
 
 Prefer a CVA variant over `data-[size=…]:` selectors on the element itself. Keep the `data-*` attribute as well when a child or a parent reads it, as CardTitle does with `group-data-[size=sm]/card`.
 
+## Lint Rules
+
+`pnpm lint` runs [`@shadcn/lint`](https://github.com/shadcn-ui/lint) (configured in `.oxlintrc.json`) to enforce the boundary above:
+
+- `no-restyle`: outside `primitive/`, a primitive's `className` may only hold layout (margin, width, flex and grid placement). Anything else, such as padding, color, radius or font, belongs in a variant.
+- `no-raw-colors`: use theme colors from `app/app.css`, not the Tailwind palette (`bg-pink-500`). A new color is declared there as `--color-<name>` first.
+- `no-arbitrary-values`: stay on the scale (`w-88`, not `w-[22rem]`). A layout the scale can't express usually reads better as flex or grid with scale widths.
+- `no-inline-styles`: put dynamic values in a CSS custom property and read them from a class, as `media-image` does: `style={{ "--placeholder": url }}` with `bg-(image:--placeholder)`.
+
+The linter can't read `defineStyles` maps, so the color and arbitrary-value rules don't cover `*.styles.ts` files. Keep primitive styles on theme tokens by hand.
+
+### Fixing a Lint Error
+
+Work through these in order and stop at the first that fits:
+
+1. Use an existing variant or size prop on the primitive.
+2. If the class is about placement, move it to the parent (`gap`, grid or flex) or keep only its layout part.
+3. If the design really needs a new look, add or change a variant in the primitive's `*.styles.ts`, following [Changing a Primitive](#changing-a-primitive): check its consumers and update the story. A variant should be a look the design can reuse, not a fix for one page.
+
+Don't silence the error with a disable comment, a wrapper element that carries the styling, or a raw element in place of the primitive. If a rule is genuinely wrong somewhere, disable it on that line with a comment saying why.
+
 ## Changing a Primitive
 
 A primitive's styles change every page that uses it, so follow the "Prepare shared pieces" step in [frontend-flow.md](../frontend-flow.md). Before you change a default or add a variant, check the existing consumers and the other primitives that compose it, because some rely on its slots and selectors (`data-slot`, `in-data-[slot=button-group]`, `has-data-[icon=…]`, `aria-invalid`). Then update the story.

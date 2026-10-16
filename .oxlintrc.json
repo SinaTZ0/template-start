@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "vitest"],
+  "jsPlugins": ["@shadcn/lint"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
@@ -9,6 +10,12 @@
     "browser": true,
     "node": true
   },
+  "settings": {
+    "shadcn": {
+      "ui": "~/components/primitive",
+      "note": "Fix in order: existing variant → layout on the parent → new variant in the primitive (docs/frontend/components.md#lint-rules). Don't work around it."
+    }
+  },
   "rules": {
     "react/react-in-jsx-scope": "off",
     "import/no-unassigned-import": [
@@ -16,8 +23,20 @@
       {
         "allow": ["**/*.css"]
       }
-    ]
+    ],
+    "shadcn/no-restyle": ["error", { "allow": ["layout"] }],
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-arbitrary-values": "error",
+    "shadcn/no-inline-styles": "error"
   },
+  "overrides": [
+    {
+      "files": ["app/components/primitive/**"],
+      "rules": {
+        "shadcn/no-restyle": "off"
+      }
+    }
+  ],
   "ignorePatterns": [
     ".react-router/",
     "build/",
