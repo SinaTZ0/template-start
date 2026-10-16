@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -61,10 +63,69 @@ type sourceLine struct {
 	Current bool
 }
 
-type timelineView struct {
-	Breakdown string
-	Spans     string
+// timelineContext is the app's `timeline` context (app/lib/trace.server.ts → Timeline), in whole milliseconds. Events
+// reported before the app sent rows carry `breakdown` and `spans` as preformatted text instead.
+type timelineContext struct {
+	Ms    float64
+	Kinds []struct {
+		Kind  string
+		Count int
+		Ms    float64
+	}
+	Rows []struct {
+		Depth  int
+		Kind   string
+		Name   string
+		Count  int
+		At     float64
+		Ms     float64
+		Failed bool
+	}
+	Hidden        int
+	HiddenUnderMs float64
+	Breakdown     string
+	Spans         string
 }
+
+// timelineView is the waterfall: one row per span, its bar placed on a shared time axis. Positions are percentages of
+// the axis, for SVG attributes: the CSP allows no inline styles.
+type timelineView struct {
+	Total         int
+	Kinds         []kindTotal
+	Ticks         []timelineTick
+	Rows          []timelineRow
+	Hidden        int
+	HiddenUnderMs int
+	Breakdown     string // legacy text
+	Spans         string // legacy text
+}
+
+type kindTotal struct {
+	Kind  string
+	Count int
+	Ms    int
+}
+
+type timelineTick struct {
+	Label  string
+	X      string
+	Anchor string // the label's text-anchor, so the first and last labels stay inside the axis
+}
+
+type timelineRow struct {
+	Depth  int // capped, for the indent classes in app.css
+	Kind   string
+	Name   string
+	Count  int
+	At     int
+	Ms     int
+	Failed bool
+	X      string
+	Width  string
+}
+
+// maxTimelineDepth is the deepest indent app.css has a class for; deeper rows share it.
+const maxTimelineDepth = 8
 
 type contextView struct {
 	Name   string
@@ -113,9 +174,9 @@ func buildDetail(row eventRow) detailView {
 
 	/*------ Contexts ------*/
 	if raw, ok := ev.Contexts["timeline"]; ok {
-		var timeline timelineView
+		var timeline timelineContext
 		if json.Unmarshal(raw, &timeline) == nil {
-			view.Timeline = &timeline
+			view.Timeline = buildTimeline(timeline)
 		}
 	}
 	if raw, ok := ev.Contexts["log"]; ok {
@@ -258,4 +319,90 @@ func indentJSON(payload []byte) string {
 		return string(payload)
 	}
 	return buf.String()
+}
+
+/*===== Timeline =====*/
+
+// buildTimeline places each span on a time axis that runs from the start of the request to its end (or to the last
+// span's end, if one outlasted the report).
+func buildTimeline(ctx timelineContext) *timelineView {
+	view := &timelineView{
+		Total:         int(math.Round(ctx.Ms)),
+		Hidden:        ctx.Hidden,
+		HiddenUnderMs: int(math.Round(ctx.HiddenUnderMs)),
+		Breakdown:     ctx.Breakdown,
+		Spans:         ctx.Spans,
+	}
+	for _, k := range ctx.Kinds {
+		view.Kinds = append(view.Kinds, kindTotal{Kind: k.Kind, Count: k.Count, Ms: int(math.Round(k.Ms))})
+	}
+	if len(ctx.Rows) == 0 {
+		return view
+	}
+
+	/*------ Scale ------*/
+	scale := ctx.Ms
+	for _, r := range ctx.Rows {
+		scale = max(scale, r.At+r.Ms)
+	}
+	scale = max(scale, 1)
+	percent := func(ms float64) string { return strconv.FormatFloat(ms/scale*100, 'f', 2, 64) + "%" }
+
+	/*------ Rows ------*/
+	for _, r := range ctx.Rows {
+		view.Rows = append(view.Rows, timelineRow{
+			Depth:  min(max(r.Depth, 0), maxTimelineDepth),
+			Kind:   r.Kind,
+			Name:   r.Name,
+			Count:  max(r.Count, 1),
+			At:     int(math.Round(r.At)),
+			Ms:     int(math.Round(r.Ms)),
+			Failed: r.Failed,
+			X:      percent(max(r.At, 0)),
+			// A bar never vanishes: a 0 ms span still shows as a sliver.
+			Width: percent(max(r.Ms, scale*0.004)),
+		})
+	}
+
+	/*------ Axis ------*/
+	// At most five ticks, since the step is at least a quarter of the scale. Each is a multiple of the step, so no
+	// rounding error builds up.
+	step := niceStep(scale / 4)
+	for i := 0; float64(i)*step <= scale; i++ {
+		ms := float64(i) * step
+		tick := timelineTick{Label: formatMs(ms), X: percent(ms), Anchor: "middle"}
+		if i == 0 {
+			tick.Anchor = "start"
+		} else if ms > scale*0.92 {
+			tick.Anchor = "end"
+		}
+		view.Ticks = append(view.Ticks, tick)
+	}
+	return view
+}
+
+// niceStep rounds up to 1, 2 or 5 times a power of ten, so the axis reads 0, 500ms, 1s, 1.5s rather than 0, 781ms….
+func niceStep(raw float64) float64 {
+	if raw <= 0 {
+		return 1
+	}
+	magnitude := math.Pow(10, math.Floor(math.Log10(raw)))
+	for _, m := range []float64{1, 2, 5, 10} {
+		if raw <= m*magnitude {
+			return m * magnitude
+		}
+	}
+	return 10 * magnitude
+}
+
+// formatMs writes an axis label: milliseconds below a second, seconds from there.
+func formatMs(ms float64) string {
+	if ms == 0 {
+		return "0"
+	}
+	ms = math.Round(ms)
+	if ms < 1000 {
+		return fmt.Sprintf("%gms", ms)
+	}
+	return strconv.FormatFloat(ms/1000, 'f', -1, 64) + "s"
 }

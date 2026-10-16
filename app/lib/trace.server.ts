@@ -158,11 +158,32 @@ export function traceTotals(trace: RequestTrace): Partial<Record<SpanKind, { cou
 // Spans shorter than this share of the request are left out (their count is shown), so the tree shows where the time
 // went rather than every 1 ms query.
 const MIN_SHARE = 0.02;
-const MAX_LINES = 40;
-// The error tracker's page collapses runs of ordinary spaces; non-breaking ones keep the columns and indentation.
-const NBSP = " ";
+const MAX_ROWS = 40;
 
-/** Sibling spans of the same kind and name, merged into one line: `db ×41`. */
+/** One timeline row: a span, or identical siblings merged into one (`count` > 1). Times are whole milliseconds. */
+export type TimelineRow = {
+  /** 0 for a top-level span, 1 for a span inside it, and so on. */
+  depth: number;
+  kind: SpanKind;
+  name: string;
+  count: number;
+  /** When it started, counted from the start of the request. */
+  at: number;
+  ms: number;
+  failed: boolean;
+};
+
+/** The request's spans as the error viewer draws them: a tree in the order they started, flattened into rows. */
+export type Timeline = {
+  /** The request's time when the timeline was taken: the scale the rows are drawn against. */
+  ms: number;
+  rows: TimelineRow[];
+  /** How many spans were left out, for being shorter than `hiddenUnderMs` or past the row limit. */
+  hidden: number;
+  hiddenUnderMs: number;
+};
+
+/** Sibling spans of the same kind and name, merged into one row: `db ×41`. */
 type SpanGroup = {
   kind: SpanKind;
   name: string;
@@ -191,18 +212,11 @@ function groupSiblings(spans: Span[]): SpanGroup[] {
 }
 
 /**
- * The request's spans as an indented tree in the order they started, one line each: duration, kind and name, and
- * `@` the time it started, counted from the start of the request. Children are indented under the span they ran inside; identical siblings are merged (`db ×41`,
- * the sign of a query in a loop). Time a parent has beyond its children is its own work (rendering, CPU, waiting).
- *
- * ```text
- *  3107ms  loader routes/notes/notes  @100ms
- *  3106ms    procedure note.list  @100ms
- *  3105ms      service note.listNotes  @101ms
- *    16ms        db select … from note left join media on … where note.owner_id = $1  @3190ms
- * ```
+ * The request's spans as a tree in the order they started, each row after the span it ran inside. Identical siblings
+ * are merged (`db ×41`, the sign of a query in a loop), and spans under 2% of the request are left out. Time a parent
+ * has beyond its children is its own work (rendering, CPU, waiting).
  */
-export function traceTimeline(trace: RequestTrace): string {
+export function traceTimeline(trace: RequestTrace): Timeline {
   const total = performance.now() - trace.start;
   const minMs = total * MIN_SHARE;
 
@@ -219,27 +233,22 @@ export function traceTimeline(trace: RequestTrace): string {
   const countSpans = (ids: number[]): number =>
     ids.reduce((sum, id) => sum + 1 + countSpans((children.get(id) ?? []).map((child) => child.id)), 0);
 
-  /*------ Lines ------*/
-  const lines: string[] = [];
+  /*------ Rows ------*/
+  const rows: TimelineRow[] = [];
   let hidden = 0;
   const visit = (parents: (number | undefined)[], depth: number) => {
     const spans = parents.flatMap((parent) => children.get(parent) ?? []);
     for (const group of groupSiblings(spans)) {
-      if (group.ms < minMs || lines.length >= MAX_LINES) {
+      if (group.ms < minMs || rows.length >= MAX_ROWS) {
         hidden += countSpans(group.ids);
         continue;
       }
-      const ms = `${Math.round(group.ms)}ms`.padStart(7, NBSP);
-      const count = group.count > 1 ? ` ×${group.count}` : "";
-      const failed = group.failed ? "  FAILED" : "";
-      lines.push(
-        `${ms}${NBSP.repeat(2 + depth * 2)}${group.kind}${count} ${group.name}  @${Math.round(group.at)}ms${failed}`,
-      );
+      const { kind, name, count, failed } = group;
+      rows.push({ depth, kind, name, count, at: Math.round(group.at), ms: Math.round(group.ms), failed });
       visit(group.ids, depth + 1);
     }
   };
   visit([undefined], 0);
 
-  if (hidden > 0) lines.push(`(${hidden} spans under ${Math.round(minMs)}ms not shown)`);
-  return lines.join("\n");
+  return { ms: Math.round(total), rows, hidden, hiddenUnderMs: Math.round(minMs) };
 }

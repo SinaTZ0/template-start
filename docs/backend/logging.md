@@ -121,36 +121,37 @@ INFO: GET /notes 200 45ms (loader 2×30ms, procedure 1×28ms, db 2×5ms) {"modul
 `LOG_SLOW_REQUEST_MS` is a warning line, and is also **reported to the error viewer** as
 `Slow request: GET /notes/:id (1420ms)`, of kind `slow`. Search `route:/notes/:id` to see every slow hit on one route.
 
-The report has no stack trace (a stack shows where code is, not where time went). Its **Timeline** block has the time
-per kind (`breakdown`) and the request's spans as a tree (`spans`):
+The report has no stack trace (a stack shows where code is, not where time went). Its **Timeline** shows the time per
+kind and draws the request's spans as a waterfall, one row each:
 
 ```text
-  121ms  middleware routes/notes_layout/notes-layout  @1ms
-  116ms    db select … from session where session.token = $1  @6ms
- 3116ms  loader routes/notes/notes  @123ms
- 3116ms    procedure note.list  @123ms
-   87ms      db ×5 select … from user where user.id = $1  @124ms
- 3024ms      service note.listNotes  @214ms
-(3 spans under 65ms not shown)
+Span                                          Start  Duration  0        1s        2s        3s
+middleware routes/notes_layout/notes-layout     1ms     121ms  ▇
+  db select … from session where …              6ms     116ms  ▇
+loader routes/notes/notes                     123ms    3116ms   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+  procedure note.list                         123ms    3116ms   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+    db ×5 select … from user where …          124ms      87ms   ▇
+    service note.listNotes                    214ms    3024ms    ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+3 spans under 65ms not shown.
 ```
 
-Each line is a span's duration, its kind and name, and `@` when it started, counted from the start of the request:
-`3116ms loader … @123ms` began 123 ms into the request and took 3116 ms. Comparing start times shows order and waiting:
-a span that starts when the one before it ends ran after it, two that start together ran in parallel, and a gap is time
-spent on untraced work. A span is indented under the one it ran inside, so parallel loaders keep their own children.
-Identical siblings are merged into one line (`db ×5`) with their total time. Spans under 2% of the request are left out,
-and the last line counts them. Queries show their shape only: quotes and column lists are dropped, and parameters are
-never included.
+Each row is a span's kind and name, when it started (counted from the start of the request) and how long it took; its
+bar shows the same on the request's time axis. The bars show order and waiting: a span that starts when the one before
+it ends ran after it, two that start together ran in parallel, and a gap is time spent on untraced work. A span is
+indented under the one it ran inside, so parallel loaders keep their own children. Identical siblings are merged into one
+row (`db ×5`) with their total time. Spans under 2% of the request are left out, and the line under the table counts
+them. Queries show their shape only: quotes and column lists are dropped, and parameters are never included. The app
+sends the rows as data (`traceTimeline` in `app/lib/trace.server.ts`); the viewer draws them.
 
-Read it from the top down: follow the slowest line at each level. Here the loader waits on `note.list`, which spends
+Read it from the top down: follow the longest bar at each level. Here the loader waits on `note.list`, which spends
 87 ms on queries and 3024 ms in `note.listNotes`, whose own query is too fast to be listed. So the time went into the
 service's own code.
 
 - **One span takes most of the time:** that is the bottleneck. For a query, check its plan and indexes.
-- **A `×N` line** (`db ×41 select …`): a query inside a loop (N+1). Fetch them in one query or a join.
+- **A `×N` row** (`db ×41 select …`): a query inside a loop (N+1). Fetch them in one query or a join.
 - **A span much slower than its children:** time in its own code, usually rendering, CPU work or waiting on something
   untraced. Wrap the suspect in a `task` span.
-- **`FAILED`:** that span threw. Its error is reported separately with the same `reqId` tag.
+- **`failed`:** that span threw (its bar is red). Its error is reported separately with the same `reqId` tag.
 
 A query slower than `LOG_SLOW_QUERY_MS` also gets its own `slow query` warning line, inside or outside a request. It
 isn't reported to the error viewer: the slow request it belongs to is.
@@ -159,7 +160,7 @@ isn't reported to the error viewer: the slow request it belongs to is.
 
 - A request's time ends when its response starts. Content streamed in later (deferred loader data) isn't counted.
 - A trace keeps at most 300 spans. Spans past that still count in the totals but not in the timeline, and the timeline
-  shows at most 40 lines.
+  shows at most 40 rows.
 - Only queries through `db` (`app/db/client.server.ts`) are traced. A separate `pg` pool or client isn't.
 - The error viewer shows errors, not performance: there are no percentile charts, only reports for requests past the
   threshold. The log lines carry every request's timing.

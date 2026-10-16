@@ -437,10 +437,180 @@ pre.block {
   white-space: pre-wrap;
   word-break: break-word;
 }
-/* The timeline is aligned with padding (no-break spaces): it must not wrap. */
+/* An event reported before the app sent timeline rows: text aligned with no-break spaces, so it must not wrap. */
 pre.timeline {
   white-space: pre;
   word-break: normal;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*------ Timeline ------*/
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.kinds li {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  font-size: 12.5px;
+}
+.kinds b {
+  font-weight: 600;
+}
+
+.waterfall-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+/* Fixed layout, so a long query is cut off with an ellipsis instead of pushing the bars aside. */
+.waterfall {
+  table-layout: fixed;
+  min-width: 640px;
+}
+.waterfall .col-at {
+  width: 72px;
+}
+.waterfall .col-ms {
+  width: 80px;
+}
+.waterfall .col-bar {
+  width: 42%;
+}
+.waterfall th,
+.waterfall td {
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+.waterfall th {
+  height: 30px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
+.waterfall td {
+  height: 28px;
+}
+.waterfall tbody tr:last-child td {
+  border-bottom: 0;
+}
+.waterfall tbody tr:hover {
+  background: var(--accent);
+}
+.waterfall .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.waterfall td.span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.waterfall .kind {
+  margin-right: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.waterfall .count {
+  margin-right: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warning);
+}
+.waterfall .name {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.waterfall .badge {
+  margin-right: 6px;
+}
+/* Indentation by depth. A class per level, since the CSP allows no inline styles. */
+.waterfall .d1 {
+  padding-left: 24px;
+}
+.waterfall .d2 {
+  padding-left: 40px;
+}
+.waterfall .d3 {
+  padding-left: 56px;
+}
+.waterfall .d4 {
+  padding-left: 72px;
+}
+.waterfall .d5 {
+  padding-left: 88px;
+}
+.waterfall .d6 {
+  padding-left: 104px;
+}
+.waterfall .d7 {
+  padding-left: 120px;
+}
+.waterfall .d8 {
+  padding-left: 136px;
+}
+
+/* The bars' SVG fills its cell, so the gridlines join up from row to row. */
+.waterfall td.bar {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.waterfall .bar svg {
+  display: block;
+  width: 100%;
+  height: 28px;
+  overflow: visible;
+}
+.waterfall .bar line {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.waterfall .bar rect {
+  fill: var(--chart);
+}
+.waterfall tr.failed .bar rect {
+  fill: var(--destructive);
+}
+.waterfall svg.axis {
+  height: 16px;
+}
+.waterfall .axis text {
+  fill: var(--muted-foreground);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .kv th,
@@ -553,5 +723,42 @@ details[open] > summary {
   }
   .kv th {
     width: auto;
+  }
+  /* Narrower, so the bars stay in view; full names are in each row's tooltip. */
+  .waterfall {
+    min-width: 0;
+  }
+  .waterfall .col-at {
+    display: none;
+  }
+  .waterfall .col-ms {
+    width: 76px;
+  }
+  .waterfall .col-bar {
+    width: 34%;
+  }
+  .waterfall .d1 {
+    padding-left: 14px;
+  }
+  .waterfall .d2 {
+    padding-left: 20px;
+  }
+  .waterfall .d3 {
+    padding-left: 26px;
+  }
+  .waterfall .d4 {
+    padding-left: 32px;
+  }
+  .waterfall .d5 {
+    padding-left: 38px;
+  }
+  .waterfall .d6 {
+    padding-left: 44px;
+  }
+  .waterfall .d7 {
+    padding-left: 50px;
+  }
+  .waterfall .d8 {
+    padding-left: 56px;
   }
 }

@@ -132,7 +132,7 @@ function logRequest({
   else if (slow) log.warn(fields, `slow request: ${summary}`);
   else log.info(fields, summary);
 
-  if (slow) reportSlowRequest({ method: request.method, route, ms, breakdown, timeline: traceTimeline(trace) });
+  if (slow) reportSlowRequest({ method: request.method, route, ms, kinds: timing, timeline: traceTimeline(trace) });
 }
 
 /**

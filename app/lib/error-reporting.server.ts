@@ -3,6 +3,7 @@ import type { ErrorEvent } from "@sentry/node";
 
 import { env } from "~/env.server";
 import { currentTrace } from "~/lib/trace.server";
+import type { SpanKind, Timeline } from "~/lib/trace.server";
 
 /*===== Query Parameters =====*/
 /**
@@ -42,6 +43,8 @@ if (env.SENTRY_DSN && !Sentry.isInitialized()) {
       databaseQueryData: env.LOG_QUERY_PARAMS,
       stackFrameVariables: false,
     },
+    // The SDK cuts contexts off below this depth. 4 keeps the timeline's rows: contexts → timeline → rows → row.
+    normalizeDepth: 4,
     beforeSend: scrubEvent,
   });
 }
@@ -88,32 +91,34 @@ export function reportError({
  * is how the error viewer tells these apart from errors; a grouping tracker (Bugsink, Sentry) would also group them by
  * method and route pattern.
  *
- * @param breakdown Time per kind of work: `loader 1×3008ms, procedure 1×3004ms, db 1×3ms`.
+ * @param kinds Count and total time per kind of work, in the order each kind first ran (`traceTotals`).
  * @param timeline The request's spans as a tree (`traceTimeline`).
  */
 export function reportSlowRequest({
   method,
   route,
   ms,
-  breakdown,
+  kinds,
   timeline,
 }: {
   method: string;
   route: string;
   ms: number;
-  breakdown: string;
-  timeline: string;
+  kinds: Partial<Record<SpanKind, { count: number; ms: number }>>;
+  timeline: Timeline;
 }) {
   if (!Sentry.isEnabled()) return;
 
   // `captureEvent` rather than `captureMessage`, which would attach the stack of this call: the same for every slow
   // request, and no clue to where the time went. The timeline is that clue (docs/backend/logging.md → Request Timing).
-  // A context is shown as its own titled block, keeping the timeline's line breaks.
+  // The viewer draws the `timeline` context as a waterfall. Kinds go as a list, since JSON objects lose their order.
   Sentry.captureEvent({
     message: `Slow request: ${method} ${route} (${ms}ms)`,
     level: "warning",
     fingerprint: ["slow-request", method, route],
     tags: { ...requestTags(), route },
-    contexts: { timeline: { breakdown, spans: timeline } },
+    contexts: {
+      timeline: { ...timeline, kinds: Object.entries(kinds).map(([kind, total]) => ({ kind, ...total })) },
+    },
   });
 }

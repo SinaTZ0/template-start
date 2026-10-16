@@ -81,14 +81,85 @@
 
     {{/*===== Timeline =====*/}}
     {{with .Timeline}}
+      {{$ticks := .Ticks}}
       <section class="card">
-        <h2>Timeline</h2>
-        {{if .Breakdown}}<p class="mono">{{.Breakdown}}</p>{{end}}
-        {{if .Spans}}<pre class="block timeline">{{.Spans}}</pre>{{end}}
-        <p class="hint">
-          Each line is a span's duration, kind and name. <code>@</code> is when it started, counted from the start of the
-          request. Children are indented under the span they ran inside; follow the slowest line at each level.
-        </p>
+        <div class="card-head">
+          <h2>Timeline</h2>
+          {{if .Total}}<span class="mono muted">{{.Total}}ms total</span>{{end}}
+        </div>
+
+        {{/*------ Time per Kind ------*/}}
+        {{if .Kinds}}
+          <ul class="kinds" aria-label="Time per kind of work">
+            {{range .Kinds}}
+              <li>
+                <span class="muted">{{.Kind}}</span> <b class="mono">{{.Ms}}ms</b>
+                {{if gt .Count 1}}<span class="muted mono">×{{.Count}}</span>{{end}}
+              </li>
+            {{end}}
+          </ul>
+        {{else if .Breakdown}}
+          <p class="mono">{{.Breakdown}}</p>
+        {{end}}
+
+        {{/*------ Waterfall ------*/}}
+        {{if .Rows}}
+          <div class="waterfall-wrap">
+            <table class="waterfall">
+              <colgroup>
+                <col />
+                <col class="col-at" />
+                <col class="col-ms" />
+                <col class="col-bar" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Span</th>
+                  <th scope="col" class="num col-at">Start</th>
+                  <th scope="col" class="num">Duration</th>
+                  <th scope="col" class="bar">
+                    <span class="visually-hidden">When it ran</span>
+                    <svg class="axis" aria-hidden="true">
+                      {{range .Ticks}}<text x="{{.X}}" y="12" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+                    </svg>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {{range .Rows}}
+                  <tr class="{{if .Failed}}failed{{end}}">
+                    <td class="span d{{.Depth}}" title="{{.Kind}} {{.Name}}">
+                      {{- /* The badge goes first: a long query would push it out of sight. */ -}}
+                      {{if .Failed}}<span class="badge error">failed</span>{{end}}
+                      <span class="kind">{{.Kind}}</span>
+                      {{if gt .Count 1}}<span class="count">×{{.Count}}</span>{{end}}
+                      <span class="name">{{.Name}}</span>
+                    </td>
+                    <td class="num col-at muted">{{.At}}ms</td>
+                    <td class="num">{{.Ms}}ms</td>
+                    <td class="bar">
+                      <svg aria-hidden="true">
+                        {{range $ticks}}<line x1="{{.X}}" x2="{{.X}}" y1="0" y2="100%" />{{end}}
+                        <rect x="{{.X}}" y="9" width="{{.Width}}" height="10" rx="3">
+                          <title>{{.Kind}} {{.Name}}: {{.Ms}}ms, from {{.At}}ms</title>
+                        </rect>
+                      </svg>
+                    </td>
+                  </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+          {{if .Hidden}}
+            <p class="hint">{{.Hidden}} spans under {{.HiddenUnderMs}}ms not shown.</p>
+          {{end}}
+          <p class="hint">
+            Each bar is when a span ran, from the start of the request. Rows are indented under the span they ran inside;
+            time a span has beyond its children is its own work. Follow the longest bar at each level.
+          </p>
+        {{else if .Spans}}
+          <pre class="block timeline">{{.Spans}}</pre>
+        {{end}}
       </section>
     {{end}}
 
