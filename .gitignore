@@ -5,6 +5,12 @@
 !.env.production.example
 /node_modules/
 
+# Production server state (deploy/deploy.sh): certificates, private keys and database dumps never belong in git.
+/certs/
+/backups/
+*.key
+*.pfx
+
 # React Router
 /.react-router/
 /build/

@@ -11,5 +11,9 @@ build
 playwright-report
 test-results
 storybook-static
+certs
+backups
+*.key
+*.pfx
 # The error viewer builds from its own folder (tools/error-viewer/Dockerfile).
 tools

@@ -2,7 +2,8 @@
 # the app and to the error viewer (on its own subdomain), and serves image variants read-only from SeaweedFS. Before the app starts, two one-time jobs run from the
 # app's image: `migrate` applies pending database migrations and `storage-init` creates the media bucket.
 #
-# Configure with a `.env` file next to this one (copy `.env.production.example`). Deploy or update with
+# Set up, update and back up with `deploy/deploy.sh`. By hand: configure with a `.env` file next to this one (copy
+# `.env.production.example`), then deploy or update with
 #   docker compose -f compose.prod.yaml up -d --build
 # Needs Docker Compose 2.23.1 or later (inline `configs`).
 
@@ -39,8 +40,12 @@ services:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
       ERRORS_DOMAIN: ${ERRORS_DOMAIN:?set ERRORS_DOMAIN in .env}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:?set S3_BUCKET_NAME in .env}
+      # `auto` (Let's Encrypt) or `files` (the certificate in `certs/`), see `deploy/Caddyfile`.
+      TLS_MODE: ${TLS_MODE:-auto}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Your own certificate, put there by `deploy/deploy.sh`. Unused with `TLS_MODE=auto`.
+      - ./certs:/certs:ro
       # Certificates and their keys: keep this volume, or every restart requests new ones (and hits rate limits).
       - caddy_data:/data
       - caddy_config:/config
