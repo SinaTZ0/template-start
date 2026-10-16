@@ -186,6 +186,9 @@ step: `go run` compiles the current source on each start (cached, so a restart t
 changing the viewer's code. Events are kept in `tools/error-viewer/data/` (gitignored). Its key is fixed, so put
 `SENTRY_DSN=http://developmentkey@localhost:8000/1` in `.env` and restart `pnpm dev`.
 
+`.env.example` sets `LOG_LEVEL=warn`, so the dev terminal shows only warnings and errors, and the viewer holds their
+details. Set `LOG_LEVEL=info` to see every request line again.
+
 ### Production
 
 `compose.prod.yaml` runs it on its own subdomain (`ERRORS_DOMAIN`), behind Caddy. The setup is in
@@ -206,8 +209,8 @@ projects. Do that when you need what the viewer leaves out: grouping into issues
 | `LOG_QUERY_PARAMS`    | `false` | Log and report a failed query's parameters (personal data risk) |
 | `SENTRY_DSN`          | (empty) | The error viewer's DSN, for the server and the browser          |
 
-At `LOG_LEVEL=warn`, only the slow, failed and erroring requests are written, which suits a busy production server.
-`fatal` and `silent` also stop error reports, which are sent from the logger.
+At `LOG_LEVEL=warn`, only the slow, failed and erroring requests are written, which suits development next to the
+error viewer and a busy production server. `fatal` and `silent` also stop error reports, which are sent from the logger.
 
 The browser bundle reads `SENTRY_DSN` when it is built (`envPrefix` in `vite.config.ts`), so changing it needs a
 rebuild. The server reads it at startup.
