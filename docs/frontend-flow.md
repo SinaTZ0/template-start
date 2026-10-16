@@ -14,6 +14,7 @@ Changing only a primitive or a shared component? Go straight to step 6.
 | [frontend/nuqs.md](./frontend/nuqs.md)                         | URL state                                                             |
 | [frontend/jotai.md](./frontend/jotai.md)                       | Shared client state                                                   |
 | [frontend/view-transitions.md](./frontend/view-transitions.md) | The page fade                                                         |
+| [frontend/seo.md](./frontend/seo.md)                           | Page meta, link previews, what to index, the sitemap                  |
 | [backend/media.md](./backend/media.md)                         | Uploading and rendering images                                        |
 
 The `notes` route (`app/routes/notes/`) is the worked example.
@@ -62,8 +63,9 @@ The `notes` route (`app/routes/notes/`) is the worked example.
 7. **Route and data**: register the route in `routes.ts` and create its flat slice folder
    ([architecture.md](./frontend/architecture.md) → Route Slices). If it needs a signed-in user, put it under a layout
    route guarded by `requireSession`, and read the user in its loader with `context.get(sessionContext)`. Load
-   render-critical data in the `loader` through `createServerClient(request)`. Set the title in `meta` with
-   `pageTitle(...)` (`app/lib/site.ts`), and add an `ErrorBoundary` where a failure shouldn't take the whole layout
+   render-critical data in the `loader` through `createServerClient(request)`. Set the page's tags in `meta` with
+   `pageMeta(...)`: a title and description for a public page, which also goes in the sitemap, or `index: false` for
+   a private one ([seo.md](./frontend/seo.md)). Add an `ErrorBoundary` where a failure shouldn't take the whole layout
    down ([architecture.md](./frontend/architecture.md) → Data and the Server Boundary).
    - The page's data comes from oRPC procedures. If one it needs doesn't exist yet, add it first with
      [backend-flow.md](./backend-flow.md).

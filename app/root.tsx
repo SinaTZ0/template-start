@@ -7,6 +7,7 @@ import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration }
 import { DirectionProvider } from "~/components/primitive/direction/direction";
 import { Toaster } from "~/components/primitive/toast/toast";
 import { TooltipProvider } from "~/components/primitive/tooltip/tooltip";
+import { SITE_ORIGIN } from "~/lib/site.server";
 import { THEME_INIT_SCRIPT } from "~/lib/theme";
 
 import type { Route } from "./+types/root";
@@ -61,6 +62,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </html>
   );
 }
+
+/*===== Loader =====*/
+/** The public origin, for the absolute URLs in every page's meta tags (`absoluteUrl` in `app/lib/seo.ts`). */
+export function loader() {
+  return { origin: SITE_ORIGIN };
+}
+
+// The origin never changes while the app runs, so client navigations and mutations don't need to fetch it again.
+export const shouldRevalidate = () => false;
 
 export default function App() {
   return <Outlet />;

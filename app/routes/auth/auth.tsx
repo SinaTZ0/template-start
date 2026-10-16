@@ -3,7 +3,7 @@ import { redirect, useNavigate, useRevalidator } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/primitive/card/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/primitive/tabs/tabs";
 import { auth } from "~/lib/auth.server";
-import { pageTitle } from "~/lib/site";
+import { pageMeta } from "~/lib/seo";
 import { SignInForm } from "~/routes/auth/components/sign-in-form";
 import { SignUpForm } from "~/routes/auth/components/sign-up-form";
 
@@ -13,7 +13,8 @@ import type { Route } from "./+types/auth";
 const DEFAULT_REDIRECT = "/notes";
 
 /*===== Meta =====*/
-export const meta: Route.MetaFunction = () => [{ title: pageTitle("ورود") }];
+// Sign-in has nothing to find in search results.
+export const meta: Route.MetaFunction = (args) => pageMeta({ args, title: "ورود", index: false });
 
 /*===== Loader =====*/
 export async function loader({ request }: Route.LoaderArgs) {

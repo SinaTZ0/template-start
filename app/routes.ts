@@ -11,4 +11,6 @@ export default [
   route("api/auth/*", "routes/api_auth/api-auth.ts"),
   route("rpc/*", "routes/rpc/rpc.ts"),
   route("healthz", "routes/healthz/healthz.ts"),
+  route("robots.txt", "routes/robots/robots.ts"),
+  route("sitemap.xml", "routes/sitemap/sitemap.ts"),
 ] satisfies RouteConfig;

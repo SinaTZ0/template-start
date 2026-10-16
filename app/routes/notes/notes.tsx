@@ -3,7 +3,7 @@ import { useRevalidator } from "react-router";
 
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/primitive/card/card";
 import { sessionContext } from "~/lib/session-guard.server";
-import { pageTitle } from "~/lib/site";
+import { pageMeta } from "~/lib/seo";
 import { createServerClient } from "~/orpc/server-client.server";
 import { NoteCard } from "~/routes/notes/components/note-card";
 import { NoteForm } from "~/routes/notes/components/note-form";
@@ -11,7 +11,8 @@ import { NoteForm } from "~/routes/notes/components/note-form";
 import type { Route } from "./+types/notes";
 
 /*===== Meta =====*/
-export const meta: Route.MetaFunction = () => [{ title: pageTitle("یادداشت‌ها") }];
+// Behind a sign-in, so search engines shouldn't list it.
+export const meta: Route.MetaFunction = (args) => pageMeta({ args, title: "یادداشت‌ها", index: false });
 
 /*===== Loader =====*/
 // Render-critical data comes from the loader through the in-process client; mutations go through the browser client

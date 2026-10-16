@@ -253,5 +253,7 @@ docker compose -f compose.prod.yaml exec -T db pg_restore -U app -d app --clean 
 - Add a Content-Security-Policy in the app (the inline theme script in `root.tsx` needs a nonce or hash). Its
   `connect-src` must allow `https://<ERRORS_DOMAIN>`, or browser errors can't be reported. Caddy sets the other
   security headers.
+- Set the site's name, description and link-preview image in `app/lib/site.ts`, and check `/sitemap.xml` lists every
+  public page ([seo.md](./frontend/seo.md)).
 - Schedule the orphan-media cleanup if uploads matter (`deleteMedia` in `app/orpc/media/service.ts`).
 - Schedule the nightly backup and a copy off the server (Backups above).

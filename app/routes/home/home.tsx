@@ -2,14 +2,23 @@ import { ArrowLeftIcon } from "lucide-react";
 import { Link } from "react-router";
 
 import { buttonVariants } from "~/components/primitive/button/button.styles";
-import { SITE_NAME, pageTitle } from "~/lib/site";
+import { absoluteUrl, pageMeta } from "~/lib/seo";
+import { SITE_NAME } from "~/lib/site";
 
 import type { Route } from "./+types/home";
 
 /*===== Meta =====*/
-export const meta: Route.MetaFunction = () => [
-  { title: pageTitle() },
-  { name: "description", content: "نقطه شروع پروژه‌های تازه." },
+// A public page: the full set of tags, plus structured data that tells search engines the site's name.
+export const meta: Route.MetaFunction = (args) => [
+  ...pageMeta({ args }),
+  {
+    "script:ld+json": {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: SITE_NAME,
+      url: absoluteUrl({ matches: args.matches, path: "/" }),
+    },
+  },
 ];
 
 /*===== Home =====*/
