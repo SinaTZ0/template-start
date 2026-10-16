@@ -9,6 +9,7 @@ import { env } from "~/env.server";
 import { verifyAltchaPayload } from "~/lib/altcha.server";
 import { ACCOUNT_BLOCKED_CODE, ALTCHA_HEADER, CAPTCHA_FAILED_CODE } from "~/lib/auth-constants";
 import { createLogger } from "~/lib/logger.server";
+import { CLIENT_ADDRESS_HEADER } from "~/lib/rate-limit.server";
 
 const log = createLogger("auth");
 
@@ -35,6 +36,11 @@ export const auth = betterAuth({
       log[level](err ? { err } : args.length > 0 ? { details: args } : {}, message);
     },
   },
+  // `/api/auth/*` is limited by the app's own limiter (`app/routes/api_auth/`). Better-Auth's would count the same
+  // requests a second time, and without a client address it falls back to one bucket shared by every visitor.
+  rateLimit: { enabled: false },
+  // Sessions record the address the app's limiter trusts: Caddy sets it (`app/lib/rate-limit.server.ts`).
+  advanced: { ipAddress: { ipAddressHeaders: [CLIENT_ADDRESS_HEADER] } },
   emailAndPassword: {
     enabled: true,
     // No mail provider in the template: accounts work immediately, and sign-up signs the user in. Turn verification

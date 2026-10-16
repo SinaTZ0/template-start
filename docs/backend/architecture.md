@@ -117,8 +117,8 @@ return { id: result.id };
 
 ### Middleware
 
-- **Global** middleware (procedure timing, then error normalization and its logging) is applied once on `base`, so it
-  wraps validation too. Every procedure starts from `base.<feature>.<procedure>`. The router is assembled with the
+- **Global** middleware (procedure timing, then error normalization and its logging, then the general rate limit) is
+  applied once on `base`, so it wraps validation too. Every procedure starts from `base.<feature>.<procedure>`. The router is assembled with the
   undecorated `implementer`, because oRPC v2 doesn't dedupe middleware and would otherwise run it twice.
 - **Feature-level** middleware is opt-in per procedure with `.use()`. It provides dependencies (`provideDbMiddleware`)
   or enforces guards (`requireUserMiddleware`, origin checks) and passes results through `context`.
@@ -146,6 +146,25 @@ return { id: result.id };
   `FORBIDDEN`.
 - Pages are guarded separately with `requireSession({ roles })` on a layout route (`app/lib/session-guard.server.ts`).
   The UI guard is never the only check.
+
+### Rate limiting
+
+- One limiter (`app/lib/rate-limit.server.ts`) covers both the API and `/api/auth/*`, keyed by the client address
+  that Caddy sends in `X-Real-IP`. Better-Auth's own limiter is off.
+- Every procedure gets the general policy from `base` (300 a minute). A procedure that is expensive or abusable adds a
+  stricter one as its first middleware: `.use(rateLimitMiddleware(UPLOAD_RATE_LIMIT))`, with the policy defined next to
+  the procedure. Policy names must be unique, since they keep the counters apart.
+- `TOO_MANY_REQUESTS` is a common error, so contracts already declare it. Its data adds `retryAfterSeconds`, and its
+  Persian message reaches the form through `describeApiFailure`.
+- Auth limits are set by path in `app/routes/api_auth/`: endpoints that check a password or send mail get the strict
+  policy. Add new Better-Auth endpoints of that kind to `CREDENTIAL_PATHS`.
+- Calls from loaders through the server client count against the same address as the page request.
+- Limits are per address, and many Iranian mobile users share one (CGNAT). Keep them high enough for that, and prefer
+  a per-procedure policy over lowering the general one.
+- Counters are in memory, which fits the single app process production runs. Running several instances needs a shared
+  store behind `RateLimitStore`.
+- A production request without an address isn't limited, and the limiter logs it ([deployment.md](../deployment.md) →
+  Rate Limiting).
 
 ### Database
 

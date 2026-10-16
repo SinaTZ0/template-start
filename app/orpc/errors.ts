@@ -23,6 +23,11 @@ export const commonErrors = {
     // `errorId` correlates the response with the full error in the server logs.
     data: errorDataSchema.extend({ errorId: z.string() }),
   },
+  // Common because every procedure is rate limited (`rateLimitMiddleware` on `base`).
+  TOO_MANY_REQUESTS: {
+    message: "Too many requests.",
+    data: errorDataSchema.extend({ retryAfterSeconds: z.number().int().positive() }),
+  },
 };
 
 /*===== HTTP Status =====*/

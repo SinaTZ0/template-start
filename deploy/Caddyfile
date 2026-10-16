@@ -59,7 +59,11 @@
 	}
 
 	handle {
-		reverse_proxy app:3000
+		reverse_proxy app:3000 {
+			# The app rate-limits by the visitor's address, which it reads from X-Real-IP (`app/lib/rate-limit.server.ts`).
+			# Setting it replaces any value the visitor sent.
+			header_up X-Real-IP {remote_host}
+		}
 	}
 }
 

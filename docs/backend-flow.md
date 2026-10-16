@@ -36,8 +36,9 @@ The `note` feature (`app/orpc/note/`) is the worked example. Copy its shape.
 6. **Mapper**: add `mapper.ts` only if the stored and public shapes differ.
 7. **Procedure**: in `procedure.ts`, start from `base.<feature>.<procedure>` (`implementer.server.ts`), attach the
    middleware it needs (`requireUserMiddleware` or `requireRoleMiddleware`, then `provideDbMiddleware`), call the
-   service, and map each failure outcome to a declared contract error. Register it in `app/orpc/router.ts`
-   ([architecture.md](./backend/architecture.md) → Middleware, Auth).
+   service, and map each failure outcome to a declared contract error. A procedure that is expensive or abusable
+   (uploads, mail, heavy queries) puts a stricter `rateLimitMiddleware` first. Register it in `app/orpc/router.ts`
+   ([architecture.md](./backend/architecture.md) → Middleware, Auth, Rate limiting).
 8. **Status codes**: a new error code that oRPC doesn't map already gets its HTTP status in `ERROR_STATUS_MAP`
    (`app/orpc/errors.ts`). `NOT_FOUND`, `CONFLICT`, `UNAUTHORIZED` and `FORBIDDEN` need nothing.
 

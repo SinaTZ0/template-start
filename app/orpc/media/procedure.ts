@@ -1,12 +1,17 @@
 import { base } from "~/orpc/implementer.server";
 import { requireUserMiddleware } from "~/orpc/middleware/auth/auth.middleware";
 import { provideDbMiddleware } from "~/orpc/middleware/db/db.middleware";
+import { rateLimitMiddleware } from "~/orpc/middleware/rate-limit/rate-limit.middleware";
 import { uploadMedia } from "~/orpc/media/service";
 import type { UserRole } from "~/lib/user-constants";
 
 /*===== Upload =====*/
+// Each upload decodes and re-encodes an image of up to 10 MB with sharp, so it gets a far lower limit than the API's.
+const UPLOAD_RATE_LIMIT = { name: "media-upload", limit: 20, windowMs: 60_000 };
+
 // Any signed-in user; which kinds a role may upload is the service's rule.
 export const uploadMediaProcedure = base.media.upload
+  .use(rateLimitMiddleware(UPLOAD_RATE_LIMIT))
   .use(requireUserMiddleware)
   .use(provideDbMiddleware)
   .handler(async ({ context, input, errors }) => {

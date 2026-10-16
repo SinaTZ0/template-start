@@ -6,7 +6,7 @@ This is a React Router v8 application using Framework Mode, started from the pro
 
 The docs have two entry points. Start backend work at `docs/backend-flow.md` and frontend work at `docs/frontend-flow.md`. Each one is a list of steps that links to the rule docs in `docs/backend/` and `docs/frontend/` at the step where they apply.
 
-- Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing, plus error and slow-request reports to the error viewer, a small Go service in `tools/error-viewer/` (`docs/backend/logging.md`).
+- Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, per-address rate limits on the API and auth endpoints (`docs/backend/architecture.md` → Rate limiting), Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing, plus error and slow-request reports to the error viewer, a small Go service in `tools/error-viewer/` (`docs/backend/logging.md`).
 - Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`).
 - Production: Docker Compose with Caddy in front, migrations applied before each deploy, and a `/healthz` check (`docs/deployment.md`).
 - The `note` feature (`app/orpc/note/`, `app/routes/notes/`) is the template's worked example. Copy its shape for new features; delete it once the project has its own.

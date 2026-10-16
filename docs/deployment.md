@@ -166,6 +166,27 @@ The old app keeps running while `migrate` applies a new migration, for the secon
 that drops or renames something the old code still reads can fail its requests in that window. For a busy app, split
 such changes over two deploys: first add the new shape and ship code that uses it, then remove the old shape.
 
+## Rate Limiting
+
+The app limits requests per visitor address (`docs/backend/architecture.md` → Rate limiting). Caddy sends the address
+in `X-Real-IP` (`deploy/Caddyfile`). The header can be trusted because the app publishes no port, so a visitor can't
+reach it without Caddy replacing what they sent. Keep it that way: publishing the app's port would let anyone choose
+their own address.
+
+If a production request arrives without the header, the app lets it through without a limit rather than putting every
+visitor in one bucket. It reports the problem by changes of state, not per request:
+
+| Log line (`module: "rate-limit"`)                | Level | When                                                                         |
+| ------------------------------------------------ | ----- | ---------------------------------------------------------------------------- |
+| `client address missing: rate limiting is off …` | error | The first such request. Also sent to the error viewer.                       |
+| `client address still missing …`                 | warn  | Every 5 minutes while it lasts, with `requests` counted since the last line. |
+| `client address visible again …`                 | info  | The first request with the header after an error was logged.                 |
+
+After fixing the proxy, open any page through it and look for the `visible again` line. Another error or warning
+means it isn't fixed. Errors are limited to one per 5 minutes: if addresses go missing again within 5 minutes of the
+last error, the new error is logged once those 5 minutes have passed. The Docker healthcheck calls `/healthz` directly
+with no header, which is fine: `/healthz` isn't limited.
+
 ## Health Check
 
 `GET /healthz` (`app/routes/healthz/`) answers 200 when the app can query Postgres and 503 otherwise, with a 2-second
