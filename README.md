@@ -61,11 +61,16 @@ docs/                              start at backend-flow.md or frontend-flow.md
 
 ## Starting a New Project
 
-1. Rename: `name` in `package.json`, `compose.dev.yaml` and `compose.prod.yaml` (and `image` there), `SITE_NAME` in
-   `app/lib/site.ts`, the bucket name in `.env.example` and `.env.production.example`.
-2. Fill in `docs/frontend/app-identity.md` and the colour tokens in `app/app.css`. Replace `public/favicon.ico`.
-3. Update the first paragraph of `CLAUDE.md`.
-4. Build the first real feature by copying the shape of `note`, then delete the example (`app/orpc/note/`,
+1. Copy the template without its git history (copy the folder without `.git`, then `git init`).
+2. Rename: `name` in `package.json`, `compose.dev.yaml` and `compose.prod.yaml` (and `image` there), the bucket name in
+   `.env.example` and `.env.production.example`, and the site identity in `app/lib/site.ts` (`SITE_NAME`,
+   `SITE_DESCRIPTION`, and a `SITE_IMAGE` for link previews).
+3. Design the look. Everything that ships (colours, type styles, radius and shadows in `app/app.css`, the primitives'
+   styles) is a neutral placeholder. Design the homepage, then give it to an agent with
+   `docs/customize-template.md`, which turns it into app-identity, tokens, primitives, header, footer and the home
+   route.
+4. Rewrite this README and the first paragraph of `CLAUDE.md` for the project.
+5. Build the first real feature by copying the shape of `note`, then delete the example (`app/orpc/note/`,
    `app/routes/notes*`, the `note` table, its entries in `contract.ts`, `router.ts` and `routes.ts`). Before the first
    deploy, replace `drizzle/` with one fresh migration: delete the folder and run `pnpm db:generate --name init`.
-5. Deploy with `compose.prod.yaml` and go through "Before Going Live" in `docs/deployment.md`.
+6. Deploy with `compose.prod.yaml` and go through "Before Going Live" in `docs/deployment.md`.

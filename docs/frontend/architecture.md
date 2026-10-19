@@ -100,6 +100,7 @@ Not every slice needs every file. Start with the route module alone and split it
 - Primitives and visible shared components have Storybook stories. Stories are maintained UI documentation; keep them
   in sync with the component.
 - Handle every state a user can see: loading, empty, error, and success.
+- Creating, changing and linting primitives: see [components.md](./components.md).
 
 ## Persian, RTL, and Accessibility
 
@@ -118,13 +119,3 @@ Not every slice needs every file. Start with the route module alone and split it
 - Style with Tailwind utilities. Put design tokens (colors, fonts, spacing scale) in `app.css` instead of hard-coding
   values in components.
 - Extract a component when a pattern repeats, not a utility class.
-
-## Testing
-
-- Cover consequential user flows (forms, critical navigation) with Playwright smoke tests.
-- Do not test styling, markup structure, or library behavior. Use Storybook for visual and accessibility review.
-
-## Code Conventions
-
-General code conventions (imports without barrel files, object parameters, section dividers, comments, JSDoc) are
-defined in `CLAUDE.md` and apply to frontend code as well.

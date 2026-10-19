@@ -71,11 +71,8 @@ page boundary's `default="none"` only covers the page itself.
 - Don't add `@view-transition { navigation: auto; }`. It only affects full page loads between documents, not client
   navigations.
 
-## PWA Notes
+## iOS Swipe-Back
 
-- A service worker doesn't affect view transitions. It works on the network layer (documents, assets, and loader
-  data requests), and the fade is in-page rendering. An installed PWA uses the same browser engine, so the fade works
-  the same way.
-- **Test the iOS swipe-back gesture on a real device.** iOS plays its own animation for a swipe back, and the page
-  then fades too, which can look like a double animation. If it shows up, skip the fade when the browser already
-  animated, which `PopStateEvent.hasUAVisualTransition` reports.
+**Test the iOS swipe-back gesture on a real device.** iOS plays its own animation for a swipe back, and the page
+then fades too, which can look like a double animation. If it shows up, skip the fade when the browser already
+animated, which `PopStateEvent.hasUAVisualTransition` reports.

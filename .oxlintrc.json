@@ -13,7 +13,7 @@
   "settings": {
     "shadcn": {
       "ui": "~/components/primitive",
-      "note": "Fix in order: existing variant → layout on the parent → new variant in the primitive (docs/frontend/components.md#lint-rules). Don't work around it."
+      "note": "Move the look into the primitive (a variant or its base style), the layout onto the parent, or a new token into app/app.css (docs/frontend/components.md#lint-rules). Don't hide it in a wrapper element."
     }
   },
   "rules": {

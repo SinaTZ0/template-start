@@ -14,7 +14,7 @@ const twSharedStyles = defineStyles({
     "transition-[color,background-color,border-color,translate] duration-150 ease-out outline-none select-none",
   focus:
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid",
-  // The press: a 1px drop while held. Transforms only run with motion allowed (docs/frontend/app-identity.md → Interaction).
+  // The press: a 1px drop while held. Transforms only run with motion allowed.
   active: "motion-safe:active:not-disabled:translate-y-px",
   disabled: "disabled:pointer-events-none disabled:opacity-45",
   invalid: "aria-invalid:border-destructive",

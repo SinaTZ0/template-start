@@ -18,7 +18,7 @@
   --text-lg--line-height: calc(28 / 16);
 
   /* The app's type styles as `text-<name>`: size, line height and weight together. Small sizes and medium weights
-     keep the page quiet (docs/frontend/app-identity.md → Type); display, h1 and h2 drop one step on phones, below. */
+     keep the page quiet; display, h1 and h2 drop one step on phones, below. */
   --text-display: 2.75rem;
   --text-display--line-height: 4.25rem;
   --text-display--font-weight: 700;
@@ -285,7 +285,7 @@
   ::selection {
     @apply bg-accent text-foreground;
   }
-  /* A light icon line (docs/frontend/app-identity.md). Author CSS beats
+  /* A light icon line. Author CSS beats
      lucide's `stroke-width` attribute, so change it with a `stroke-*` class, not the `strokeWidth` prop. */
   :where(svg.lucide) {
     stroke-width: 1.5;

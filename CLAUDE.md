@@ -4,7 +4,7 @@ These instructions apply to the entire repository unless overridden by a more sp
 
 This is a React Router v8 application using Framework Mode, started from the project template. The application's user-facing content is in Persian and right-to-left. Its look and feel is defined in `docs/frontend/app-identity.md`.
 
-The docs have two entry points. Start backend work at `docs/backend-flow.md` and frontend work at `docs/frontend-flow.md`. Each one is a list of steps that links to the rule docs in `docs/backend/` and `docs/frontend/` at the step where they apply.
+The docs have two entry points. Start backend work at `docs/backend-flow.md` and frontend work at `docs/frontend-flow.md`. Each one is a list of steps that links to the rule docs in `docs/backend/` and `docs/frontend/` at the step where they apply. When a new project starts from the template, `docs/customize-template.md` turns its homepage design into the app's design system.
 
 - Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, per-address rate limits on the API and auth endpoints (`docs/backend/architecture.md` → Rate limiting), Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing, plus error and slow-request reports to the error viewer, a small Go service in `tools/error-viewer/` (`docs/backend/logging.md`).
 - Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`), and page meta through `pageMeta` (`docs/frontend/seo.md`).
@@ -56,7 +56,8 @@ Preserve established local conventions unless a rule below explicitly says other
 - Write style maps with `defineStyles` and the shared group names; join them with `joinStyles` / `composeStyles`.
 - If a shadcn component has no primitive yet, create one from its `ui/` source, keeping shadcn's API and `data-slot`s.
 - App-made components with no shadcn original (e.g. `form-alert`, `site-link`) live in `app/components/shared/<name>/` once more than one route uses them.
-- When `shadcn/*` lint flags a class, fix it in this order: an existing variant or size, then layout on the parent, then a new or changed variant in the primitive (`docs/frontend/components.md#fixing-a-lint-error`). Never work around it with a disable comment, a restyled wrapper element, or a raw element in place of the primitive.
+- When `shadcn/*` lint flags a class, fix the code it points at: a variant or base style in the primitive, layout on the parent, or a token in `app/app.css` (`docs/frontend/components.md#lint-rules`). Don't hide the styling in a wrapper element or a raw element in place of the primitive.
+- The current look (tokens in `app/app.css`, primitives, existing pages) serves the design, not the other way round. When a design needs something different, change the primitives and `app/app.css` instead of bending the design to fit them.
 
 ### Imports
 
