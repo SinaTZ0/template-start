@@ -104,11 +104,11 @@ export const media = pgTable(
     height: integer("height").notNull(),
     /** Data URI of a 16 px wide WebP, shown blurred while the image loads. */
     placeholder: text("placeholder").notNull(),
-    /** Set when an entity starts using it. Null means an orphan, which a cleanup job may delete after 24 hours. */
+    /** Set when an entity starts using it. Null means not used yet; the cleanup deletes it 25 hours after upload. */
     attachedAt: timestamp("attached_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  // Serves the cleanup job's "unattached and older than 24 hours" scan.
+  // Serves the cleanup's "unattached and older than 25 hours" scan (`findOrphanedMediaIds`).
   (table) => [index("media_attached_at_created_at_idx").on(table.attachedAt, table.createdAt)],
 );
 

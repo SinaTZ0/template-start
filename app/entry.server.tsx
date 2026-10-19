@@ -22,8 +22,13 @@ import { reportSlowRequest } from "~/lib/error-reporting.server";
 import { createLogger } from "~/lib/logger.server";
 import { runWithTrace, span, traceTimeline, traceTotals } from "~/lib/trace.server";
 import type { RequestTrace, SpanKind } from "~/lib/trace.server";
+import { startMediaCleanup } from "~/orpc/media/cleanup.server";
 
 const log = createLogger("http");
+
+/*===== Background Jobs =====*/
+// The server entry is loaded once when the server starts, which makes it the place to start in-process jobs.
+startMediaCleanup();
 
 /*===== Document Rendering =====*/
 // React Router's default Node entry, except that render errors go through the logger.

@@ -21,7 +21,7 @@ type AddNoteResult = { kind: "success"; note: Note } | { kind: "invalid"; fields
 
 /**
  * Validates and stores a new note for its owner. An image must be an `image` upload by the same user; it is marked
- * attached so a cleanup job leaves it alone.
+ * attached so the orphan cleanup leaves it alone.
  *
  * @returns `invalid` with per-field messages when the input breaks a domain rule.
  */

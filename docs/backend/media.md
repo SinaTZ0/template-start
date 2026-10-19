@@ -68,10 +68,15 @@ One `media` table records every upload (`app/db/schema.ts`). Entities point to i
 2. The server writes every variant, then inserts the row, and returns its ID, URLs and placeholder. If a write fails
    halfway, the variants already written are deleted, so a row only exists when all its variants do.
 3. Saving the form sends the media ID. The entity's service calls `attachMedia`, which checks the kind and the
-   uploader and sets `attachedAt`.
-4. When an entity is deleted or its image replaced, the service calls `deleteMedia` (bucket first, then the row).
-5. **Cleanup (not built):** a scheduled job should delete media still unattached 24 hours after upload (forms never
-   saved) with `deleteMedia`. The `attached_at, created_at` index serves that scan.
+   uploader and sets `attachedAt`. An upload can only be attached within 24 hours (`MEDIA_ATTACH_WINDOW_MS`); after
+   that the form shows the image as unusable and the user picks it again.
+4. When an entity is deleted or its image replaced, the service calls `deleteMedia` (bucket first, then the row). The
+   cleanup below never sees a replaced image, because it is still marked attached, so the service must delete it.
+5. **Cleanup:** uploads whose form was never saved are orphans. `startMediaCleanup` (`app/orpc/media/cleanup.server.ts`),
+   started from `entry.server.tsx`, runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
+   unattached 25 hours after upload (`ORPHANED_MEDIA_AGE_MS`), up to 200 per run, through `deleteMedia`. The extra hour
+   past the attach window means a save and the cleanup can never race. The `attached_at, created_at` index serves the
+   scan.
 
 ## Rendering
 

@@ -12,9 +12,25 @@ import type { MediaKind } from "~/orpc/media/constants";
 import type { Media } from "~/orpc/media/contract";
 import { isMediaKind, toPublicMedia } from "~/orpc/media/mapper";
 import { processImage } from "~/orpc/media/processing.server";
-import { deleteMediaRow, findMediaById, insertMedia, markMediaAttached } from "~/orpc/media/repository";
+import {
+  deleteMediaRow,
+  findMediaById,
+  findOrphanedMediaIds,
+  insertMedia,
+  markMediaAttached,
+} from "~/orpc/media/repository";
 
 const log = createLogger("media");
+
+/*===== Lifetimes =====*/
+/** How long an upload can still be attached: a form must be saved within this time of picking its image. */
+export const MEDIA_ATTACH_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How old an unattached upload must be before the cleanup deletes it. The hour past the attach window means the cleanup
+ * never races a save: by the time a media qualifies, `attachMedia` has refused it for an hour.
+ */
+export const ORPHANED_MEDIA_AGE_MS = MEDIA_ATTACH_WINDOW_MS + 60 * 60 * 1000;
 
 /*===== Keys =====*/
 function variantKeys({ kind, mediaId }: { kind: MediaKind; mediaId: string }): string[] {
@@ -111,18 +127,21 @@ type AttachMediaResult = { kind: "ok" } | { kind: "invalid" };
  * Calling it again for a media that is already attached is fine, which keeps re-saving a form idempotent. It cannot
  * tell which entity uses the media: an entity that must not share one checks that itself.
  *
- * @returns `invalid` when the ID is unknown or malformed, the media is another kind, or someone else uploaded it.
+ * @returns `invalid` when the ID is unknown or malformed, the media is another kind, someone else uploaded it, or it is
+ * still unattached past `MEDIA_ATTACH_WINDOW_MS` (the cleanup is about to delete it).
  */
 export async function attachMedia({
   db,
   mediaId,
   kind,
   userId,
+  now = new Date(),
 }: {
   db: Database;
   mediaId: string;
   kind: MediaKind;
   userId: string;
+  now?: Date;
 }): Promise<AttachMediaResult> {
   if (!isMediaId(mediaId)) return { kind: "invalid" };
 
@@ -130,6 +149,9 @@ export async function attachMedia({
   if (!record || !isMediaKind(record.kind) || record.kind !== kind || record.uploadedBy !== userId) {
     return { kind: "invalid" };
   }
+
+  const expired = !record.attachedAt && now.getTime() - record.createdAt.getTime() > MEDIA_ATTACH_WINDOW_MS;
+  if (expired) return { kind: "invalid" };
 
   await markMediaAttached({ db, id: mediaId });
   return { kind: "ok" };
@@ -141,9 +163,6 @@ export async function attachMedia({
  *
  * The bucket goes first: if it fails, the row stays and the delete can be retried; the other order could leave files
  * nothing points to. Entities still pointing at the row are cleared by the foreign key.
- *
- * Not scheduled anywhere yet: a project that needs it adds a job that calls this for media still unattached 24 hours
- * after `created_at` (forms that were never saved). Until then those files stay in the bucket.
  *
  * @throws When the bucket or the database fails.
  */
@@ -158,4 +177,45 @@ export async function deleteMedia({ db, mediaId }: { db: Database; mediaId: stri
 
   await deleteObjects({ keys: variantKeys({ kind: record.kind, mediaId }) });
   await deleteMediaRow({ db, id: mediaId });
+}
+
+/*===== Orphan Cleanup =====*/
+const ORPHAN_BATCH_SIZE = 200;
+
+/**
+ * Deletes up to one batch of uploads that were never attached (forms that were never saved) and are older than
+ * `ORPHANED_MEDIA_AGE_MS`. Run on a schedule (`cleanup.server.ts`); a backlog bigger than one batch clears over the
+ * following runs.
+ *
+ * A media that fails to delete is logged and skipped, so one broken row can't block the rest. It stays unattached and
+ * is retried on the next run.
+ *
+ * @returns How many were deleted and how many failed.
+ */
+export async function deleteOrphanedMedia({
+  db,
+  now = new Date(),
+}: {
+  db: Database;
+  now?: Date;
+}): Promise<{ deleted: number; failed: number }> {
+  const ids = await findOrphanedMediaIds({
+    db,
+    uploadedBefore: new Date(now.getTime() - ORPHANED_MEDIA_AGE_MS),
+    limit: ORPHAN_BATCH_SIZE,
+  });
+
+  let deleted = 0;
+  let failed = 0;
+  // One at a time: the job runs in the app's process and shouldn't compete with requests for the pool or the bucket.
+  for (const mediaId of ids) {
+    try {
+      await deleteMedia({ db, mediaId });
+      deleted += 1;
+    } catch (error) {
+      failed += 1;
+      log.error({ err: error, mediaId }, "could not delete an orphaned media");
+    }
+  }
+  return { deleted, failed };
 }
