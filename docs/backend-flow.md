@@ -41,14 +41,18 @@ The `note` feature (`app/orpc/note/`) is the worked example. Copy its shape.
    ([architecture.md](./backend/architecture.md) → Middleware, Auth, Rate limiting).
 8. **Status codes**: a new error code that oRPC doesn't map already gets its HTTP status in `ERROR_STATUS_MAP`
    (`app/orpc/errors.ts`). `NOT_FOUND`, `CONFLICT`, `UNAUTHORIZED` and `FORBIDDEN` need nothing.
+9. **Environment variables**: a new one goes in `app/env.server.ts`, `.env.example`, the `app` service in
+   `compose.prod.yaml`, `.env.production.example` and the settings registry in `deploy/deploy.sh`. A required one the
+   script can't generate (a domain, an API key, an external URL) gets a kind that asks for it
+   ([deployment.md](./deployment.md) → Adding a Variable).
 
 ## Check
 
-9. **Logging**: log through `createLogger`, never `console`. Log errors as `log.error({ err }, …)`, which also reports
-   them to the error viewer, and wrap slow work that isn't timed automatically in `span(...)`
-   ([logging.md](./backend/logging.md)).
-10. **Test**: add an `integration.test.ts` if the behavior is consequential: a success case and the failures that
+10. **Logging**: log through `createLogger`, never `console`. Log errors as `log.error({ err }, …)`, which also reports
+    them to the error viewer, and wrap slow work that isn't timed automatically in `span(...)`
+    ([logging.md](./backend/logging.md)).
+11. **Test**: add an `integration.test.ts` if the behavior is consequential: a success case and the failures that
     matter ([architecture.md](./backend/architecture.md) → Testing). Run `pnpm lint` and `pnpm typecheck`, and the
     test itself if the database is running.
-11. **Use it**: a page reads the procedure in its `loader` through `createServerClient(request)` or calls it from the
+12. **Use it**: a page reads the procedure in its `loader` through `createServerClient(request)` or calls it from the
     browser through `orpc` in `app/orpc/client.ts`. Build that side with [frontend-flow.md](./frontend-flow.md).

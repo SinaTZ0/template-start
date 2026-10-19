@@ -35,15 +35,17 @@ gets the `admin` key.
 ```text
   1) Set up            clone, create .env, first build
   2) Update            back up, pull, rebuild, wait for healthy
-  3) Back up           database and/or media
-  4) Restore           from a backup file
-  5) SSL certificate   automatic or your own files
-  6) Status            containers, health, disk
-  7) Logs              pick a service, follow
-  8) Make admin        promote an account by email
-  9) Quit
+  3) Settings          check, edit .env, apply
+  4) Back up           database and/or media
+  5) Restore           from a backup file
+  6) SSL certificate   automatic or your own files
+  7) Status            containers, health, disk
+  8) Logs              pick a service, follow
+  9) Make admin        promote an account by email
+  0) Quit
 
   ● Project      up to date  (381286c)
+  ● Settings     applied 2026-10-15 14:02
   ● Site         https://app.example.com        200 OK
   ● Errors       https://errors.example.com     200 OK
   ● Ports        80 ✓  443 ✓  (Caddy)
@@ -51,8 +53,9 @@ gets the `admin` key.
   ● Last backup  2026-10-15 03:00  (1 day ago)
 ```
 
-Green is fine, yellow needs attention (commits to pull, a certificate under 30 days, a backup older than a week), red
-is missing or broken. **Project** compares the checkout with its upstream branch. **Site** and **Errors** request
+Green is fine, yellow needs attention (commits to pull, an edit to apply, a certificate under 30 days, a backup older
+than a week), red is missing or broken. **Project** compares the checkout with its upstream branch. **Settings** says
+whether `.env` is complete and whether the running stack uses it (Settings below). **Site** and **Errors** request
 `/healthz` from outside, through Caddy. **Ports** says whether Caddy holds 80 and 443, or what else does. Before setup,
 only Set up is available; after it, everything else.
 
@@ -70,10 +73,16 @@ deploy/deploy.sh          # choose Set up
 ```
 
 Set up checks the tools and the ports, asks for the two domains, the certificate (HTTPS Certificates below), the backup
-folder and an optional Go module mirror, then writes `.env` from `.env.production.example` with every secret generated
-(hex, so they're safe inside the database URL and the store's config), builds the stack and waits for it to turn
-healthy. It prints the error viewer's password at the end; it's also in `.env`. Keep a copy of `.env` off the server:
-without its secrets, a database backup is all that's left.
+folder and an optional Go module mirror, then writes `.env` from `.env.production.example`. The check every deploy runs
+(Settings below) fills in the rest: every secret generated (hex, so they're safe inside the database URL and the
+store's config), `SENTRY_DSN`, and anything else the script can't generate asked for. If a database volume is already
+there from an earlier install, it asks for that database's original password instead of generating one. It then offers
+to open `.env` in an editor, builds the stack and waits for it to turn healthy. It prints the error viewer's password at
+the end; it's also in `.env`. Keep a copy of `.env` off the server: without its secrets, a database backup is all
+that's left.
+
+Once `.env` exists, Set up is locked. If the first build fails, fix the cause and choose Settings → Apply
+(`deploy/deploy.sh apply`).
 
 The script can also run on its own, downloaded before the repository: then Set up clones the repository first.
 
@@ -124,9 +133,10 @@ to be public, because browsers send their errors there; everything but the event
 sign-in with `ERROR_VIEWER_ADMIN_PASSWORD`.
 
 The DSN is known before the first deploy: `SENTRY_DSN=https://<ERROR_VIEWER_PUBLIC_KEY>@<ERRORS_DOMAIN>/1`. Set it in
-`.env` with the rest, and errors are reported from the start. The viewer also prints it in its log at startup
-(`docker compose -f compose.prod.yaml logs error-viewer`). Changing it later needs a redeploy with `--build`: the
-server reads it at startup, but the browser bundle has it baked in at build time.
+`.env` with the rest, and errors are reported from the start (the deploy script sets it, and offers to fix it when it
+doesn't match). The viewer also prints it in its log at startup
+(`docker compose -f compose.prod.yaml logs error-viewer`). Changing it later needs a redeploy with `--build`, which
+Settings → Apply does: the server reads it at startup, but the browser bundle has it baked in at build time.
 
 Until `SENTRY_DSN` is set, nothing is reported; errors are still in the logs. The viewer keeps its SQLite file in the
 `error-viewer-data` volume, separate from the app's backups, and deletes events older than 30 days or beyond the
@@ -135,13 +145,17 @@ history, nothing else.
 
 **Building where Google is blocked.** The viewer's image pulls everything from Docker Hub, but its build downloads Go
 modules from `proxy.golang.org`. If that fails with `403 Forbidden`, set `GOPROXY` in `.env` to a Go module mirror the
-server can reach, and deploy again.
+server can reach, and deploy again (Settings: edit `.env`, then apply).
 
 ## Updating
 
 Choose Update (`deploy/deploy.sh update`). It stops if files on the server were changed (`git pull` could clash with
 them), dumps the database first (`db-<time>-pre-update.dump`: a migration can't be undone by going back a commit),
-pulls, rebuilds, waits for the app to turn healthy and removes the stack's old images (only its own). By hand:
+pulls, then hands over to the pulled copy of the script, which checks `.env` (Settings below), rebuilds, waits for the
+app to turn healthy and removes the stack's old images (only its own). The pulled copy, because its settings registry
+knows the variables the new commits added: they're added to `.env` and filled in or asked for before the build. Without
+a terminal (cron), a new value it can't generate stops the update after the pull and before the build, naming the
+variable: the app that was running keeps running. By hand:
 
 ```bash
 git pull
@@ -152,6 +166,68 @@ Compose builds the new image, runs `migrate` and `storage-init`, and starts the 
 succeeded. A failing migration stops the deploy there: the database is unchanged (pending migrations run in one
 transaction), and the app isn't started on the new image. Expect a few seconds of downtime while the app container is
 replaced.
+
+## Settings (.env)
+
+`.env` holds the deployment's settings, read by Compose. Choose Settings (`deploy/deploy.sh env`) to check it, edit it,
+and apply the edit. Set up, Update and Apply run the same check before every build:
+
+- **Tidy.** CRLF line endings, trailing spaces, `export `, spaces around `=` and quotes that aren't needed are removed,
+  and a variable set twice keeps its last line (after asking), as Compose would read it. Comments and order stay.
+- **New variables.** A variable in `.env.production.example` that `.env` doesn't have (one added by a pulled commit) is
+  appended with its comment from the example.
+- **Fill in.** An empty secret is generated, and an empty setting with a default gets the example's value. Generating
+  `ERROR_VIEWER_PUBLIC_KEY` also points `SENTRY_DSN` at it; a `SENTRY_DSN` that doesn't match is offered a fix, and an
+  empty one only gets a warning (reporting off). An empty `POSTGRES_PASSWORD` is never generated once the database
+  exists: Postgres only reads it when it creates the database, so a new one would lock the app out. The script asks for
+  the original instead.
+- **Ask.** What it can't generate it asks for: a domain still set to the example's `example.com`, a value that isn't
+  allowed (`TLS_MODE`, `LOG_LEVEL`, `BACKUP_KEEP`), a secret with characters that would break the database URL or the
+  store's config, the same domain for the site and the error viewer, a line that isn't `KEY=value`. Answer in the
+  terminal or in the editor. Without a terminal it stops instead, naming each variable.
+
+Problems name the variable, never a secret's value. A variable `.env` has but the script doesn't know (a typo like
+`DOMIAN`) only gets a warning.
+
+**Editing.** Edit opens a copy of `.env` in nano (vi when nano isn't installed; `sudo apt install nano`), not
+`$EDITOR`, since a graphical editor would return before the file is saved. Save and close it (nano: Ctrl-O Enter, then
+Ctrl-X), and the script carries on: it tidies the copy, lists the variables that changed (secrets masked) and checks
+it. When the check fails it offers Edit again, Save anyway or Discard. The copy replaces `.env` in one step, so a
+half-done edit or a Ctrl-C leaves `.env` as it was. Changing `POSTGRES_PASSWORD` here doesn't change the database's
+password: the script warns, since the app would be locked out until it's changed in Postgres too.
+
+**Applied or pending.** Every deploy records a fingerprint of what Compose reads from `.env` in `.env.applied`
+(gitignored). The Settings status line compares it with `.env`:
+
+| Status line                               | Meaning                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------- |
+| `missing: DOMAIN, …` / `invalid: …` (red) | the next deploy fills these in or asks for them                           |
+| `edited <date>, not applied` (yellow)     | `.env` changed since the last deploy: choose Settings → Apply             |
+| `applied <date>` (green)                  | the stack runs with this `.env`                                           |
+| `edited <date>, not tracked yet` (dim)    | set up before the script tracked this; the next Update or Apply starts it |
+
+Comments, order, spacing and the backup settings (`BACKUP_DIR`, `BACKUP_KEEP`, read only by the script) never count as
+a change: after such an edit the line stays green and adds `(edited <date>)`. Apply (`deploy/deploy.sh apply`) runs the check, then rebuilds and restarts the stack, always with `--build`,
+since `SENTRY_DSN` is baked into the browser bundle.
+
+**Checking from cron or CI.** `deploy/deploy.sh env --check` asks nothing and changes nothing: it lists what's missing
+or invalid and exits 1 if anything is.
+
+### Adding a Variable
+
+A variable the deployment sets goes in four places: `app/env.server.ts` (its schema), the service's `environment` in
+`compose.prod.yaml`, `.env.production.example` (with a comment saying what it is), and the settings registry at the top
+of `deploy/deploy.sh` (`SETTINGS`), with the kind that says how the script gets a value:
+
+- **Required and can't be generated** (a domain, a third-party API key, an external URL): it must be asked for. Use an
+  asking kind (`domain`, `required`, `url`) and add a check to `validate_setting` when a value can be wrong in a way
+  worth catching early. Set up, Update and Settings then ask for it instead of the deploy failing inside Compose with
+  `set X in .env`.
+- **Can be generated or has a default**: an entry of the right kind (`secret:<bytes>`, `password:<n>`, `enum:<a,b>`,
+  `int`, `default`, `optional`) is all it needs.
+
+Scope `script` is for variables Compose doesn't read. A variable left out of the registry still gets asked for when
+it's empty, but with a warning that the registry misses it.
 
 ## Database Changes
 

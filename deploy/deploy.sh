@@ -14,6 +14,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="compose.prod.yaml"
 ENV_FILE="$ROOT/.env"
+EXAMPLE_FILE="$ROOT/.env.production.example"
+# `<fingerprint> <epoch>` of the .env the running stack was last deployed with (Applied State below).
+APPLIED_FILE="$ROOT/.env.applied"
 CERT_DIR="$ROOT/certs"
 SERVICES=(app caddy error-viewer db seaweedfs)
 MIN_COMPOSE="2.23.1"
@@ -85,16 +88,33 @@ choose() {
   done
 }
 
+# ask_secret <question>: like ask, but the answer isn't shown while it's typed.
+ask_secret() {
+  local question=$1 answer
+  [[ $INTERACTIVE == 1 ]] || die "No terminal to ask \"$question\"."
+  read -r -s -p "$question: " answer
+  printf '\n' >&2
+  printf '%s' "$answer"
+}
+
+DOMAIN_RE='^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'
+
+# `example.com` is reserved for examples (RFC 2606), so the example file's values, and any name under it, mean unset.
+is_placeholder_domain() { [[ $1 == example.com || $1 == *.example.com ]]; }
+
 ask_domain() {
   local question=$1 default=${2:-} domain
   while true; do
     domain=$(ask "$question" "$default")
     domain=${domain,,}
-    if [[ $domain =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
+    if ! [[ $domain =~ $DOMAIN_RE ]]; then
+      warn "\"$domain\" isn't a domain name like app.example.com."
+    elif is_placeholder_domain "$domain"; then
+      warn "$domain is the example's placeholder. Use your own domain."
+    else
       printf '%s' "$domain"
       return
     fi
-    warn "\"$domain\" isn't a domain name like app.example.com."
   done
 }
 
@@ -102,9 +122,11 @@ pause() { read -r -p $'\nPress Enter for the menu… ' _ || true; }
 
 # ===== Settings =====
 # `.env` is only ever read line by line, never sourced: it's data, not a script.
+# env_get <key> [file]: the last line wins, as in Compose.
 env_get() {
-  [[ -f $ENV_FILE ]] || return 0
-  sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1
+  local file=${2:-$ENV_FILE}
+  [[ -f $file ]] || return 0
+  sed -n "s/^$1=//p" "$file" | tail -n 1
 }
 
 # Replaces the variable's line, or appends one. Keeps the file's permissions.
@@ -138,6 +160,689 @@ backup_dir() {
 list_backups() {
   find "$1" -maxdepth 1 -type f \( -name 'db-*.dump' -o -name 'media-*.tar.gz' \) -printf '%T@ %p\n' 2>/dev/null |
     sort -nr || true
+}
+
+# ===== Settings Registry =====
+# Every variable .env can hold, as KEY|kind|scope. Set up, Update and Settings check .env against it before each
+# deploy: they fill in what the kind can generate and ask for the rest, so a missing value never first shows up as a
+# failed Compose run. A new variable in `.env.production.example` needs an entry here, and a required one that can't be
+# generated (a domain, an API key, an external URL) needs a kind that asks for it (docs/deployment.md → Adding a
+# Variable). A key in the example but not here is asked for, with a warning that this list misses it.
+#
+#   domain        asked for; `example.com` and names under it count as unset
+#   required      asked for; anything but empty (a third-party API key)
+#   url           asked for; an http(s) URL (an external service)
+#   secret:<n>[:<min>]
+#                 generated (`openssl rand -hex <n>`). A value set by hand may only use letters, digits and `-._~`,
+#                 since secrets go inside the database URL and the store's JSON config, where `/`, `+`, `@` or quotes
+#                 would break them; and needs <min> characters where the app or the viewer refuses fewer
+#   password:<n>  generated like a secret; any value of at least <n> characters
+#   enum:<a,b,…>  one of these; empty takes the example's value
+#   int           a whole number above 0; empty takes the example's value
+#   default       anything; empty takes the example's value
+#   optional      anything, empty too
+#   derived       SENTRY_DSN, from ERROR_VIEWER_PUBLIC_KEY and ERRORS_DOMAIN
+#
+# Scope: `stack` is read by Compose, so changing it needs an Apply; `script` only by this script, so it never does.
+SETTINGS=(
+  "DOMAIN|domain|stack"
+  "ERRORS_DOMAIN|domain|stack"
+  "TLS_MODE|enum:auto,files|stack"
+  "BACKUP_DIR|default|script"
+  "BACKUP_KEEP|int|script"
+  "LOG_LEVEL|enum:fatal,error,warn,info,debug,trace,silent|stack"
+  "ERROR_VIEWER_PUBLIC_KEY|secret:16|stack"
+  "ERROR_VIEWER_ADMIN_PASSWORD|password:12|stack"
+  "ERROR_VIEWER_SESSION_SECRET|secret:32:32|stack"
+  "SENTRY_DSN|derived|stack"
+  "GOPROXY|optional|stack"
+  "POSTGRES_PASSWORD|secret:32|stack"
+  "BETTER_AUTH_SECRET|secret:32:32|stack"
+  "ALTCHA_HMAC_KEY|secret:32:32|stack"
+  "S3_BUCKET_NAME|default|stack"
+  "S3_ACCESS_KEY|secret:16|stack"
+  "S3_SECRET_KEY|secret:32|stack"
+  "S3_ADMIN_ACCESS_KEY|secret:16|stack"
+  "S3_ADMIN_SECRET_KEY|secret:32|stack"
+  # Overrides `compose.prod.yaml` reads but the example leaves out; Compose has a default for each.
+  "LOG_SLOW_REQUEST_MS|int|stack"
+  "LOG_SLOW_QUERY_MS|int|stack"
+  "LOG_QUERY_PARAMS|optional|stack"
+)
+
+declare -A SETTING_KIND=() SETTING_SCOPE=()
+for _setting in "${SETTINGS[@]}"; do
+  IFS='|' read -r _key _kind _scope <<<"$_setting"
+  SETTING_KIND[$_key]=$_kind
+  SETTING_SCOPE[$_key]=$_scope
+done
+unset _setting _key _kind _scope
+
+# The example's keys in their order, and its values (the defaults).
+EXAMPLE_KEYS=()
+declare -A EXAMPLE_VALUES=()
+load_example() {
+  local line
+  EXAMPLE_KEYS=()
+  EXAMPLE_VALUES=()
+  [[ -f $EXAMPLE_FILE ]] || return 0
+  while IFS= read -r line; do
+    if [[ $line =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      [[ -v EXAMPLE_VALUES[${BASH_REMATCH[1]}] ]] || EXAMPLE_KEYS+=("${BASH_REMATCH[1]}")
+      EXAMPLE_VALUES[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
+    fi
+  done <"$EXAMPLE_FILE"
+}
+
+# Keys Compose reads, sorted: the registry's stack keys, plus example keys the registry misses.
+stack_keys() {
+  local key
+  load_example
+  {
+    for key in "${!SETTING_SCOPE[@]}"; do
+      if [[ ${SETTING_SCOPE[$key]} == stack ]]; then echo "$key"; fi
+    done
+    for key in "${EXAMPLE_KEYS[@]}"; do
+      if [[ -z ${SETTING_KIND[$key]-} ]]; then echo "$key"; fi
+    done
+  } | sort -u
+}
+
+# Secrets are never printed. Besides the generated kinds, a name like an API key's counts too.
+is_secret_key() {
+  case ${SETTING_KIND[$1]-} in
+    secret:* | password:*) return 0 ;;
+    *) [[ $1 =~ (SECRET|PASSWORD|KEY|TOKEN)$ ]] ;;
+  esac
+}
+
+# ===== Reading .env =====
+# Turns .env into what Compose reads, line for line: LF line endings, no trailing whitespace, no `export `, no spaces
+# around `=`, a final newline. Quotes are dropped when nothing inside needs them, and so is an inline ` # comment` after
+# an unquoted value (Compose drops it too). Comments and order stay. A key set twice keeps its last line, as Compose
+# and env_get do; `normalize_stream 0` keeps every line, for counting them.
+normalize_stream() {
+  awk -v q="'" -v dedupe="${1:-1}" '
+    { sub(/\r$/, ""); sub(/[ \t]+$/, "") }
+    match($0, /^[ \t]*(export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=/) {
+      key = substr($0, 1, RLENGTH)
+      value = substr($0, RLENGTH + 1)
+      sub(/^[ \t]*(export[ \t]+)?/, "", key)
+      sub(/[ \t]*=$/, "", key)
+      sub(/^[ \t]+/, "", value)
+      first = substr(value, 1, 1)
+      if (first == "\"" || first == q) {
+        rest = substr(value, 2)
+        end = index(rest, first)
+        if (end > 0) {
+          inner = substr(rest, 1, end - 1)
+          after = substr(rest, end + 1)
+          if (after ~ /^([ \t]+#.*)?$/ && inner !~ /[ \t"$\\`#]/ && index(inner, q) == 0) value = inner
+        }
+      } else {
+        sub(/[ \t]+#.*$/, "", value)
+      }
+      n++
+      out[n] = key "=" value
+      keyof[n] = key
+      last[key] = n
+      next
+    }
+    { out[++n] = $0 }
+    END { for (i = 1; i <= n; i++) if (!dedupe || !(i in keyof) || last[keyof[i]] == i) print out[i] }'
+}
+
+# Keys set more than once, space-separated.
+env_duplicates() {
+  normalize_stream 0 <"$1" | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | sort | uniq -d | paste -sd' ' -
+}
+
+# Reads a file's settings, as Compose would see them, into ENV_VALUES.
+declare -A ENV_VALUES=()
+load_env() {
+  local line
+  ENV_VALUES=()
+  [[ -f $1 ]] || return 0
+  while IFS= read -r line; do
+    if [[ $line =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then ENV_VALUES[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}; fi
+  done < <(normalize_stream <"$1")
+}
+
+# Whether the database volume exists, i.e. Postgres has already set its password: it reads POSTGRES_PASSWORD only when
+# it first creates the database. When Docker can't tell, it counts as existing: asking is safe, while a newly generated
+# password would lock the app out.
+pgdata_exists() {
+  if [[ -z ${PGDATA_EXISTS-} ]]; then
+    local project
+    project=$(sed -n 's/^name:[[:space:]]*\([A-Za-z0-9_.-]*\).*/\1/p' "$ROOT/$COMPOSE_FILE" | head -n 1)
+    project=${project:-$(basename "$ROOT")}
+    if ! timeout 10 docker info >/dev/null 2>&1; then
+      PGDATA_EXISTS=1
+    elif timeout 10 docker volume inspect "${project,,}_pgdata" >/dev/null 2>&1; then
+      PGDATA_EXISTS=1
+    else
+      PGDATA_EXISTS=0
+    fi
+  fi
+  [[ $PGDATA_EXISTS == 1 ]]
+}
+
+# https://<ERROR_VIEWER_PUBLIC_KEY>@<ERRORS_DOMAIN>/1 from ENV_VALUES, or nothing while either isn't set yet.
+expected_dsn() {
+  local key=${ENV_VALUES[ERROR_VIEWER_PUBLIC_KEY]-} domain=${ENV_VALUES[ERRORS_DOMAIN]-}
+  if [[ $key =~ ^[A-Za-z0-9_]+$ && $domain =~ $DOMAIN_RE ]] && ! is_placeholder_domain "$domain"; then
+    printf 'https://%s@%s/1' "$key" "$domain"
+  fi
+}
+
+# ===== Checking .env =====
+# A problem is a `KEY|fix|state|reason` line. fix: `gen` (filled in without asking), `ask` (needs an answer) or `warn`
+# (only said). state: `missing`, `invalid` or `warn`, for the status line. Reasons never contain a secret's value.
+
+# Compose expands `$` and treats quotes, `#` and spaces specially, so a stack value with them isn't what it looks like.
+UNSAFE_RE='[[:space:]$"'\''`#\\]'
+
+# validate_setting <key> <value> <in example: 0|1>. Cross-checks read the other values from ENV_VALUES.
+validate_setting() {
+  local key=$1 value=$2 in_example=$3 kind scope n default
+  kind=${SETTING_KIND[$key]-}
+  scope=${SETTING_SCOPE[$key]-stack}
+  default=${EXAMPLE_VALUES[$key]-}
+
+  if [[ -n $value && $scope == stack && $value =~ $UNSAFE_RE ]]; then
+    echo "$key|ask|invalid|has a space, quote, \$, # or backslash, which Compose reads differently"
+    return
+  fi
+
+  case $kind in
+    domain)
+      if [[ -z $value ]] || is_placeholder_domain "$value"; then
+        echo "$key|ask|missing|not set"
+      elif ! [[ $value =~ $DOMAIN_RE ]]; then
+        echo "$key|ask|invalid|isn't a lowercase domain name like app.example.com"
+      elif [[ $key == ERRORS_DOMAIN && $value == "${ENV_VALUES[DOMAIN]-}" ]]; then
+        echo "$key|ask|invalid|is the same as DOMAIN: the error viewer needs its own"
+      fi
+      ;;
+    secret:* | password:*)
+      # secret:<n>:<min> → min; password:<n> → n.
+      n=${kind#*:}
+      if [[ $kind == secret:* && $n == *:* ]]; then
+        n=${n#*:}
+      elif [[ $kind == secret:* ]]; then
+        n=0
+      fi
+      if [[ -z $value ]]; then
+        if [[ $key == POSTGRES_PASSWORD ]] && pgdata_exists; then
+          echo "$key|ask|missing|empty, and the database already exists: it needs the password it was created with"
+        else
+          echo "$key|gen|missing|empty (generated when applied)"
+        fi
+      elif [[ $kind == secret:* && ! $value =~ ^[A-Za-z0-9._~-]+$ ]]; then
+        echo "$key|ask|invalid|has characters that break the database URL or the store's config (use openssl rand -hex 32)"
+      elif [[ $key == ERROR_VIEWER_PUBLIC_KEY && ! $value =~ ^[A-Za-z0-9_]+$ ]]; then
+        echo "$key|ask|invalid|may only use letters, digits and _ (the Sentry SDKs drop the DSN otherwise)"
+      elif ((${#value} < n)); then
+        echo "$key|ask|invalid|is shorter than $n characters"
+      fi
+      ;;
+    enum:* | int | default)
+      if [[ -z $value ]]; then
+        # Without a default in the example, Compose's own applies.
+        if [[ -n $default ]]; then echo "$key|gen|missing|empty (\"$default\", the example's, when applied)"; fi
+      elif [[ $kind == enum:* && ",${kind#enum:}," != *",$value,"* ]]; then
+        local values=${kind#enum:}
+        echo "$key|ask|invalid|isn't one of ${values//,/, }"
+      elif [[ $kind == int && ! $value =~ ^[1-9][0-9]*$ ]]; then
+        echo "$key|ask|invalid|isn't a whole number above 0"
+      elif [[ $key == S3_BUCKET_NAME && ! $value =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]; then
+        echo "$key|ask|invalid|isn't a bucket name (3 to 63 lowercase letters, digits, dots and dashes)"
+      fi
+      ;;
+    required)
+      if [[ -z $value ]]; then echo "$key|ask|missing|not set"; fi
+      ;;
+    url)
+      if [[ -z $value ]]; then
+        echo "$key|ask|missing|not set"
+      elif ! [[ $value =~ ^https?://[^/]+ ]]; then
+        echo "$key|ask|invalid|isn't an http:// or https:// URL"
+      fi
+      ;;
+    optional) ;;
+    derived)
+      local expected
+      expected=$(expected_dsn)
+      if [[ -z $value ]]; then
+        echo "$key|warn|warn|is empty, so error reporting is off"
+      elif ! [[ $value =~ ^https?://[^/@]+@[^/]+/[0-9]+$ ]]; then
+        echo "$key|ask|invalid|isn't a DSN like https://<key>@<errors domain>/1"
+      elif [[ -n $expected && $value != "$expected" ]]; then
+        echo "$key|warn|warn|doesn't point at this server's error viewer"
+      fi
+      ;;
+    "")
+      if ((in_example)); then
+        echo "$key|warn|warn|is in .env.production.example but not in deploy/deploy.sh's settings registry"
+        if [[ -z $value ]]; then echo "$key|ask|missing|not set"; fi
+      elif [[ $key != COMPOSE_* ]]; then
+        echo "$key|warn|warn|isn't a known setting (a typo?)"
+      fi
+      ;;
+    *) echo "$key|warn|warn|has an unknown kind ($kind) in deploy/deploy.sh's settings registry" ;;
+  esac
+}
+
+# env_problems <file>: every problem in the file, in the example's order, then the keys the example doesn't have.
+env_problems() {
+  local file=$1 key keys=() fix line
+  load_example
+  load_env "$file"
+
+  for key in "${EXAMPLE_KEYS[@]}"; do
+    if [[ -v ENV_VALUES[$key] ]]; then
+      validate_setting "$key" "${ENV_VALUES[$key]}" 1
+      continue
+    fi
+    # Not in .env yet (added to the example since): check_env appends it with the example's value.
+    fix=ask
+    line=$(validate_setting "$key" "${EXAMPLE_VALUES[$key]}" 1 | grep -v '|warn|' || true)
+    if [[ -z $line || $line == "$key|gen|"* ]]; then fix=gen; fi
+    echo "$key|$fix|missing|not in .env yet (new in .env.production.example)"
+  done
+  for key in $(printf '%s\n' "${!ENV_VALUES[@]}" | sort); do
+    if [[ ! -v EXAMPLE_VALUES[$key] ]]; then keys+=("$key"); fi
+  done
+  for key in "${keys[@]}"; do validate_setting "$key" "${ENV_VALUES[$key]}" 0; done
+
+  # Compose refuses the whole file over one line it can't parse.
+  { normalize_stream 0 <"$file" | grep -nvE '^[[:space:]]*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*=' || true; } | cut -d: -f1 |
+    while IFS= read -r line; do echo "line $line|ask|invalid|isn't KEY=value, so Compose can't read .env"; done
+}
+
+# Rewrites .env as normalize_stream does, after a confirm when that drops duplicates.
+normalize_env() {
+  local tidy dups
+  tidy=$(mktemp "$ROOT/.env.tidy.XXXXXX")
+  normalize_stream <"$ENV_FILE" >"$tidy"
+  if cmp -s "$tidy" "$ENV_FILE"; then
+    rm -f "$tidy"
+    return 0
+  fi
+  dups=$(env_duplicates "$ENV_FILE")
+  if [[ -n $dups ]]; then
+    warn "Set more than once in .env: $dups. The last line counts, for Compose too."
+    if [[ $INTERACTIVE == 1 ]] && ! confirm "Remove the earlier lines?" y; then
+      rm -f "$tidy"
+      die "Left .env as it was. Remove the lines you don't want, then run this again."
+    fi
+  fi
+  cat "$tidy" >"$ENV_FILE"
+  rm -f "$tidy"
+  ok "Tidied .env (line endings, spacing, export, quotes${dups:+, duplicates})"
+}
+
+# Appends the example's keys that .env doesn't have, each with the comment block above it in the example.
+append_new_keys() {
+  [[ -f $EXAMPLE_FILE ]] || return 0
+  local present added
+  present=$(sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' "$ENV_FILE" | paste -sd' ' -)
+  # `block` is the comment above the current run of keys; `prev` is set while the previous key was appended too, so a
+  # run of new keys stays together under one comment, as in the example.
+  added=$(awk -v present=" $present " '
+    /^#/ {
+      if (inkeys) { block = ""; inkeys = 0 }
+      block = block $0 "\n"
+      next
+    }
+    /^[A-Za-z_][A-Za-z0-9_]*=/ {
+      key = substr($0, 1, index($0, "=") - 1)
+      if (index(present, " " key " ") == 0) {
+        if (prev) printf "%s", (inkeys ? "" : block)
+        else printf "\n%s", block
+        print
+        prev = 1
+      } else {
+        prev = 0
+      }
+      inkeys = 1
+      next
+    }
+    { block = ""; inkeys = 0; prev = 0 }' "$EXAMPLE_FILE")
+  [[ -n $added ]] || return 0
+  printf '%s\n' "$added" >>"$ENV_FILE"
+  info "Added from .env.production.example: $(sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' <<<"$added" | paste -sd, - | sed 's/,/, /g')"
+}
+
+# The value check_env fills in for a `gen` problem.
+generated_value() {
+  case ${SETTING_KIND[$1]-} in
+    secret:* | password:*)
+      local bytes=${SETTING_KIND[$1]#*:}
+      secret "${bytes%%:*}"
+      ;;
+    *) printf '%s' "${EXAMPLE_VALUES[$1]-}" ;;
+  esac
+}
+
+# Points SENTRY_DSN at this server's error viewer: always when the key was just generated, else after asking. Each
+# mismatch is raised once per run (DSN_RAISED), not on every pass of check_env.
+DSN_RAISED=""
+sync_dsn() {
+  local key_generated=$1 expected dsn
+  load_env "$ENV_FILE"
+  expected=$(expected_dsn)
+  dsn=${ENV_VALUES[SENTRY_DSN]-}
+  [[ -n $expected && $dsn != "$expected" && $expected != "$DSN_RAISED" ]] || return 0
+  if ((key_generated)); then
+    env_set SENTRY_DSN "$expected"
+    ok "SENTRY_DSN points at this server's error viewer."
+    return
+  fi
+  DSN_RAISED=$expected
+  if [[ -z $dsn ]]; then
+    warn "SENTRY_DSN is empty, so error reporting is off."
+    return
+  fi
+  warn "SENTRY_DSN doesn't point at this server's error viewer (https://<ERROR_VIEWER_PUBLIC_KEY>@<ERRORS_DOMAIN>/1)."
+  if [[ $INTERACTIVE == 1 ]] && confirm "Point it there?" y; then
+    env_set SENTRY_DSN "$expected"
+    ok "SENTRY_DSN updated."
+  fi
+}
+
+# Asks for one setting, in the way its kind needs, until the answer passes validate_setting.
+answer_setting() {
+  local key=$1 kind value line options n default explained=0
+  kind=${SETTING_KIND[$key]-}
+  while true; do
+    load_example
+    load_env "$ENV_FILE"
+    case $kind in
+      domain)
+        if [[ $key == ERRORS_DOMAIN ]]; then
+          default=""
+          if [[ ${ENV_VALUES[DOMAIN]-} =~ $DOMAIN_RE ]]; then default="errors.${ENV_VALUES[DOMAIN]}"; fi
+          value=$(ask_domain "Error viewer domain (ERRORS_DOMAIN)" "$default")
+        else
+          value=$(ask_domain "Site domain ($key, e.g. app.example.com)")
+        fi
+        ;;
+      enum:*)
+        IFS=, read -r -a options <<<"${kind#enum:}"
+        n=$(choose "$key:" "${options[@]}")
+        value=${options[n - 1]}
+        ;;
+      secret:* | password:*)
+        if [[ $key == POSTGRES_PASSWORD ]] && pgdata_exists; then
+          if ((explained == 0)); then
+            info "The database already exists, and Postgres only reads POSTGRES_PASSWORD when it creates it: a new"
+            info "password would lock the app out. Enter the original one (from your copy of .env)."
+            explained=1
+          fi
+          value=$(ask_secret "Original POSTGRES_PASSWORD")
+        else
+          value=$(ask_secret "$key (Enter to generate one)")
+          [[ -n $value ]] || value=$(generated_value "$key")
+        fi
+        ;;
+      derived)
+        value=$(ask "$key" "$(expected_dsn)")
+        ;;
+      *)
+        if is_secret_key "$key"; then
+          value=$(ask_secret "$key")
+        else
+          value=$(ask "$key" "${EXAMPLE_VALUES[$key]-}")
+        fi
+        ;;
+    esac
+    line=$(validate_setting "$key" "$value" 1 | grep '|ask|' | head -n 1 || true)
+    if [[ -z $line ]]; then
+      env_set "$key" "$value"
+      return
+    fi
+    warn "$key ${line##*|}."
+  done
+}
+
+# join_comma <item>…: `a, b, c`, without duplicates.
+join_comma() { printf '%s\n' "$@" | awk '!seen[$0]++' | paste -sd, - | sed 's/,/, /g'; }
+
+# Prints problems as an indented list.
+print_problems() {
+  local key _fix _state reason
+  while IFS='|' read -r key _fix _state reason; do
+    if [[ -n $key ]]; then printf '    %-30s %s\n' "$key" "$reason" >&2; fi
+  done <<<"$1"
+}
+
+# Brings .env in line with the registry before a deploy: tidies it, appends keys new in the example, fills in what
+# can be generated and asks for the rest (here, or in the editor). Without a terminal it stops instead of asking and
+# names each key; CHECK_FAILED_NOTE, when set, is added to that message.
+CHECK_FAILED_NOTE=""
+check_env() {
+  [[ -w $ENV_FILE ]] || die "Can't write to .env. Fix its owner: sudo chown $(id -u) $ENV_FILE"
+  chmod 600 "$ENV_FILE" 2>/dev/null || warn "Can't make .env private (chmod 600): its owner is another user."
+  normalize_env
+  append_new_keys
+
+  local problems asks key fix _state _reason generated defaults key_generated=0 warned=0 answerable options n
+  while true; do
+    # ------ Fill In ------
+    load_example
+    problems=$(env_problems "$ENV_FILE")
+    generated=() defaults=()
+    while IFS='|' read -r key fix _state _reason; do
+      [[ $fix == gen ]] || continue
+      env_set "$key" "$(generated_value "$key")"
+      if is_secret_key "$key"; then generated+=("$key"); else defaults+=("$key=${EXAMPLE_VALUES[$key]-}"); fi
+      if [[ $key == ERROR_VIEWER_PUBLIC_KEY ]]; then key_generated=1; fi
+    done <<<"$problems"
+    if ((${#generated[@]})); then ok "Generated $(join_comma "${generated[@]}")"; fi
+    if ((${#defaults[@]})); then ok "Set to the example's defaults: $(join_comma "${defaults[@]}")"; fi
+    sync_dsn "$key_generated"
+
+    # ------ Report ------
+    problems=$(env_problems "$ENV_FILE")
+    if ((warned == 0)); then
+      warned=1
+      while IFS='|' read -r key fix _state _reason; do
+        if [[ $fix == warn && $key != SENTRY_DSN ]]; then warn "$key $_reason."; fi
+      done <<<"$problems"
+    fi
+    asks=$(grep '^[^|]*|ask|' <<<"$problems" || true)
+    if [[ -z $asks ]]; then
+      ok ".env has every setting."
+      return 0
+    fi
+    warn "These settings need a value:"
+    print_problems "$asks"
+    if [[ $INTERACTIVE != 1 ]]; then
+      mapfile -t answerable < <(cut -d'|' -f1 <<<"$asks" | awk '!seen[$0]++')
+      die "Can't deploy until .env is fixed: $(join_comma "${answerable[@]}"). Set the values in .env (or run deploy/deploy.sh env on a terminal), then deploy/deploy.sh apply.${CHECK_FAILED_NOTE:+
+$CHECK_FAILED_NOTE}"
+    fi
+
+    # ------ Ask ------
+    # Only keys can be answered here; a line Compose can't parse needs the editor.
+    mapfile -t answerable < <(cut -d'|' -f1 <<<"$asks" | grep -E '^[A-Za-z_][A-Za-z0-9_]*$' | awk '!seen[$0]++' || true)
+    options=()
+    if ((${#answerable[@]})); then options+=("Answer here"); fi
+    options+=("Open .env in your editor" "Stop")
+    n=$(choose "How do you want to set them?" "${options[@]}")
+    case ${options[n - 1]} in
+      "Answer here")
+        for key in "${answerable[@]}"; do answer_setting "$key"; done
+        ;;
+      "Open .env in your editor") edit_env ;;
+      *) die "Stopped. .env still needs a value for the settings above.${CHECK_FAILED_NOTE:+ $CHECK_FAILED_NOTE}" ;;
+    esac
+  done
+}
+
+# ===== Editing .env =====
+# The system's terminal editor, not $EDITOR: a graphical one (`code`) returns at once, before the file is saved, and
+# nano or vi always block until they close.
+pick_editor() {
+  if command -v nano >/dev/null; then
+    echo nano
+  elif command -v vi >/dev/null; then
+    echo vi
+  else
+    die "No terminal editor here (looked for nano and vi). Install one: sudo apt install nano"
+  fi
+}
+
+# list_env_changes <old file> <new file>: the keys whose values differ, with secrets masked.
+list_env_changes() {
+  local -A old=()
+  local key keys=() shown=0
+  load_env "$1"
+  for key in "${!ENV_VALUES[@]}"; do old[$key]=${ENV_VALUES[$key]}; done
+  load_env "$2"
+  mapfile -t keys < <(printf '%s\n' "${!old[@]}" "${!ENV_VALUES[@]}" | sort -u)
+  for key in "${keys[@]}"; do
+    [[ -n $key ]] || continue
+    if [[ ! -v old[$key] ]]; then
+      printf '    %-30s added\n' "$key"
+    elif [[ ! -v ENV_VALUES[$key] ]]; then
+      printf '    %-30s removed\n' "$key"
+    elif [[ ${old[$key]} == "${ENV_VALUES[$key]}" ]]; then
+      continue
+    elif is_secret_key "$key"; then
+      printf '    %-30s changed (hidden)\n' "$key"
+    else
+      printf '    %-30s %s → %s\n' "$key" "${old[$key]:-(empty)}" "${ENV_VALUES[$key]:-(empty)}"
+    fi
+    shown=1
+  done
+  if ((shown == 0)); then info "    only comments or layout"; fi
+}
+
+# Opens a copy of .env in the terminal's editor and, once the editor closes, tidies and checks it, then puts it in
+# place of .env in one step (a rename). Editing a copy means a half-done edit or a Ctrl-C never leaves .env broken.
+# Sets ENV_EDITED=1 when .env changed; it always returns 0, so callers don't run it as a condition, where `set -e`
+# wouldn't apply inside it.
+ENV_EDITED=0
+edit_env() {
+  ENV_EDITED=0
+  [[ $INTERACTIVE == 1 ]] ||
+    die "No terminal for an editor. Edit .env by hand, then check it with deploy/deploy.sh env --check"
+  local editor copy dups problems old_pg new_pg exit_trap
+  editor=$(pick_editor)
+  copy=$(umask 077 && mktemp "$ROOT/.env.edit.XXXXXX")
+  # Set up may have one already (install_cert's), put back below.
+  exit_trap=$(trap -p EXIT)
+  # shellcheck disable=SC2064 # `copy` is meant to be expanded now.
+  trap "rm -f '$copy' '$copy.tidy'" EXIT
+  trap 'exit 130' INT TERM HUP
+  cat "$ENV_FILE" >"$copy"
+
+  while true; do
+    if [[ $editor == nano ]]; then
+      info "${DIM}Opening .env in nano. Ctrl-O Enter saves, Ctrl-X closes.${RESET}"
+    else
+      info "${DIM}Opening .env in vi. :wq saves and closes, :q! closes without saving.${RESET}"
+    fi
+    if ! "$editor" "$copy" </dev/tty >/dev/tty; then
+      warn "The editor exited with an error, so .env is unchanged."
+      break
+    fi
+
+    # ------ Compare ------
+    if cmp -s "$copy" "$ENV_FILE"; then
+      info "No changes."
+      break
+    fi
+    dups=$(env_duplicates "$copy")
+    normalize_stream <"$copy" >"$copy.tidy"
+    cat "$copy.tidy" >"$copy"
+    if cmp -s "$copy" "$ENV_FILE"; then
+      info "No changes."
+      break
+    fi
+    step "Changes"
+    list_env_changes "$ENV_FILE" "$copy"
+
+    # ------ Check ------
+    problems=$(env_problems "$copy" | grep '^[^|]*|ask|' || true)
+    if [[ -n $dups ]]; then
+      problems+=${problems:+$'\n'}"$dups|ask|invalid|set more than once: only the last line is kept"
+    fi
+    old_pg=$(env_get POSTGRES_PASSWORD "$ENV_FILE")
+    new_pg=$(env_get POSTGRES_PASSWORD "$copy")
+    if [[ -n $old_pg && -n $new_pg && $old_pg != "$new_pg" ]] && pgdata_exists; then
+      problems+=${problems:+$'\n'}"POSTGRES_PASSWORD|ask|invalid|changed, but Postgres keeps the password the database was created with: change it there too (ALTER USER app PASSWORD '…'), or the app is locked out"
+    fi
+    if [[ -z $problems ]]; then
+      save_edited_env "$copy"
+      break
+    fi
+    warn "The edited .env has problems:"
+    print_problems "$problems"
+    case $(choose "What now?" "Edit again" "Save anyway" "Discard the changes") in
+      1) continue ;;
+      2)
+        save_edited_env "$copy"
+        break
+        ;;
+      3)
+        info "Discarded: .env is unchanged."
+        break
+        ;;
+    esac
+  done
+  rm -f "$copy" "$copy.tidy"
+  trap - EXIT INT TERM HUP
+  if [[ -n $exit_trap ]]; then eval "$exit_trap"; fi
+}
+
+save_edited_env() {
+  chmod 600 "$1"
+  # A rename replaces a symlink rather than writing through it, so a linked .env is written in place instead.
+  if [[ -L $ENV_FILE ]]; then
+    cat "$1" >"$ENV_FILE"
+    rm -f "$1"
+  else
+    mv -f "$1" "$ENV_FILE"
+  fi
+  ENV_EDITED=1
+  ok "Saved .env"
+}
+
+# ===== Applied State =====
+# A fingerprint of what Compose reads from .env: the sorted KEY=value pairs of the stack keys, so comments, order,
+# spacing and the backup settings never count as a change. Every deploy records it with its time in .env.applied;
+# when .env's differs, an edit is waiting for Apply.
+env_fingerprint() {
+  normalize_stream <"$1" | awk -v keys="$(stack_keys | paste -sd' ' -)" '
+    BEGIN { n = split(keys, k, " "); for (i = 1; i <= n; i++) want[k[i]] = 1 }
+    match($0, /^[A-Za-z_][A-Za-z0-9_]*=/) {
+      key = substr($0, 1, RLENGTH - 1)
+      if (key in want) value[key] = substr($0, RLENGTH + 1)
+    }
+    END { for (i = 1; i <= n; i++) print k[i] "=" value[k[i]] }' | sha256sum | cut -d' ' -f1
+}
+
+# record_applied [fingerprint]: the one taken before the deploy started, so an edit made during the build stays pending.
+record_applied() {
+  local fingerprint=${1:-}
+  [[ -n $fingerprint ]] || fingerprint=$(env_fingerprint "$ENV_FILE")
+  (umask 077 && printf '%s %s\n' "$fingerprint" "$(date +%s)" >"$APPLIED_FILE")
+}
+
+# applied | pending | untracked (deployed before .env.applied existed, or never).
+settings_state() {
+  local fingerprint=""
+  if [[ -f $APPLIED_FILE ]]; then read -r fingerprint _ <"$APPLIED_FILE" || true; fi
+  if [[ -z $fingerprint ]]; then
+    echo untracked
+  elif [[ $fingerprint == "$(env_fingerprint "$ENV_FILE")" ]]; then
+    echo applied
+  else
+    echo pending
+  fi
 }
 
 # ===== Docker =====
@@ -189,29 +894,34 @@ wait_healthy() {
 }
 
 # Builds and starts the stack. Compose runs `migrate` and `storage-init` first and starts the new app only if both
-# succeed, so a failure here leaves the database and the running app as they were.
+# succeed, so a failure here leaves the database and the running app as they were. Always `--build`: SENTRY_DSN is a
+# build argument of the browser bundle, so an .env change can need a new image.
 deploy_stack() {
   # Docker would create a missing bind-mount folder as root, which this script then couldn't write certificates into.
   mkdir -p "$CERT_DIR"
 
   step "Building and starting the stack"
-  local log
+  local log fingerprint
+  fingerprint=$(env_fingerprint "$ENV_FILE")
   log=$(mktemp)
   if ! dc up -d --build --remove-orphans 2>&1 | tee "$log"; then
     # Where Google blocks the region, the error viewer's build gets 403 from Go's module proxy (docs/deployment.md).
     if grep -q 'proxy.golang.org.*403 Forbidden' "$log"; then
       rm -f "$log"
       die "This server can't download Go modules from proxy.golang.org. Set GOPROXY in .env to a mirror it can reach
-(e.g. GOPROXY=https://goproxy.cn), then choose Update."
+(e.g. GOPROXY=https://goproxy.cn): choose Settings, edit .env, then apply (deploy/deploy.sh apply)."
     fi
     rm -f "$log"
     die "The deploy stopped (see above). Nothing that was running was replaced: a failed build or migration leaves the
-running app and the database as they were."
+running app and the database as they were. Once it's fixed, choose Settings → Apply (deploy/deploy.sh apply)."
   fi
   rm -f "$log"
+  # The containers now run with this .env, even if the app turns out unhealthy below.
+  record_applied "$fingerprint"
 
   step "Waiting for the app to turn healthy"
-  wait_healthy app || die "The app didn't turn healthy. Its logs: deploy/deploy.sh logs app"
+  wait_healthy app ||
+    die "The app didn't turn healthy. Its logs: deploy/deploy.sh logs app. Once it's fixed, choose Settings → Apply."
   ok "App is healthy"
   if wait_healthy error-viewer 60; then
     ok "Error viewer is healthy"
@@ -538,36 +1248,31 @@ cmd_setup() {
   goproxy=$(ask "Go module mirror (Enter for none)")
 
   # ------ Write .env ------
+  # The answers above go in; check_env generates every secret and SENTRY_DSN, and asks for anything else the registry
+  # can't fill in. From here on .env exists and Set up is locked: a failed build is retried with Settings → Apply.
   step "Writing .env"
-  local public_key password
-  public_key=$(secret 16)
-  password=$(secret 12)
-  (umask 077 && cp "$ROOT/.env.production.example" "$ENV_FILE")
+  (umask 077 && cp "$EXAMPLE_FILE" "$ENV_FILE")
   chmod 600 "$ENV_FILE"
   env_set DOMAIN "$domain"
   env_set ERRORS_DOMAIN "$errors_domain"
   env_set TLS_MODE "$tls_mode"
   env_set BACKUP_DIR "$dir"
   env_set GOPROXY "$goproxy"
-  env_set ERROR_VIEWER_PUBLIC_KEY "$public_key"
-  env_set ERROR_VIEWER_ADMIN_PASSWORD "$password"
-  env_set ERROR_VIEWER_SESSION_SECRET "$(secret)"
-  env_set SENTRY_DSN "https://$public_key@$errors_domain/1"
-  env_set POSTGRES_PASSWORD "$(secret)"
-  env_set BETTER_AUTH_SECRET "$(secret)"
-  env_set ALTCHA_HMAC_KEY "$(secret)"
-  env_set S3_ACCESS_KEY "$(secret 16)"
-  env_set S3_SECRET_KEY "$(secret)"
-  env_set S3_ADMIN_ACCESS_KEY "$(secret 16)"
-  env_set S3_ADMIN_SECRET_KEY "$(secret)"
-  ok ".env written, with every secret generated. Keep a copy off the server: it's the only copy of them."
+  check_env
+  ok ".env written. Keep a copy off the server: it's the only copy of its secrets."
+  if confirm "Review .env in your editor before the first build?" n; then
+    edit_env
+    if ((ENV_EDITED)); then check_env; fi
+  fi
 
   deploy_stack
+  local password
+  password=$(env_get ERROR_VIEWER_ADMIN_PASSWORD)
 
   # ------ Done ------
   step "Done"
-  info "  Site          https://$domain"
-  info "  Error viewer  https://$errors_domain   password: $password (also in .env)"
+  info "  Site          https://$(env_get DOMAIN)"
+  info "  Error viewer  https://$(env_get ERRORS_DOMAIN)   password: $password (also in .env)"
   info ""
   info "  The first admin: sign up on the site, then choose Make admin (or: deploy/deploy.sh admin <email>)."
   info "  A nightly database backup: add this line with crontab -e"
@@ -614,11 +1319,91 @@ Keep them with git stash, or drop them with git checkout -- <file>, then update 
   if [[ $before == "$after" ]]; then
     info "Already on the newest commit ($after); rebuilding anyway, for changes in .env."
   else
-    git -C "$ROOT" log --oneline "$before..$after"
+    git -C "$ROOT" --no-pager log --oneline "$before..$after"
   fi
 
-  deploy_stack
+  # The pulled script, not the functions already loaded from the old one: its settings registry knows the variables the
+  # new commits added, so they're filled in or asked for before the build.
+  bash "$ROOT/deploy/deploy.sh" apply --after-update
   ok "Updated to $after"
+}
+
+# ------ Settings ------
+cmd_env() {
+  is_set_up || die "Set up first."
+  case ${1:-} in
+    --check)
+      check_env_only
+      return
+      ;;
+    "") ;;
+    *) die "Unknown env option: $1 (see deploy/deploy.sh help)" ;;
+  esac
+  [[ $INTERACTIVE == 1 ]] ||
+    die "No terminal for Settings. deploy/deploy.sh env --check checks .env without asking; deploy/deploy.sh apply deploys it."
+
+  step "Checking .env"
+  check_env
+  while true; do
+    info ""
+    status_settings </dev/null
+    case $(choose "Settings:" "Edit .env in your editor" "Apply pending changes (rebuild and restart)" "Back") in
+      1)
+        edit_env
+        if ((ENV_EDITED)); then
+          check_env
+          if confirm "Apply now?" y; then cmd_apply; fi
+        fi
+        ;;
+      2)
+        if [[ $(settings_state) == applied ]]; then
+          info "Nothing pending: the stack already runs with this .env."
+          confirm "Rebuild and restart anyway?" n || continue
+        fi
+        cmd_apply
+        ;;
+      3) return 0 ;;
+    esac
+  done
+}
+
+# Reports what check_env would fill in or ask for, and changes nothing: for cron and CI. Exits 1 when .env isn't ready.
+check_env_only() {
+  local problems key fix _state reason bad=0
+  if ! normalize_stream <"$ENV_FILE" | cmp -s - "$ENV_FILE"; then
+    info "• .env isn't tidy (line endings, spacing, export, quotes or duplicates); the next apply tidies it."
+  fi
+  problems=$(env_problems "$ENV_FILE")
+  while IFS='|' read -r key fix _state reason; do
+    case $fix in
+      ask | gen)
+        printf '%s✗%s %-30s %s\n' "$RED" "$RESET" "$key" "$reason"
+        bad=1
+        ;;
+      warn) warn "$key $reason." ;;
+    esac
+  done <<<"$problems"
+  if ((bad)); then
+    die ".env isn't ready. deploy/deploy.sh env fills in or asks for these; deploy/deploy.sh apply does too, then deploys."
+  fi
+  ok ".env has every setting."
+  status_settings </dev/null
+}
+
+# ------ Apply ------
+# `--after-update` is how Update hands over to the pulled script; it only changes what a stop says.
+cmd_apply() {
+  is_set_up || die "Set up first."
+  case ${1:-} in
+    --after-update) CHECK_FAILED_NOTE="The update stopped before the build: the new code is pulled, but the app that was running still runs the old one." ;;
+    "") ;;
+    *) die "Unknown apply option: $1 (see deploy/deploy.sh help)" ;;
+  esac
+  require_tools
+  step "Checking .env"
+  check_env
+  deploy_stack
+  ok "The stack runs with the current .env."
 }
 
 # ------ Back Up ------
@@ -770,6 +1555,9 @@ cmd_cert() {
     fi
   fi
 
+  # Only Caddy reads TLS_MODE, and apply_tls restarts it. So when nothing else was pending, nothing is afterwards.
+  local state
+  state=$(settings_state)
   if [[ $source == auto ]]; then
     env_set TLS_MODE auto
   else
@@ -777,6 +1565,7 @@ cmd_cert() {
     env_set TLS_MODE files
   fi
   apply_tls "$old"
+  if [[ $state == applied ]]; then record_applied; fi
 }
 
 # ------ Status ------
@@ -968,6 +1757,42 @@ status_backup() {
   fi
 }
 
+# Whether .env has every setting, and whether the running stack uses it: the fingerprint against .env.applied.
+status_settings() {
+  if [[ ! -f $ENV_FILE ]]; then
+    status_line red Settings "not configured"
+    return
+  fi
+  local problems key _fix state _reason missing=() invalid=() text="" edited applied_at=""
+  problems=$(env_problems "$ENV_FILE")
+  while IFS='|' read -r key _fix state _reason; do
+    case $state in
+      missing) missing+=("$key") ;;
+      invalid) invalid+=("$key") ;;
+    esac
+  done <<<"$problems"
+  if ((${#missing[@]} + ${#invalid[@]})); then
+    if ((${#missing[@]})); then text="missing: $(join_comma "${missing[@]}")"; fi
+    if ((${#invalid[@]})); then text+="${text:+  }invalid: $(join_comma "${invalid[@]}")"; fi
+    status_line red Settings "$text"
+    return
+  fi
+
+  edited=$(stat -c %Y "$ENV_FILE")
+  if [[ -f $APPLIED_FILE ]]; then read -r _ applied_at <"$APPLIED_FILE" || true; fi
+  case $(settings_state) in
+    untracked) status_line dim Settings "edited $(date -d "@$edited" '+%F %H:%M'), not tracked yet" ;;
+    pending) status_line yellow Settings "edited $(date -d "@$edited" '+%F %H:%M'), not applied" ;;
+    applied)
+      text="applied $(date -d "@${applied_at:-0}" '+%F %H:%M')"
+      if [[ $applied_at =~ ^[0-9]+$ ]] && ((edited > applied_at)); then
+        text+="  (edited $(date -d "@$edited" '+%F %H:%M'))"
+      fi
+      status_line green Settings "$text"
+      ;;
+  esac
+}
+
 # Nothing here reads input: a status check that did (docker, git) would swallow what the user types ahead.
 render_status() {
   render_status_lines </dev/null
@@ -975,6 +1800,7 @@ render_status() {
 
 render_status_lines() {
   status_project
+  status_settings
   status_url Site "$(env_get DOMAIN)"
   status_url Errors "$(env_get ERRORS_DOMAIN)"
   status_ports
@@ -983,11 +1809,12 @@ render_status_lines() {
 }
 
 # ===== Menu =====
-MENU_KEYS=(setup update backup restore cert status logs admin)
-MENU_LABELS=("Set up" "Update" "Back up" "Restore" "SSL certificate" "Status" "Logs" "Make admin")
+MENU_KEYS=(setup update env backup restore cert status logs admin)
+MENU_LABELS=("Set up" "Update" "Settings" "Back up" "Restore" "SSL certificate" "Status" "Logs" "Make admin")
 MENU_HINTS=(
   "clone, create .env, first build"
   "back up, pull, rebuild, wait for healthy"
+  "check, edit .env, apply"
   "database and/or media"
   "from a backup file"
   "automatic or your own files"
@@ -1018,7 +1845,7 @@ draw_menu() {
       printf '  %s%s) %-17s (set up first)%s\n' "$DIM" "$((i + 1))" "${MENU_LABELS[$i]}" "$RESET"
     fi
   done
-  printf '  9) Quit\n\n'
+  printf '  0) Quit\n\n'
   printf '  %s%s%s\n' "$DIM" "$rule" "$RESET"
   render_status
   printf '  %s%s%s\n\n' "$DIM" "$rule" "$RESET"
@@ -1031,8 +1858,8 @@ menu() {
     draw_menu
     read -r -p "Choose: " choice || exit 0
     case $choice in
-      9 | q | Q) exit 0 ;;
-      [1-8]) key=${MENU_KEYS[choice - 1]} ;;
+      0 | q | Q) exit 0 ;;
+      [1-9]) key=${MENU_KEYS[choice - 1]} ;;
       *) continue ;;
     esac
     if ! menu_available "$key"; then
@@ -1071,7 +1898,10 @@ Usage: deploy/deploy.sh [command]
 With no command, a menu with the stack's status under it.
 
   setup                         clone (when run outside a checkout), create .env, first build
-  update                        back up the database, git pull, rebuild, wait for healthy
+  update                        back up the database, git pull, then apply with the pulled script
+  env [--check]                 check .env (fill in what can be generated, ask for the rest), edit it in nano
+                                or vi, apply it; --check only reports, and exits 1 when something is missing
+  apply                         check .env, then rebuild and restart the stack with it
   backup [--all|--db|--media] [--dir <folder>]
                                 without a terminal, --db is the default; --dir is remembered in .env
   restore [<file> --confirm <domain>]
@@ -1091,6 +1921,8 @@ main() {
     menu) menu ;;
     setup) cmd_setup ;;
     update) cmd_update ;;
+    env) cmd_env "$@" ;;
+    apply) cmd_apply "$@" ;;
     backup) cmd_backup "$@" ;;
     restore) cmd_restore "$@" ;;
     cert) cmd_cert "$@" ;;

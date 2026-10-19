@@ -58,7 +58,8 @@ services:
     <<: *app-image
     restart: unless-stopped
     # Listed one by one, so each container gets only its own secrets (never the store's admin key). A variable added to
-    # `app/env.server.ts` must be added here too.
+    # `app/env.server.ts` must be added here too, and one read from `.env` also to `.env.production.example` and the
+    # settings registry in `deploy/deploy.sh` (docs/deployment.md → Adding a Variable).
     environment:
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}

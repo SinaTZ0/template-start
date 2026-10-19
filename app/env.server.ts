@@ -8,7 +8,9 @@ dotenv.config({ quiet: true });
 
 /*===== Schema =====*/
 // Single source of truth for server env vars. Add new variables here, to `.env.example`, and to the `app` service in
-// `compose.prod.yaml` (plus `.env.production.example` when the value is per deployment).
+// `compose.prod.yaml`. A value that differs per deployment also goes in `.env.production.example` and in the settings
+// registry of `deploy/deploy.sh`, which must ask for it when it can't be generated (docs/deployment.md → Adding a
+// Variable).
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
