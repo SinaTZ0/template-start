@@ -4,6 +4,8 @@ import type { ErrorInfo } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { HydratedRouter } from "react-router/dom";
 
+import { ensureClientId } from "~/lib/client-id";
+
 /*===== Error Reporting =====*/
 // Browser errors go to the same tracker as the server's (docs/backend/logging.md). The DSN is baked in at build time
 // (`envPrefix` in `vite.config.ts`); without it nothing is sent. It is public by design: it only allows sending events.
@@ -14,6 +16,8 @@ if (import.meta.env.SENTRY_DSN) {
     // Query strings can carry tokens; cookies and headers carry the session.
     dataCollection: { userInfo: false, cookies: false, httpHeaders: false, urlQueryParams: false },
   });
+  // Groups this browser's errors in the viewer, with the server's errors for its requests (`app/lib/client-id.ts`).
+  Sentry.setTag("clientId", ensureClientId());
 }
 
 /**

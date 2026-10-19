@@ -21,7 +21,7 @@
         type="search"
         name="q"
         value="{{.Query.Q}}"
-        placeholder="errorId, reqId, path:/notes, route:…, module:…, or text in the title"
+        placeholder="errorId, reqId, path:/notes, route:…, module:…, clientId:…, or text in the title"
         aria-label="Search"
         autocomplete="off"
         spellcheck="false"
@@ -75,23 +75,47 @@
 {{/* The part the filter form swaps. */}}
 {{define "results"}}
   <section id="results" class="results">
-    <div class="table-wrap">
-      <table class="events">
-        <thead>
-          <tr>
-            <th scope="col">Time</th>
-            <th scope="col">Level</th>
-            <th scope="col">Kind</th>
-            <th scope="col">Title</th>
-            <th scope="col">Path</th>
-            <th scope="col">errorId</th>
-          </tr>
-        </thead>
-        <tbody id="rows">
-          {{template "rows" .Rows}}
-        </tbody>
-      </table>
-    </div>
+    {{/*------ Delete Selected ------*/}}
+    {{/* Wraps the table so each row's checkbox is part of the post. Without JS the checkboxes still work, and the
+         button stays enabled; the server ignores an empty selection. */}}
+    <form
+      id="bulk-delete"
+      method="post"
+      action="/events/delete-selected"
+      hx-post="/events/delete-selected"
+      hx-confirm="Delete the selected events?"
+    >
+      <input type="hidden" name="q" value="{{.Query.Q}}" />
+      <input type="hidden" name="level" value="{{.Query.Level}}" />
+      <input type="hidden" name="kind" value="{{.Query.Kind}}" />
+      <input type="hidden" name="platform" value="{{.Query.Platform}}" />
+      <input type="hidden" name="env" value="{{.Query.Env}}" />
+      <input type="hidden" name="range" value="{{.Query.Range}}" />
+      <div class="bulk-bar">
+        <button id="delete-selected" type="submit" class="danger">Delete selected</button>
+      </div>
+      <div class="table-wrap">
+        <table class="events">
+          <thead>
+            <tr>
+              <th scope="col" class="check">
+                <input id="select-all" type="checkbox" aria-label="Select all events" />
+              </th>
+              <th scope="col">Time</th>
+              <th scope="col">Level</th>
+              <th scope="col">Kind</th>
+              <th scope="col">Title</th>
+              <th scope="col">Path</th>
+              <th scope="col">errorId</th>
+              <th scope="col">Client</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            {{template "rows" .Rows}}
+          </tbody>
+        </table>
+      </div>
+    </form>
     {{if and .Rows.First (not .Rows.Events)}}
       <p class="empty">No events{{if .Query.Filtered}} match these filters{{end}}.</p>
     {{end}}

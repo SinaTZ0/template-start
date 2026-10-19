@@ -5,7 +5,7 @@
   {{range .Events}}{{template "row" .}}{{end}}
   {{if .More}}
     <tr id="more" class="more">
-      <td colspan="6">
+      <td colspan="8">
         <a class="button" href="{{.MoreURL}}" hx-get="{{.MoreRowsURL}}" hx-target="#more" hx-swap="outerHTML">
           Load more <span class="htmx-indicator spinner" aria-hidden="true"></span>
         </a>
@@ -14,8 +14,12 @@
   {{end}}
 {{end}}
 
+{{/* `data-client` lets app.js draw one client's consecutive rows as a single card. */}}
 {{define "row"}}
-  <tr class="level-{{.Level}}">
+  <tr class="level-{{.Level}}" data-client="{{.ClientID}}">
+    <td class="check">
+      <input type="checkbox" name="id" value="{{.ID}}" aria-label="Select event" />
+    </td>
     <td class="time"><time datetime="{{iso .ReceivedAt}}" title="{{exact .ReceivedAt}}" data-ago>{{ago .ReceivedAt}}</time></td>
     <td><span class="badge level {{.Level}}">{{.Level}}</span></td>
     <td><span class="badge kind">{{.KindLabel}}</span></td>
@@ -25,6 +29,11 @@
       {{if .ErrorID}}
         <span title="{{.ErrorID}}">{{short .ErrorID}}</span>
         <button type="button" class="copy" data-copy="{{.ErrorID}}" aria-label="Copy errorId">Copy</button>
+      {{end}}
+    </td>
+    <td class="client mono">
+      {{if .ClientID}}
+        <a href="{{searchURL "clientId" .ClientID}}" title="All events from client {{.ClientID}}">{{short .ClientID}}</a>
       {{end}}
     </td>
   </tr>

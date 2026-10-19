@@ -55,16 +55,32 @@ func openStore(path string, log *slog.Logger) (*store, error) {
 	return s, nil
 }
 
-// migrate creates the schema. `user_version` records the schema version for later changes.
+// migrate brings the schema up to date, one version at a time. `user_version` records the version reached.
 func migrate(db *sql.DB) error {
 	var version int
 	if err := db.QueryRow("pragma user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version >= 1 {
-		return nil
+	if version < 1 {
+		if err := migrateV1(db); err != nil {
+			return err
+		}
 	}
+	if version < 2 {
+		// Events stored before this have no client ID, which only means they don't group.
+		_, err := db.Exec(`
+			alter table events add column client_id text;
+			create index if not exists events_client_id on events (client_id, received_at desc) where client_id is not null;
+			pragma user_version = 2;
+		`)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+func migrateV1(db *sql.DB) error {
 	_, err := db.Exec(`
 		create table if not exists events (
 			id           text primary key,
@@ -148,8 +164,8 @@ func (s *store) insert(rows []eventRow) error {
 
 	stmt, err := tx.Prepare(`
 		insert into events (id, received_at, occurred_at, kind, level, platform, environment, title, error_id, req_id,
-			method, path, route, module, payload)
-		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			method, path, route, module, client_id, payload)
+		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		on conflict (id) do nothing`)
 	if err != nil {
 		return err
@@ -163,7 +179,7 @@ func (s *store) insert(rows []eventRow) error {
 		}
 		_, err := stmt.Exec(r.ID, r.ReceivedAt, occurredAt, r.Kind, r.Level, nullable(r.Platform),
 			nullable(r.Environment), r.Title, nullable(r.ErrorID), nullable(r.ReqID), nullable(r.Method),
-			nullable(r.Path), nullable(r.Route), nullable(r.Module), r.Payload)
+			nullable(r.Path), nullable(r.Route), nullable(r.Module), nullable(r.ClientID), r.Payload)
 		if err != nil {
 			return err
 		}
@@ -211,7 +227,7 @@ type eventFilter struct {
 	Platform    string
 	Environment string
 	Since       int64 // unix ms; 0 is "all time"
-	// One column matched exactly (`error_id`, `req_id`, `path`, `route` or `module`), from the search box.
+	// One column matched exactly (`error_id`, `req_id`, `path`, `route`, `module` or `client_id`), from the search box.
 	Column string
 	Value  string
 	// Matched anywhere in the title.
@@ -220,7 +236,9 @@ type eventFilter struct {
 
 // searchColumns are the columns a search may match exactly. It also keeps `Column` from carrying anything else into
 // the SQL text.
-var searchColumns = map[string]bool{"error_id": true, "req_id": true, "path": true, "route": true, "module": true}
+var searchColumns = map[string]bool{
+	"error_id": true, "req_id": true, "path": true, "route": true, "module": true, "client_id": true,
+}
 
 // where returns the filter as SQL conditions joined by `and` (starting with `where`, or empty) and their arguments.
 func (f eventFilter) where(extra ...string) (string, []any) {
@@ -296,11 +314,11 @@ func parseCursor(s string) (cursor, bool) {
 
 const listColumns = `id, received_at, coalesce(occurred_at, 0), kind, level, coalesce(platform, ''),
 	coalesce(environment, ''), title, coalesce(error_id, ''), coalesce(req_id, ''), coalesce(method, ''),
-	coalesce(path, ''), coalesce(route, ''), coalesce(module, '')`
+	coalesce(path, ''), coalesce(route, ''), coalesce(module, ''), coalesce(client_id, '')`
 
 func scanRow(rows interface{ Scan(...any) error }, r *eventRow) error {
 	return rows.Scan(&r.ID, &r.ReceivedAt, &r.OccurredAt, &r.Kind, &r.Level, &r.Platform, &r.Environment, &r.Title,
-		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module)
+		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID)
 }
 
 // list returns up to limit events matching f, newest first, starting after `before` (nil for the newest). `more`
@@ -359,7 +377,7 @@ func (s *store) get(ctx context.Context, id string) (eventRow, error) {
 	var compressed []byte
 	row := s.db.QueryRowContext(ctx, "select "+listColumns+", payload from events where id = ?", id)
 	err := row.Scan(&r.ID, &r.ReceivedAt, &r.OccurredAt, &r.Kind, &r.Level, &r.Platform, &r.Environment, &r.Title,
-		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &compressed)
+		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID, &compressed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, errNotFound
 	}
@@ -442,6 +460,23 @@ func (s *store) delete(ctx context.Context, id string) error {
 func (s *store) deleteMatching(ctx context.Context, f eventFilter) (int64, error) {
 	where, args := f.where()
 	result, err := s.db.ExecContext(ctx, "delete from events "+where, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// deleteIDs deletes the events with the given normalized IDs and returns how many were stored.
+func (s *store) deleteIDs(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	result, err := s.db.ExecContext(ctx, "delete from events where id in ("+marks+")", args...)
 	if err != nil {
 		return 0, err
 	}

@@ -197,6 +197,7 @@ type eventRow struct {
 	Path        string
 	Route       string
 	Module      string
+	ClientID    string // the browser's random ID (app/lib/client-id.ts), shared by its own and its requests' events
 	Payload     []byte
 }
 
@@ -230,6 +231,7 @@ func buildRow(payload []byte, fallbackID string, receivedAt time.Time) (eventRow
 		Path:        clip(tags["path"], columnMaxLen),
 		Route:       clip(tags["route"], columnMaxLen),
 		Module:      clip(tags["module"], columnMaxLen),
+		ClientID:    clip(tags["clientId"], 64),
 	}
 
 	/*------ Browser Events ------*/

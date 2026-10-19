@@ -59,6 +59,12 @@ log.error({ err, mediaId }, "could not clean up the variants");
 A user who sees a 500 gets its `errorId`. Paste it into the error viewer's search box to find the full error, then
 click its `reqId` to see everything else that request reported.
 
+**Client ID.** Each browser gets a random ID in a `cid` cookie the first time the page runs
+(`app/lib/client-id.ts`). Browser reports carry it as a `clientId` tag, and so do the server's reports for that
+browser's requests, so one visitor's errors on both sides can be read together. It is random, not a fingerprint of the
+device, and identifies nobody: clearing cookies gives a new one. A browser's very first page load has no ID yet,
+because the cookie is set once that page runs.
+
 **What isn't sent.** Cookies, headers, request bodies, query strings, IP addresses and local variables are all off
 (`dataCollection` in both setups). A failed query's parameters are replaced with `(hidden)` unless `LOG_QUERY_PARAMS` is
 on.
@@ -173,9 +179,11 @@ is down. Its settings and internals are in [its README](../../tools/error-viewer
 
 - **List** (`/`): newest first, with filters for level, kind (`error`, `slow`, `message`, `browser`), platform,
   environment and time, a 14-day count strip and an auto-refresh toggle. Every view is a URL you can bookmark.
-- **Search box:** a UUID finds an `errorId`, 8 hex characters a `reqId`; `errorId:`, `reqId:`, `path:`, `route:` and
-  `module:` match that field exactly; anything else is searched in titles.
-- **Detail** (`/events/<id>`): tags (each `errorId`, `reqId`, `path` and `route` links to the list filtered by it), the
+  Consecutive events with the same `clientId` are drawn as one card, with the client and its event count on the first
+  row. Only neighbors group: a client whose events are interleaved with another's shows as separate cards.
+- **Search box:** a UUID finds an `errorId`, 8 hex characters a `reqId`; `errorId:`, `reqId:`, `path:`, `route:`,
+  `module:` and `clientId:` match that field exactly; anything else is searched in titles.
+- **Detail** (`/events/<id>`): tags (each `errorId`, `reqId`, `path`, `route` and `clientId` links to the list filtered by it), the
   exception chain with source lines for the app's own frames, the timeline of a slow request, the log line's fields,
   browser details and the raw JSON.
 

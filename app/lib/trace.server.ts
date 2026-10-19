@@ -21,8 +21,11 @@ type Span = {
 export type RequestTrace = {
   /** Short ID the logger adds to every line written during the request, so one request's lines can be grouped. */
   id: string;
-  /** The request line, without the query string (it can carry tokens). Error reports carry it. */
-  request?: { method: string; path: string };
+  /**
+   * The request line, without the query string (it can carry tokens), and the browser's client ID
+   * (`app/lib/client-id.ts`) when it sent one. Error reports carry them.
+   */
+  request?: { method: string; path: string; clientId?: string };
   start: number;
   spans: Span[];
   totals: Partial<Record<SpanKind, { count: number; ms: number }>>;

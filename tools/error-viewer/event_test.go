@@ -19,7 +19,8 @@ func TestBuildRowServerError(t *testing.T) {
 			{"type": "Error", "value": "connect ECONNREFUSED"},
 			{"type": "DrizzleQueryError", "value": "Failed query: select 1\nparams: (hidden)"}
 		]},
-		"tags": {"errorId": "4f1c2b9e-0000-4000-8000-000000000000", "reqId": "638455eb", "method": "GET", "path": "/notes", "module": "orpc"}
+		"tags": {"errorId": "4f1c2b9e-0000-4000-8000-000000000000", "reqId": "638455eb", "method": "GET", "path": "/notes", "module": "orpc",
+			"clientId": "0f4a9c2e8b7d4e1fa3c5b6d7e8f90a1b"}
 	}`
 	row, err := buildRow([]byte(payload), "", time.UnixMilli(1000))
 	if err != nil {
@@ -32,7 +33,7 @@ func TestBuildRowServerError(t *testing.T) {
 		// The thrown error is the last value; only its first line.
 		Title:   "DrizzleQueryError: Failed query: select 1",
 		ErrorID: "4f1c2b9e-0000-4000-8000-000000000000", ReqID: "638455eb", Method: "GET", Path: "/notes",
-		Module: "orpc",
+		Module: "orpc", ClientID: "0f4a9c2e8b7d4e1fa3c5b6d7e8f90a1b",
 	}
 	if !reflect.DeepEqual(row, want) {
 		t.Errorf("row =\n%+v\nwant\n%+v", row, want)

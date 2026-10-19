@@ -367,6 +367,62 @@ table {
   text-align: right;
 }
 
+/* Above the table, so the selection's button is in view as the list grows. */
+.bulk-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.events th.check,
+.events td.check {
+  width: 1%;
+  padding-right: 0;
+}
+.events input[type="checkbox"] {
+  margin: 0;
+  vertical-align: middle;
+}
+#delete-selected:disabled {
+  opacity: 0.5;
+}
+/* Without app.js there is no select-all box to click, so its column header stays empty. */
+html:not(.js) .events th.check input {
+  visibility: hidden;
+}
+
+/*------ Client Groups ------*/
+/* app.js marks runs of rows from one client. A run reads as a card: a tinted block with an accent edge, cut off from
+   its neighbors by a strip of the page background. Only the first row names the client. With collapsed borders the
+   wider one wins, so the strip also replaces the neighbors' own dividers. */
+.events td.client {
+  white-space: nowrap;
+}
+.events tr.group td {
+  background: var(--muted);
+}
+.events tr.group td:first-child {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.events tr.group-first td {
+  border-top: 18px solid var(--background);
+}
+.events tr.group-last td {
+  border-bottom: 18px solid var(--background);
+}
+.events tbody tr.group:hover td {
+  background: var(--accent);
+}
+.events tr.group:not(.group-first) td.client a {
+  visibility: hidden;
+}
+.events tr.group-first td.client::after {
+  content: attr(data-group-size);
+  margin-left: 6px;
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
 /*------ Badges ------*/
 .badge {
   display: inline-block;

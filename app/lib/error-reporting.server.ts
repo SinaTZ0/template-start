@@ -50,11 +50,19 @@ if (env.SENTRY_DSN && !Sentry.isInitialized()) {
 }
 
 /*===== Reporting =====*/
-/** Tags every report with the request it came from, so its log lines can be found by `reqId`. */
+/**
+ * Tags every report with the request it came from, so its log lines can be found by `reqId`, and with the browser's
+ * `clientId`, so the viewer can group it with that browser's own errors.
+ */
 function requestTags(): Record<string, string> {
   const trace = currentTrace();
   if (!trace) return {};
-  return { reqId: trace.id, ...(trace.request && { method: trace.request.method, path: trace.request.path }) };
+  const { method, path, clientId } = trace.request ?? {};
+  return {
+    reqId: trace.id,
+    ...(method && path && { method, path }),
+    ...(clientId && { clientId }),
+  };
 }
 
 /**

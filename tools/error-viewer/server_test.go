@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -123,6 +124,39 @@ func TestIngestDeduplicatesRetries(t *testing.T) {
 }
 
 /*===== Dashboard =====*/
+
+// Only the checked events may go: a malformed ID is dropped, and an event that wasn't posted must survive.
+func TestDeleteSelectedRemovesOnlyChosenEvents(t *testing.T) {
+	server, st := newTestServer(t)
+	other := strings.ReplaceAll(sampleEnvelope, "9ec79c33ec9942ab8353589fcb2e04dc", "1ec79c33ec9942ab8353589fcb2e04dc")
+	postEnvelope(t, server, "/api/1/envelope/?sentry_key="+testKey, sampleEnvelope)
+	postEnvelope(t, server, "/api/1/envelope/?sentry_key="+testKey, other)
+	waitForEvents(t, st, 2)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	res, err := client.PostForm(server.URL+"/login", url.Values{"password": {"password"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	res, err = client.PostForm(server.URL+"/events/delete-selected", url.Values{
+		"id": {"9ec79c33ec9942ab8353589fcb2e04dc", "not-an-id"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	ctx := context.Background()
+	if _, err := st.get(ctx, "9ec79c33ec9942ab8353589fcb2e04dc"); !errors.Is(err, errNotFound) {
+		t.Errorf("chosen event: err %v, want not found", err)
+	}
+	if _, err := st.get(ctx, "1ec79c33ec9942ab8353589fcb2e04dc"); err != nil {
+		t.Errorf("unchosen event: %v", err)
+	}
+}
 
 func TestDashboardNeedsSignIn(t *testing.T) {
 	server, _ := newTestServer(t)

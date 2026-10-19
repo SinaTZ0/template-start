@@ -93,6 +93,7 @@ type web struct {
 
 const (
 	pageSize      = 50
+	maxSelected   = 1000 // caps one delete post, far above what the list can hold checked at once
 	sessionCookie = "error_viewer_session"
 	sessionMaxAge = 7 * 24 * time.Hour
 )
@@ -173,6 +174,7 @@ func (wb *web) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /{$}", wb.list)
 	mux.HandleFunc("GET /rows", wb.rows)
 	mux.HandleFunc("POST /events/delete", wb.deleteMatching)
+	mux.HandleFunc("POST /events/delete-selected", wb.deleteSelected)
 	mux.HandleFunc("GET /events/{id}", wb.detail)
 	mux.HandleFunc("POST /events/{id}/delete", wb.deleteEvent)
 }
@@ -312,16 +314,18 @@ var (
 		column string
 		lower  bool
 	}{
-		"errorid": {"error_id", true},
-		"reqid":   {"req_id", true},
-		"path":    {"path", false},
-		"route":   {"route", false},
-		"module":  {"module", false},
+		"errorid":  {"error_id", true},
+		"reqid":    {"req_id", true},
+		"path":     {"path", false},
+		"route":    {"route", false},
+		"module":   {"module", false},
+		"clientid": {"client_id", true},
 	}
 )
 
 // filter turns the URL state into a store filter. The search box understands a bare errorId (a UUID), a bare reqId
-// (8 hex characters), `column:value` for errorId / reqId / path / route / module, and otherwise searches titles.
+// (8 hex characters), `column:value` for errorId / reqId / path / route / module / clientId, and otherwise searches
+// titles.
 func (q listQuery) filter(now time.Time) eventFilter {
 	f := eventFilter{Level: q.Level, Kind: q.Kind, Platform: q.Platform, Environment: q.Env}
 	if d, ok := rangeOptions[q.Range]; ok {
@@ -582,6 +586,34 @@ func (wb *web) deleteMatching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wb.log.Info("deleted matching events", "count", deleted, "filter", query.encode())
+	redirect(w, r, "/?"+query.encode())
+}
+
+// deleteSelected deletes the events whose row checkboxes were posted, then shows the filtered list again. Anything that
+// isn't an event ID is dropped, so a hand-edited form can only ever name events.
+func (wb *web) deleteSelected(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	posted := r.PostForm["id"]
+	if len(posted) > maxSelected {
+		http.Error(w, "too many events selected", http.StatusBadRequest)
+		return
+	}
+	ids := make([]string, 0, len(posted))
+	for _, id := range posted {
+		if id = normalizeEventID(id); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	query := readListQuery(r.PostForm)
+	deleted, err := wb.store.deleteIDs(r.Context(), ids)
+	if err != nil {
+		wb.serverError(w, r, err)
+		return
+	}
+	wb.log.Info("deleted selected events", "count", deleted, "filter", query.encode())
 	redirect(w, r, "/?"+query.encode())
 }
 

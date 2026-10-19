@@ -133,7 +133,8 @@ type contextView struct {
 }
 
 // tagLinks are the tags whose value links to the list filtered by it, under the search prefix it uses.
-var tagLinks = map[string]string{"errorId": "errorId", "reqId": "reqId", "path": "path", "route": "route", "module": "module"}
+var tagLinks = map[string]string{"errorId": "errorId", "reqId": "reqId", "path": "path", "route": "route", "module": "module",
+	"clientId": "clientId"}
 
 // contextsShownElsewhere have their own section on the page; browserContexts too, on a browser event.
 var (

@@ -17,6 +17,7 @@ import type {
 } from "react-router";
 
 import { env } from "~/env.server";
+import { readClientId } from "~/lib/client-id";
 import { reportSlowRequest } from "~/lib/error-reporting.server";
 import { createLogger } from "~/lib/logger.server";
 import { runWithTrace, span, traceTimeline, traceTotals } from "~/lib/trace.server";
@@ -162,7 +163,8 @@ export const instrumentations: ServerInstrumentation[] = [
         request: (handle, { request }) => {
           // The path without its query string, which can carry tokens.
           const line = { method: request.method, path: new URL(request.url).pathname };
-          return runWithTrace(line, async (trace) => {
+          const clientId = readClientId(request.headers.get("cookie"));
+          return runWithTrace({ ...line, clientId }, async (trace) => {
             const result = await handle();
             logRequest({ request: line, result, trace });
           });
