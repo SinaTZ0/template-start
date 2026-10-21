@@ -5,7 +5,14 @@ test-results/
 storybook-static/
 pnpm-lock.yaml
 app/components/ui/
+start/.output/
+start/.tanstack/
+start/pnpm-lock.yaml
+start/app/components/ui/
+start/app/routeTree.gen.ts
 drizzle/
 # Vendored, and Go templates (Prettier would reflow their {{ }} actions).
 tools/error-viewer/static/htmx.min.js
 tools/error-viewer/templates/
+# Vendored agent skills, copied from their packages (.agents/skills/*/SOURCE.md).
+.agents/

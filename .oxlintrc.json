@@ -31,19 +31,25 @@
   },
   "overrides": [
     {
-      "files": ["app/components/primitive/**"],
+      "files": ["app/components/primitive/**", "start/app/components/primitive/**"],
       "rules": {
         "shadcn/no-restyle": "off"
       }
     }
   ],
   "ignorePatterns": [
+    ".agents/",
+    ".claude/",
     ".react-router/",
     "build/",
     "playwright-report/",
     "test-results/",
     "storybook-static/",
     "app/components/ui/",
+    "start/.output/",
+    "start/.tanstack/",
+    "start/app/components/ui/",
+    "start/app/routeTree.gen.ts",
     "tools/error-viewer/static/htmx.min.js"
   ]
 }
