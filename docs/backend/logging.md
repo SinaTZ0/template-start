@@ -70,7 +70,9 @@ because the cookie is set once that page runs.
 on.
 
 **Stacks point at source files.** The server bundle ships with source maps and runs with `--enable-source-maps`
-(`Dockerfile`), so stacks are mapped before they are logged or sent. The dev server maps them itself. Browser stacks
+(`Dockerfile`), so stacks are mapped before they are logged or sent. The dev server maps them itself. The image also
+ships the server source (`app/`), because the SDK reads each frame's lines from the file it names: without it, reports
+would arrive with no source lines. Browser stacks
 from a production build are minified, because client source maps aren't published; the message, URL and browser still
 show what failed.
 

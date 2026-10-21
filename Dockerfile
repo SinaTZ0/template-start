@@ -40,6 +40,9 @@ ENV NODE_OPTIONS=--enable-source-maps
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
+# The server source, read by the error reporter: with source maps, stack frames name `/app/app/<file>.ts`, and the
+# Sentry SDK reads each frame's lines from that path to attach them to the report. Without it, reports carry no source.
+COPY --from=build /app/app ./app
 COPY package.json ./
 COPY drizzle ./drizzle
 COPY deploy/migrate.mjs deploy/init-storage.mjs ./deploy/
