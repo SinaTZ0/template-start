@@ -20,5 +20,5 @@
     "skipLibCheck": true,
     "strict": true
   },
-  "exclude": ["app/components/ui/**"]
+  "exclude": ["app/components/ui/**", "start"]
 }

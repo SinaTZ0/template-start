@@ -15,5 +15,7 @@ certs
 backups
 *.key
 *.pfx
+# The TanStack Start app isn't deployed until it replaces the root app.
+start
 # The error viewer builds from its own folder (tools/error-viewer/Dockerfile).
 tools
