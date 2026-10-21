@@ -5,9 +5,9 @@ How the server logs, where errors and slow requests are reported, and how to fin
 ## Overview
 
 ```text
-request ──▶ entry.server.tsx (trace starts, reqId) ──▶ middleware ▸ loader/action ▸ procedure ▸ service ▸ repository ▸ db
-                                                                                                      │
-              one log line per request ◀── trace (time per kind + slowest spans) ◀────────────────────┘
+request ──▶ app/server.ts (trace starts, reqId) ──▶ server function / procedure ▸ service ▸ repository ▸ db
+                                                                                              │
+              one log line per request ◀── trace (time per kind + slowest spans) ◀────────────┘
               slow request ──▶ error viewer warning, with the timeline of its slowest spans
 
 log.error({ err }) ──▶ log line + error viewer event      browser error ──▶ error viewer event
@@ -42,17 +42,18 @@ log.error({ err, mediaId }, "could not clean up the variants");
 - The global oRPC middleware logs every unexpected procedure failure once, with the `errorId` the client receives.
   Don't log and rethrow the same error in services: it would become two reports.
 - Every line written while a request is handled carries its `reqId`. Search for it to see everything one request did.
-  It is 16 hex characters, and every response returns it as an `X-Request-Id` header (set by the root middleware in
-  `app/root.tsx`), so it can be read from the browser's devtools and quoted in a bug report.
+  It is 16 hex characters, and every response returns it as an `X-Request-Id` header (set by the server entry,
+  `app/server.ts`), so it can be read from the browser's devtools and quoted in a bug report.
 
 ## Error Reporting
 
-`app/lib/error-reporting.server.ts` sets up the server SDK; `app/entry.client.tsx` sets up the browser's.
+`app/lib/error-reporting.server.ts` sets up the server SDK; `app/client.tsx` sets up the browser's.
 
 | Source                                                    | How it reaches the error viewer                                |
 | --------------------------------------------------------- | -------------------------------------------------------------- |
 | Unexpected procedure failures (global oRPC middleware)    | `log.error({ err, errorId })`, tagged with the `errorId`       |
-| Loader, action and render errors (`handleError`)          | `log.error({ err })`; ones that already have an `errorId` skip |
+| Server function failures (`app/start.ts`)                 | `log.error({ err })`; ones that already have an `errorId` skip |
+| Failures of the request handler itself (`app/server.ts`)  | `log.error({ err })`                                           |
 | Better-Auth errors, failed health checks, cleanup errors… | Any other `log.error({ err })`                                 |
 | Crashes (uncaught exceptions, unhandled rejections)       | The SDK's own handlers                                         |
 | Browser errors                                            | The SDK's handlers, plus `onCaughtError` for boundary errors   |
@@ -81,7 +82,7 @@ because the cookie is set once that page runs.
 
 **User ID.** Once a request's session is read (`getRequestSession` in `app/lib/auth.server.ts`, which every session
 lookup goes through), its log lines and reports carry the signed-in user's database ID as `userId`. The browser sets
-the same tag after hydration, from the site layout's loader, and clears it on sign-out. Only the ID is sent, never the
+the same tag after hydration, from the viewer query (`app/routes/site_layout/`), and clears it on sign-out. Only the ID is sent, never the
 email or name. It does tie events to a person: the viewer is self-hosted, behind its password, and keeps events for
 30 days (`RETENTION_DAYS`), which is the accepted trade-off for finding one user's errors with `userId:`.
 
@@ -119,9 +120,7 @@ show what failed.
 
 | Kind         | Recorded by                                          | Name                                |
 | ------------ | ---------------------------------------------------- | ----------------------------------- |
-| `middleware` | React Router instrumentation (`entry.server.tsx`)    | route ID: `routes/notes/...`        |
-| `loader`     | React Router instrumentation                         | route ID                            |
-| `action`     | React Router instrumentation                         | route ID                            |
+| `server-fn`  | global function middleware (`app/start.ts`)          | server function: `getViewer`        |
 | `procedure`  | `traceProcedureMiddleware`, first on the implementer | procedure path: `note.list`         |
 | `service`    | `traceLayers` Vite plugin (below)                    | `<feature>.<fn>`: `note.listNotes`  |
 | `repository` | `traceLayers` Vite plugin                            | `<feature>.<fn>`: `note.insertNote` |
@@ -129,10 +128,13 @@ show what failed.
 | `storage`    | S3 client middleware in `app/lib/storage.server.ts`  | command: `PutObject`                |
 | `task`       | `span(...)` calls in app code                        | whatever the call names             |
 
-Kinds nest: a loader's time includes the procedures it called, and those include their queries. Add the kinds up and
+Kinds nest: a server function's time includes the procedures it called, and those include their queries. Add the kinds up and
 you count the same time more than once.
 
-Procedures are timed the same way over HTTP (`/rpc/*`) and through the server client in a loader.
+Procedures are timed the same way over HTTP (`/rpc/*`) and in-process, when a loader calls them during SSR.
+Loaders, `beforeLoad` and rendering aren't spans of their own: they run in the browser too, and the server-side work they
+start is already a `server-fn` or `procedure` span. Time spent rendering shows as the gap between those spans and the
+end of the request.
 
 **Services and repositories** are timed by the `traceLayers` Vite plugin (`vite-plugins/trace-layers.ts`): every
 `export async function` in `app/orpc/<feature>/service.ts` or `repository.ts` becomes a span named
@@ -157,12 +159,12 @@ Outside a request (startup, `pnpm db:seed`, tests) `span` just runs the function
 Every request writes one line:
 
 ```text
-INFO: GET /notes 200 45ms (loader 2×30ms, procedure 1×28ms, db 2×5ms) {"module":"http","reqId":"638455eb2c7f1a90"}
+INFO: GET /notes 200 45ms (server-fn 2×6ms, procedure 1×28ms, db 3×9ms) {"module":"http","reqId":"638455eb2c7f1a90"}
 ```
 
-`loader 2×30ms` means two loaders ran, taking 30 ms in total. A 5xx is an error line. A request slower than
+`server-fn 2×6ms` means two server functions ran, taking 6 ms in total. A 5xx is an error line. A request slower than
 `LOG_SLOW_REQUEST_MS` is a warning line, and is also **reported to the error viewer** as
-`Slow request: GET /notes/:id (1420ms)`, of kind `slow`. Search `route:/notes/:id` to see the slow hits on one route.
+`Slow request: GET /notes/$id (1420ms)`, of kind `slow`. Search `route:/notes/$id` to see the slow hits on one route.
 Only one report per method and route is sent a minute, so a slow database doesn't flood the viewer and crowd out the
 errors. The next report carries how many were left out (`timeline.skipped`), shown as "N more slow requests on this
 route since the last report". The warning line is written for every one.
@@ -172,24 +174,23 @@ kind and draws the request's spans as a waterfall, one row each:
 
 ```text
 Span                                          Start  Duration  0        1s        2s        3s
-middleware routes/notes_layout/notes-layout     1ms     121ms  ▇
+server-fn getViewer                             1ms     121ms  ▇
   db select … from session where …              6ms     116ms  ▇
-loader routes/notes/notes                     123ms    3116ms   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
-  procedure note.list                         123ms    3116ms   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
-    db ×5 select … from user where …          124ms      87ms   ▇
-    service note.listNotes                    214ms    3024ms    ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+procedure note.list                           123ms    3116ms   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+  db ×5 select … from user where …            124ms      87ms   ▇
+  service note.listNotes                      214ms    3024ms    ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
 3 spans under 65ms not shown.
 ```
 
 Each row is a span's kind and name, when it started (counted from the start of the request) and how long it took; its
 bar shows the same on the request's time axis. The bars show order and waiting: a span that starts when the one before
 it ends ran after it, two that start together ran in parallel, and a gap is time spent on untraced work. A span is
-indented under the one it ran inside, so parallel loaders keep their own children. Identical siblings are merged into one
+indented under the one it ran inside, so parallel work keeps its own children. Identical siblings are merged into one
 row (`db ×5`) with their total time. Spans under 2% of the request are left out, and the line under the table counts
 them. Queries show their shape only: quotes and column lists are dropped, and parameters are never included. The app
 sends the rows as data (`traceTimeline` in `app/lib/trace.server.ts`); the viewer draws them.
 
-Read it from the top down: follow the longest bar at each level. Here the loader waits on `note.list`, which spends
+Read it from the top down: follow the longest bar at each level. Here the page waits on `note.list`, which spends
 87 ms on queries and 3024 ms in `note.listNotes`, whose own query is too fast to be listed. So the time went into the
 service's own code.
 
@@ -204,7 +205,8 @@ isn't reported to the error viewer: the slow request it belongs to is.
 
 ### Limits
 
-- A request's time ends when its response starts. Content streamed in later (deferred loader data) isn't counted.
+- A request's time ends when its response starts. Content streamed in later (the rest of a streamed page) isn't
+  counted.
 - A trace keeps at most 300 spans. Spans past that still count in the totals but not in the timeline, and the timeline
   shows at most 40 rows.
 - Only queries through `db` (`app/db/client.server.ts`) are traced. A separate `pg` pool or client isn't.
@@ -274,9 +276,8 @@ rebuild. The server reads it at startup.
 ## Production Logs
 
 - Each line is one JSON object. The request line has `request.{method,path,status,ms}`, `request.route` (the matched
-  pattern, e.g. `/notes/:id`, for grouping) and `request.timing.<kind>.{count,ms}`.
+  route pattern, e.g. `/notes/$id` or `/rpc/$`, for grouping; the path when no route matched) and
+  `request.timing.<kind>.{count,ms}`.
 - Paths are logged without their query string, which can carry tokens.
 - A healthy `/healthz` probe writes no request line, because Docker and uptime monitors poll it every few seconds. A
   slow or failing probe is logged like any other request.
-- `react-router-serve` also writes its own plain-text access line for each request. Moving to a custom Express server
-  would remove it.

@@ -55,5 +55,7 @@ The `note` feature (`app/orpc/note/`) is the worked example. Copy its shape.
 11. **Test**: add an `integration.test.ts` if the behavior is consequential: a success case and the failures that
     matter ([architecture.md](./backend/architecture.md) → Testing). Run `pnpm lint` and `pnpm typecheck`, and the
     test itself if the database is running.
-12. **Use it**: a page reads the procedure in its `loader` through `createServerClient(request)` or calls it from the
-    browser through `orpc` in `app/orpc/client.ts`. Build that side with [frontend-flow.md](./frontend-flow.md).
+12. **Use it**: a page reads the procedure through `orpc.<feature>.<procedure>.queryOptions()` (`app/orpc/client.ts`)
+    in its `loader` and component, and mutations invalidate the queries they change. The client calls procedures
+    in-process during SSR and over `/rpc` in the browser. Build that side with [frontend-flow.md](./frontend-flow.md)
+    and [data-loading.md](./frontend/data-loading.md).

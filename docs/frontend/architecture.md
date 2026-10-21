@@ -1,4 +1,4 @@
-# Frontend Architecture (React Router Framework Mode)
+# Frontend Architecture (TanStack Start)
 
 The frontend is organized by route. Each route slice owns everything that only it uses, and code moves to a shared
 location only when a second consumer needs it. The UI is in Persian and right-to-left.
@@ -9,19 +9,23 @@ These are the rules. The steps for building a page are in [frontend-flow.md](../
 
 ```text
 app/
-  root.tsx                  # document shell, global providers, root error boundary
-  routes.ts                 # route config: maps URLs to route modules
+  root.tsx                  # root route: document shell, global providers, error and 404 pages
+  routes.ts                 # virtual route config: maps URLs to route files
+  routeTree.gen.ts          # generated from routes.ts by the Start plugin; never edit
+  router.tsx                # getRouter(): the router, its QueryClient and preload defaults
+  start.ts                  # global server-function middleware
+  server.ts                 # server entry: request trace, X-Request-Id, request log, background jobs
+  client.tsx                # browser entry: error reporting, hydration
   app.css                   # global styles and theme tokens
   routes/
     <slice>/                # one flat folder per route
-      <slice-name>.tsx      # route module
+      <slice-name>.tsx      # route file (`export const Route = createFileRoute(...)`)
       components/           # components used only by this route
       hooks/                # hooks used only by this route
-      queries.ts            # data-fetching options used only by this route
-      search-params.ts      # nuqs parsers shared by this route's loader and components
+      queries.ts            # query options used only by this route
+      search-params.ts      # this route's search schema
       atoms.ts              # Jotai atoms used only by this route
       schema.ts             # form schemas owned by this route
-      *.server.ts           # server-only helpers for this route's loader/action
   components/
     primitive/              # this app's versions of shadcn components
     shared/                 # app-made UI shared by multiple routes
@@ -29,7 +33,7 @@ app/
   hooks/                    # hooks shared by multiple routes
   atoms/                    # Jotai atoms shared by multiple routes
   lib/                      # shared helpers (browser-safe, or *.server.ts)
-  orpc/client.ts            # typed browser API client (see ../backend/architecture.md)
+  orpc/client.ts            # isomorphic API client and query utilities (see ./data-loading.md)
 ```
 
 Not every slice needs every file. Start with the route module alone and split it out as it grows.
@@ -37,46 +41,58 @@ Not every slice needs every file. Start with the route module alone and split it
 ## Route Slices
 
 - **Flat, not nested.** URL hierarchy does not imply folder nesting: use `dashboard_user/`, never `dashboard/user/`.
-  Nesting of layouts is expressed in `routes.ts`, not in the file tree.
-- **Colocate.** The route module, its exports (`loader`, `action`, `clientLoader`, `clientAction`, `meta`, `headers`,
-  `ErrorBoundary`), its `./+types/...` imports, and its private components, hooks, queries, and schemas all live in its
-  slice.
+  Nesting of layouts is expressed in `routes.ts` (virtual file routes: `rootRoute`, `layout`, `index`, `route`), not
+  in the file tree. Paths use `$param` for params, `{-$param}` for optional ones and `$` for a catch-all.
+- **One route per file.** Each route file exports `Route` from `createFileRoute(<id>)`. The Start plugin rewrites the
+  id string to match `routes.ts` when it generates `routeTree.gen.ts`, so a new file can start with any id.
+- **Colocate.** The route file, its options (`beforeLoad`, `loader`, `loaderDeps`, `validateSearch`, `head`,
+  `component`, `pendingComponent`, `errorComponent`, `notFoundComponent`, `server.handlers`), and its private
+  components, hooks, queries, and schemas all live in its slice.
 - **Promote only when shared.** Move code to `app/components/shared/`, `app/hooks/`, or `app/lib/` only when multiple
   routes use it or it clearly belongs to a broader domain. Never import from another route's slice; promote instead.
-- **Use generated types.** Type loaders, actions, and components with the route's generated `Route` types instead of
-  hand-written ones.
+- **Let types flow from the route.** Read params, search, loader data and route context through the `Route` object
+  (`Route.useSearch()`, `Route.useRouteContext()`) or hooks with `from`. Don't annotate or cast what the router
+  infers.
 
 ## Data and the Server Boundary
 
-- **Render-critical data** comes from the route `loader`, so pages render fully on the server. Loaders and actions
-  call procedures in-process with `createServerClient(request)` (`app/orpc/server-client.server.ts`); errors arrive as
-  `ORPCError` and HTTP status codes don't apply.
-- **Client-side interactions** (submitting, refreshing, polling) use the TanStack Query utilities in
-  `app/orpc/client.ts`, e.g. `useMutation(orpc.note.create.mutationOptions(...))`. Never call the API with a
-  hand-written `fetch`. After a mutation that changes loader data, refresh it with `useRevalidator()` instead of
-  patching local copies.
-- Layout routes guard pages with `requireSession({ roles })` as route middleware
-  (`app/lib/session-guard.server.ts`). It puts the session in the router context, so loaders below it read
-  `context.get(sessionContext)` instead of fetching the session again. Procedures check auth again on their own.
-- **Server-only code** uses the `.server.ts` suffix and is only imported from loaders, actions, or other server
-  modules. Secrets and environment values never reach a component.
+The full rules are in [data-loading.md](./data-loading.md). In short:
+
+- **TanStack Query is the cache.** Loaders fill it with `context.queryClient.ensureQueryData(options)`; components
+  read the same options with `useSuspenseQuery`. Pages render fully on the server, and the browser hydrates from the
+  same cache.
+- **Loaders are isomorphic.** They run on the server for the first request and in the browser afterwards, so route
+  files never import server-only modules. Feature data comes from oRPC procedures through
+  `orpc.<feature>.<procedure>.queryOptions()`; small framework reads use `createServerFn`. Never call the API with a
+  hand-written `fetch`.
+- **Mutations invalidate what they change**: `useMutation(orpc.note.create.mutationOptions(...))`, then
+  `queryClient.invalidateQueries({ queryKey: orpc.note.list.key() })`. Don't patch local copies.
+- **Guards** are a layout's `beforeLoad`: it loads the viewer (`viewerQueryOptions`, `app/lib/viewer.ts`) and throws
+  `redirect(...)`. What it returns becomes route context for the routes below. Procedures check auth again on their
+  own.
+- **Server-only code** uses the `.server.ts` suffix; Start's import protection fails the build when browser-reachable
+  code imports it. Secrets and environment values never reach a component.
 - The frontend may import browser-safe backend files (contracts, `constants.ts`, `*.errors.ts`) for types and shared
   option values, never services, repositories, or `*.server.ts` files.
 
 ## State
 
-- Server data belongs to loaders and TanStack Query. Shareable view state belongs in URL search params, and form input
-  belongs to the form.
+- Server data belongs to TanStack Query. Shareable view state belongs in URL search params, and form input belongs to
+  the form.
 - Local state uses `useState` and props. Use Jotai only for client state shared across distant parts of the tree.
 - See [`jotai.md`](./jotai.md) for how to define, place, and use atoms.
-- URL state goes through nuqs, with one typed parser map per route shared by its loader and components. See
-  [`nuqs.md`](./nuqs.md).
+- URL state goes through the route's `validateSearch` schema, read with `Route.useSearch()` and changed with
+  `navigate({ search })`. See [`search-params.md`](./search-params.md).
 
 ## Navigation
 
-- Use `Link`, `NavLink`, `Form` and `useNavigate` from `react-router`. Moving to another pathname fades the page on
-  its own; query, hash and nuqs updates stay instant. See [`view-transitions.md`](./view-transitions.md).
-- Don't pass React Router's `viewTransition` option. It starts a second view transition that cancels React's.
+- Use `Link` and `useNavigate` from `@tanstack/react-router`. `to` is checked against the route tree; pass params
+  and search as objects (`<Link to="/auth" search={{ redirectTo }}>`). An active link gets `aria-current="page"` and
+  `data-status="active"`; style those instead of a separate `NavLink`. For hrefs that come from content data, use
+  `SiteLink` (`app/components/shared/site-link/`).
+- Moving to another pathname fades the page on its own; search and hash updates stay instant. See
+  [`view-transitions.md`](./view-transitions.md). Don't pass the router's `viewTransition` option: it starts a second
+  view transition that cancels React's.
 
 ## Forms
 
@@ -95,8 +111,9 @@ Not every slice needs every file. Start with the route module alone and split it
 - Shared components (`app/components/`) receive page data and callbacks through props and don't fetch, read route
   atoms or URL state, which keeps them reusable and easy to preview. The exception is an app-wide action with one
   meaning everywhere, through a hook in `app/hooks/` (the header's `useSignOut`, the toggle's `useTheme`).
-- Inside a route slice, loading stays in the route module. A slice component may own the mutation it triggers (the
-  note form calls `useMutation` itself) and tells the page through a callback such as `onCreated`.
+- Inside a route slice, loading stays in the route file. A slice component may own the mutation it triggers (the
+  note form calls `useMutation` itself) and tells the page through a callback such as `onCreated`; the page decides
+  which queries to invalidate.
 - Primitives and visible shared components have Storybook stories. Stories are maintained UI documentation; keep them
   in sync with the component.
 - Handle every state a user can see: loading, empty, error, and success.

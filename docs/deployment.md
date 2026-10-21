@@ -13,15 +13,15 @@ internet ──80/443──▶ caddy ──┬── /media/<kind>/<id>/<variant
 one-time jobs, before the app starts:  migrate ──▶ db      storage-init ──▶ seaweedfs (admin identity)
 ```
 
-| Service        | What it does                                                                                    |
-| -------------- | ----------------------------------------------------------------------------------------------- |
-| `caddy`        | HTTPS (automatic or your own certificate), compression, security headers, the `/media` path     |
-| `app`          | The React Router server (`react-router-serve`) from `Dockerfile`, health-checked on `/healthz`  |
-| `migrate`      | Applies pending migrations from `drizzle/` (`deploy/migrate.mjs`), then exits                   |
-| `storage-init` | Creates the media bucket if it is missing (`deploy/init-storage.mjs`), then exits               |
-| `db`           | Postgres 17                                                                                     |
-| `seaweedfs`    | S3-compatible image storage with three identities: `anonymous`, `app` and `admin` (below)       |
-| `error-viewer` | Receives and shows the app's server and browser errors and slow requests (Error Tracking below) |
+| Service        | What it does                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `caddy`        | HTTPS (automatic or your own certificate), compression, security headers, the `/media` path                   |
+| `app`          | The TanStack Start server (Nitro, `.output/server/index.mjs`) from `Dockerfile`, health-checked on `/healthz` |
+| `migrate`      | Applies pending migrations from `drizzle/` (`deploy/migrate.mjs`), then exits                                 |
+| `storage-init` | Creates the media bucket if it is missing (`deploy/init-storage.mjs`), then exits                             |
+| `db`           | Postgres 17                                                                                                   |
+| `seaweedfs`    | S3-compatible image storage with three identities: `anonymous`, `app` and `admin` (below)                     |
+| `error-viewer` | Receives and shows the app's server and browser errors and slow requests (Error Tracking below)               |
 
 Only Caddy publishes ports. Postgres and SeaweedFS are reachable from inside the stack only. Each container gets just
 the variables it needs, listed in `compose.prod.yaml`. The store's identities (`configs.seaweedfs-s3`) split its
@@ -267,8 +267,7 @@ with no header, which is fine: `/healthz` isn't limited.
 
 `GET /healthz` (`app/routes/healthz/`) answers 200 when the app can query Postgres and 503 otherwise, with a 2-second
 limit. Docker polls it every 10 seconds; point an uptime monitor at it too. Storage isn't part of the check: an S3
-problem only breaks uploads, and a restart wouldn't fix it. Healthy probes are left out of the app's request log (see
-Logs for morgan's line).
+problem only breaks uploads, and a restart wouldn't fix it. Healthy probes are left out of the app's request log.
 
 ## Logs
 
@@ -277,8 +276,7 @@ docker compose -f compose.prod.yaml logs -f app      # one JSON object per line 
 ```
 
 Errors and slow requests are easier to read in the error viewer (Error Tracking above); the logs keep every request. Docker
-rotates every service's log at 10 MB, keeping five files. `react-router-serve` also prints its own short line per
-request (morgan) next to the app's request log.
+rotates every service's log at 10 MB, keeping five files.
 
 ## Backups
 

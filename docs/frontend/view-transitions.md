@@ -1,78 +1,70 @@
 # View Transitions (Page Fade)
 
-Client navigations to another page fade between the old and new page. This uses React's
-[`<ViewTransition>`](https://react.dev/reference/react/ViewTransition) (stable since React 19.3), not React Router's
-`viewTransition` option. Browsers without the View Transition API navigate as usual, without the fade.
+Client navigations to another page fade between the old and new page. The router starts the
+[View Transition](https://developer.mozilla.org/docs/Web/API/View_Transition_API) itself, through
+`defaultViewTransition` in `app/router.tsx`. Browsers without the View Transition API navigate as usual, without the
+fade.
 
 ## How It Works
 
-The site layout (`app/routes/site_layout/site-layout.tsx`) wraps its `<Outlet>` in one boundary:
-
-```tsx
-<ViewTransition key={pathname} enter="page" exit="page" default="none">
-  <Outlet />
-</ViewTransition>
+```ts
+defaultViewTransition: { types: ({ pathChanged }) => (pathChanged ? ["page"] : false) },
 ```
 
-- React only animates updates that run inside a Transition. React Router commits every navigation's state update in
-  `React.startTransition`, so any client navigation qualifies: `<Link>`, `<NavLink>`, `<Form>`, `navigate()`,
-  redirects from actions, and Back/Forward.
-- **The key decides what fades.** A new pathname swaps the boundary, which plays `exit` on the old page and `enter`
-  on the new one. Anything that keeps the pathname keeps the boundary, and `default="none"` makes those updates
-  instant.
+- **The pathname decides what fades.** When a navigation changes the pathname, the router wraps its commit in
+  `document.startViewTransition` with the type `page`, and the whole document cross-fades. Anything that keeps the
+  pathname (a new search param, a hash, a refetch) gets `false` and updates instantly.
+- Every client navigation qualifies: `<Link>`, `navigate()`, redirects from `beforeLoad`, and Back/Forward. Nothing
+  needs to opt in.
 - The fade starts after the loaders finish, when the new page is ready to render. It doesn't replace pending UI for
   slow loaders.
+- Browsers that support view transitions but not transition types (`:active-view-transition-type()`) skip the
+  `types` function, so every navigation fades there, search changes included.
 
-| Navigation                             | Fades? |
-| -------------------------------------- | ------ |
-| To another pathname (`/` → `/orders`)  | Yes    |
-| Back/Forward to another pathname       | Yes    |
-| Same pathname, new query (`"?page=2"`) | No     |
-| Same pathname, new hash (`"#details"`) | No     |
-| nuqs updates, revalidations, fetchers  | No     |
+| Navigation                            | Fades? |
+| ------------------------------------- | ------ |
+| To another pathname (`/` → `/orders`) | Yes    |
+| Back/Forward to another pathname      | Yes    |
+| Same pathname, new query (`?page=2`)  | No     |
+| Same pathname, new hash (`#details`)  | No     |
+| Query refetches and invalidations     | No     |
 
-Use `Link`, `NavLink`, `Form` and `useNavigate` straight from `react-router`. Nothing needs to opt in.
+- **Same route, new params remount.** `/orders/1` → `/orders/2` is a new pathname, so the page fades and mounts fresh,
+  and its local state resets. That is usually what a different record should do.
 
-- **Same route, new params remount.** `/orders/1` → `/orders/2` is a new pathname, so the page mounts fresh and its
-  local state resets. That is usually what a different record should do.
+### Why Not React's `<ViewTransition>`
+
+React only animates updates that run inside a Transition. TanStack Router commits navigations inside
+`React.startTransition`, but components read the location and matches through external stores
+(`useSyncExternalStore`), and React always applies those updates synchronously. A page-level `<ViewTransition>` keyed
+on the pathname therefore never activates on navigation, so the router's own option does the page fade.
 
 ## Styling
 
-- The duration lives in `app.css`, on the `page` class and `root`. It is kept short because the page ignores clicks
-  while the fade runs.
+- The duration lives in `app.css`, on `root`. It is kept short because the page ignores clicks while the fade runs.
 - `prefers-reduced-motion: reduce` turns the animation off, so navigation is instant.
-- `app.css` pins the `::view-transition` overlay with `left: 0; right: auto`. React shrinks the overlay to 0×0, and in
-  this RTL document the browser's `inset: 0` then anchors it to the right edge, which paints every snapshot
-  off-screen: the page vanishes and reappears instead of fading. Keep that rule.
-- The header and footer stay in the `root` snapshot. They look the same on both pages, so the cross-fade keeps them
-  visually steady.
+- The header and footer are part of the `root` snapshot. They look the same on both pages, so the cross-fade keeps
+  them visually steady.
+- To style only page fades, scope rules with `:active-view-transition-type(page)`.
 
 ## Animating More
 
-Put another `<ViewTransition>` inside a page for element-level motion. Inner boundaries animate on their own; the
-page boundary's `default="none"` only covers the page itself.
-
-- **Morph an element between pages:** wrap it in `<ViewTransition name="note-42">` on both pages. A name must be
-  unique among mounted boundaries, so build it from the record's id.
-- **Animate list changes on the same page** (a filter, a deleted item): wrap each item in a keyed `<ViewTransition>`.
-  These updates only animate when they run in a Transition. nuqs and React Router's revalidation already do; wrap
-  your own state updates in `startTransition`.
-- Style with the class props (`enter`, `exit`, `update`, `share`) and `::view-transition-old(.your-class)` /
-  `::view-transition-new(.your-class)` in CSS.
+- **Morph an element between pages:** give it the same `view-transition-name` on both pages, built from the record's
+  id (`note-42`), since a name must be unique on the page. The page fade then animates that element from its old box
+  to its new one.
+- **Animate changes on the same page** (a filtered list, a deleted item): React's `<ViewTransition>` works for state
+  updates you start with `startTransition`. Query refetches don't run in a Transition, so a list that changes after an
+  invalidation doesn't animate on its own.
 
 ## Don'ts
 
-- Don't pass React Router's `viewTransition` option (`<Link viewTransition>`, `navigate(to, { viewTransition: true })`,
-  `useViewTransitionState`). It calls `document.startViewTransition()` itself, and a second view transition skips the
-  one React started.
-- Don't call `document.startViewTransition()` yourself, for the same reason.
-- Don't remove `default="none"` from the page boundary. Without it, every filter change and revalidation would fade
-  the whole page.
+- Don't call `document.startViewTransition()` around a navigation, or pass `viewTransition` to a `<Link>` or
+  `navigate()` on top of the default: a second view transition skips the first.
 - Don't add `@view-transition { navigation: auto; }`. It only affects full page loads between documents, not client
   navigations.
 
 ## iOS Swipe-Back
 
-**Test the iOS swipe-back gesture on a real device.** iOS plays its own animation for a swipe back, and the page
-then fades too, which can look like a double animation. If it shows up, skip the fade when the browser already
-animated, which `PopStateEvent.hasUAVisualTransition` reports.
+**Test the iOS swipe-back gesture on a real device.** iOS plays its own animation for a swipe back, and the page then
+fades too, which can look like a double animation. If it shows up, skip the fade when the browser already animated,
+which `PopStateEvent.hasUAVisualTransition` reports.

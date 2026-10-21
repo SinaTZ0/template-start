@@ -1,13 +1,14 @@
 # Project Template
 
-A starting point for full-stack React Router v8 apps, in Persian and right-to-left.
+A starting point for full-stack [TanStack Start](https://tanstack.com/start) apps, in Persian and right-to-left.
 
 - **Backend:** contract-first [oRPC](https://orpc.dev) v2, Drizzle + Postgres, Better-Auth (email + password, Altcha
   captcha on sign-up), image uploads processed with sharp into S3-compatible storage, pino logging, and error tracking
   with a small self-hosted error viewer (`tools/error-viewer`, Go + SQLite).
 - **Frontend:** flat route slices, shadcn components rebuilt as `primitive/`s on Base UI, Tailwind v4 tokens with
-  light/dark themes, TanStack Query, nuqs, Jotai and Storybook.
-- **Example feature:** notes (`app/orpc/note/`, `app/routes/notes/`) shows the whole path: a guarded page, a loader,
+  light/dark themes, TanStack Query as the one data cache (filled by route loaders, preloaded on hover), typed search
+  params, Jotai and Storybook.
+- **Example feature:** notes (`app/orpc/note/`, `app/routes/notes/`) shows the whole path: a guarded page, a loader that fills the Query cache,
   a form with server field errors, an image upload and a delete.
 
 ## Getting Started
@@ -33,7 +34,7 @@ linted and formatted before each commit, and commit messages must follow
 | Script                            | What it does                                     |
 | --------------------------------- | ------------------------------------------------ |
 | `pnpm dev` / `build` / `start`    | Dev server, production build, production server  |
-| `pnpm lint` / `typecheck`         | oxlint; route typegen + tsc                      |
+| `pnpm lint` / `typecheck`         | oxlint; tsc                                      |
 | `pnpm format`                     | Prettier (sorts Tailwind classes)                |
 | `pnpm test`                       | Vitest (integration tests need the database)     |
 | `pnpm test:e2e`                   | Playwright against the production build          |
@@ -46,13 +47,14 @@ linted and formatted before each commit, and commit messages must follow
 
 ```text
 app/
-  routes.ts, root.tsx, app.css     route config, document shell, theme tokens
+  routes.ts, root.tsx, app.css     virtual route config, root route (document shell), theme tokens
+  router.tsx, server.ts, client.tsx  router + QueryClient, server entry (tracing, logs), browser entry
   routes/<slice>/                  one flat folder per route (docs/frontend/architecture.md)
   components/primitive/            this app's shadcn components (docs/frontend/components.md)
   components/shared/               app-made components used by several routes
   components/ui/                   untouched shadcn source, reference only
   orpc/                            the API, one folder per feature (docs/backend/architecture.md)
-  lib/                             auth, storage, logger, session guard, helpers
+  lib/                             auth, viewer query, storage, logger, helpers
   db/                              Drizzle schema, client, seed
 drizzle/                           SQL migrations (generated, committed)
 deploy/                            Caddyfile and the production jobs (migrate, init-storage)

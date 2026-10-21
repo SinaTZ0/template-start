@@ -1,6 +1,6 @@
 ---
 name: orpc
-description: Build typesafe APIs with oRPC v2 (beta) — contracts, implementers, procedures, routers, middleware, context, typesafe errors, metadata, RPC handler/link, server-side clients, TanStack Query utilities, plugins, and helpers. Use when adding or changing anything under `app/orpc/`, mounting the RPC handler in React Router, calling procedures from loaders/actions or the browser, or when code imports from `@orpc/*`.
+description: Build typesafe APIs with oRPC v2 (beta) — contracts, implementers, procedures, routers, middleware, context, typesafe errors, metadata, RPC handler/link, server-side clients, TanStack Query utilities, plugins, and helpers. Use when adding or changing anything under `app/orpc/`, mounting the RPC handler in TanStack Start, calling procedures from route loaders or the browser, or when code imports from `@orpc/*`.
 license: MIT
 ---
 
@@ -54,7 +54,7 @@ needed for JSON Schema conversion (OpenAPI generation, Smart Coercion).
 | Reference                    | Use When                                                                           |
 | ---------------------------- | ---------------------------------------------------------------------------------- |
 | `references/v2-api.md`       | Writing contracts, implementers, procedures, middleware, errors, metadata, clients |
-| `references/react-router.md` | Mounting the handler, calling procedures from loaders/actions, browser client      |
+| `references/tanstack-start.md` | Mounting the handler, the isomorphic client for loaders, browser mutations        |
 | `references/v1-pitfalls.md`  | Any oRPC change; check generated or remembered code against it                     |
 | `references/docs-index.md`   | Finding the right doc page for plugins, helpers, adapters, OpenAPI, streaming      |
 

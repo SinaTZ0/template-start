@@ -77,7 +77,6 @@
 - [Hono Adapter](https://orpc.dev/docs/adapters/hono): Use oRPC inside a Hono project by mounting a handler as a middleware.
 - [Next.js Adapter](https://orpc.dev/docs/adapters/next): Use oRPC inside a Next.js project by mounting a handler in a route handler.
 - [Nuxt Adapter](https://orpc.dev/docs/adapters/nuxt): Use oRPC inside a Nuxt project by mounting a handler in a server route.
-- [React Router Adapter](https://orpc.dev/docs/adapters/react-router): Use oRPC inside a React Router project by mounting a handler in a resource route.
 - [SolidStart Adapter](https://orpc.dev/docs/adapters/solid-start): Use oRPC inside a SolidStart project by mounting a handler in an API route.
 - [SvelteKit Adapter](https://orpc.dev/docs/adapters/svelte-kit): Use oRPC inside a SvelteKit project by mounting a handler in an endpoint.
 - [TanStack Start Adapter](https://orpc.dev/docs/adapters/tanstack-start): Use oRPC inside a TanStack Start project by mounting a handler in a server route.

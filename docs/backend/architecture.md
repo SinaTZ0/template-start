@@ -13,8 +13,7 @@ app/orpc/
   router.ts                 # composes feature procedures into the API router
   implementer.server.ts     # `implementer` (assembles the router) and `base` (global middleware, builds procedures)
   handler.server.ts         # HTTP adapter: RPC handler, status map, interceptor for pre-procedure failures
-  client.ts                 # typed browser client and TanStack Query utils, built from the contract only
-  server-client.server.ts   # in-process client for loaders and actions, created per request
+  client.ts                 # isomorphic client (in-process on the server, RPCLink in the browser) and Query utils
   errors.ts                 # shared error data shape, common errors, error-code → HTTP status map
   middleware/
     <name>/
@@ -157,8 +156,8 @@ return { id: result.id };
 - **Ownership is checked in the data layer.** A user's records are read with the owner in the query
   (`findOwnedNote({ id, ownerId })`), so another user's record looks exactly like a missing one (`NOT_FOUND`), never
   `FORBIDDEN`.
-- Pages are guarded separately with `requireSession({ roles })` on a layout route (`app/lib/session-guard.server.ts`).
-  The UI guard is never the only check.
+- Pages are guarded separately in a layout's `beforeLoad`, from the viewer query (`app/lib/viewer.ts`,
+  [data-loading.md](../frontend/data-loading.md) → Guards). The UI guard is never the only check.
 
 ### Rate limiting
 
@@ -171,7 +170,8 @@ return { id: result.id };
   Persian message reaches the form through `describeApiFailure`.
 - Auth limits are set by path in `app/routes/api_auth/`: endpoints that check a password or send mail get the strict
   policy. Add new Better-Auth endpoints of that kind to `CREDENTIAL_PATHS`.
-- Calls from loaders through the server client count against the same address as the page request.
+- Procedure calls a loader makes during SSR run in-process, with the page request's headers, so they count against
+  the same address as the page request.
 - Limits are per address, and many Iranian mobile users share one (CGNAT). Keep them high enough for that, and prefer
   a per-procedure policy over lowering the general one.
 - Counters are in memory, which fits the single app process production runs. Running several instances needs a shared
@@ -194,7 +194,7 @@ return { id: result.id };
 - Test consequential behavior against the real database (`DATABASE_URL`): a representative success case and the
   failures that matter (rejection, ownership, idempotency, cleanup). Call the service directly; it takes `db` as a
   parameter, so no HTTP or session is needed.
-- Test through `createServerClient` or the RPC handler only when the behavior lives above the service: auth middleware,
+- Test through `createRouterClient(router, { context: { headers } })` or the RPC handler only when the behavior lives above the service: auth middleware,
   the error shape, status codes.
 - Each test creates its own rows with a per-run ID and deletes them afterwards, so it can run against a development
   database.

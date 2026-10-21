@@ -5,7 +5,7 @@ How the app stores, processes and serves uploaded images.
 ## Overview
 
 ```text
-upload:  browser ──multipart──▶ React Router (oRPC media.upload) ──sharp──▶ WebP variants ──S3 PUT──▶ bucket
+upload:  browser ──multipart──▶ TanStack Start (oRPC media.upload) ──sharp──▶ WebP variants ──S3 PUT──▶ bucket
 serve:   browser ──GET <MEDIA_PUBLIC_URL>/…──▶ (production: Caddy) ──▶ bucket (read-only, files only)
 ```
 
@@ -73,7 +73,7 @@ One `media` table records every upload (`app/db/schema.ts`). Entities point to i
 4. When an entity is deleted or its image replaced, the service calls `deleteMedia` (bucket first, then the row). The
    cleanup below never sees a replaced image, because it is still marked attached, so the service must delete it.
 5. **Cleanup:** uploads whose form was never saved are orphans. `startMediaCleanup` (`app/orpc/media/cleanup.server.ts`),
-   started from `entry.server.tsx`, runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
+   started from the server entry (`app/server.ts`), runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
    unattached 25 hours after upload (`ORPHANED_MEDIA_AGE_MS`), up to 200 per run, through `deleteMedia`. The extra hour
    past the attach window means a save and the cleanup can never race. The `attached_at, created_at` index serves the
    scan.
