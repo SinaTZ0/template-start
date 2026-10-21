@@ -298,25 +298,14 @@
 
 /*===== Motion =====*/
 
-/* Page fade on client navigations: the site layout's `<ViewTransition>` tags the old and new page with the `page`
-   class (docs/frontend/view-transitions.md). `root` is the rest of the document (header, footer), which cross-fades alongside.
-   Without these rules the browser's default cross-fade runs at 250ms. The page ignores input while it runs, so keep it
-   short. */
+/* Page fade on client navigations to another pathname: the router starts a view transition of type `page`
+   (`defaultViewTransition` in `app/router.tsx`, docs/frontend/view-transitions.md), and the whole document (`root`)
+   cross-fades. Without these rules the browser's default cross-fade runs at 250ms. The page ignores input while it
+   runs, so keep it short. */
 ::view-transition-group(root),
 ::view-transition-old(root),
-::view-transition-new(root),
-::view-transition-group(.page),
-::view-transition-old(.page),
-::view-transition-new(.page) {
+::view-transition-new(root) {
   animation-duration: 200ms;
-}
-
-/* React shrinks the transition overlay to 0×0 so it doesn't block input, but the UA keeps `inset: 0` on it. In an
-   RTL document that over-constrained box drops `left` and anchors to the right edge, which paints every snapshot
-   off-screen: the page just vanishes and reappears. Pin it to the left, where the snapshots are positioned from. */
-::view-transition {
-  left: 0;
-  right: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

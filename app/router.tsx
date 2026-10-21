@@ -21,7 +21,7 @@ export function getRouter() {
       queries: {
         // Changes the visitor makes invalidate their queries, so `staleTime` only covers changes made elsewhere.
         // Queries that should show other people's changes sooner set a shorter one
-        // (docs/tanstack-start-vs-react-router-data.md → A Freshness Policy That Works).
+        // (docs/frontend/data-loading.md → Freshness).
         staleTime: 5 * 60_000,
       },
     },
@@ -35,6 +35,10 @@ export function getRouter() {
     // The router always calls the loader on preload; Query's `staleTime` decides whether anything is fetched.
     defaultPreloadStaleTime: 0,
     scrollRestoration: true,
+    // Moving to another pathname fades the page (docs/frontend/view-transitions.md). Search and hash changes stay
+    // instant. The router starts the view transition itself: its location updates go through external stores, which
+    // React can't run as a Transition, so React's `<ViewTransition>` never activates on navigation.
+    defaultViewTransition: { types: ({ pathChanged }) => (pathChanged ? ["page"] : false) },
   });
 
   // Sends the server's Query cache to the browser with the page, so hydration doesn't fetch the same data again. It

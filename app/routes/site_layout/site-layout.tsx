@@ -1,6 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
-import { useEffect, ViewTransition } from "react";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import { SiteFooter } from "~/components/shared/site-footer/site-footer";
 import { SiteHeader } from "~/components/shared/site-header/site-header";
@@ -18,7 +18,6 @@ export const Route = createFileRoute("/_site-layout")({
 
 /** The chrome shared by every page: skip link, header, `main` landmark and footer. */
 function SiteLayout() {
-  const pathname = useLocation({ select: (location) => location.pathname });
   const { data: viewer } = useSuspenseQuery(viewerQueryOptions);
   const userId = viewer?.id ?? null;
 
@@ -37,12 +36,7 @@ function SiteLayout() {
       </a>
       <SiteHeader viewer={viewer} />
       <main id="main" className="flex-1">
-        {/*===== Page Transition =====*/}
-        {/* Keyed by pathname, so moving to another page swaps the boundary and plays exit + enter (the fade). Search
-            changes, refetches and hash links keep the key, and `default="none"` keeps those updates instant. */}
-        <ViewTransition key={pathname} enter="page" exit="page" default="none">
-          <Outlet />
-        </ViewTransition>
+        <Outlet />
       </main>
       <SiteFooter />
     </div>
