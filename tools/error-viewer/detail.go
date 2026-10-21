@@ -18,6 +18,7 @@ type detailView struct {
 	Missing    bool
 	Event      eventRow
 	Message    string // the full message when it says more than the title (several lines)
+	Suppressed int    // alike errors the app left out since its previous report of this one (`throttle` context)
 	Request    string
 	Tags       []tagView
 	Exceptions []exceptionView
@@ -83,6 +84,7 @@ type timelineContext struct {
 	}
 	Hidden        int
 	HiddenUnderMs float64
+	Skipped       int // slow requests on the route the app didn't report since its previous report
 	Breakdown     string
 	Spans         string
 }
@@ -96,6 +98,7 @@ type timelineView struct {
 	Rows          []timelineRow
 	Hidden        int
 	HiddenUnderMs int
+	Skipped       int
 	Breakdown     string // legacy text
 	Spans         string // legacy text
 }
@@ -138,8 +141,9 @@ var tagLinks = map[string]string{"errorId": "errorId", "reqId": "reqId", "path":
 
 // contextsShownElsewhere have their own section on the page; browserContexts too, on a browser event.
 var (
-	contextsShownElsewhere = map[string]bool{"log": true, "timeline": true, "react": true}
-	browserContexts        = map[string]bool{"log": true, "timeline": true, "react": true, "browser": true, "os": true}
+	contextsShownElsewhere = map[string]bool{"log": true, "timeline": true, "react": true, "throttle": true}
+	browserContexts        = map[string]bool{"log": true, "timeline": true, "react": true, "throttle": true,
+		"browser": true, "os": true}
 )
 
 func buildDetail(row eventRow) detailView {
@@ -178,6 +182,14 @@ func buildDetail(row eventRow) detailView {
 		var timeline timelineContext
 		if json.Unmarshal(raw, &timeline) == nil {
 			view.Timeline = buildTimeline(timeline)
+		}
+	}
+	if raw, ok := ev.Contexts["throttle"]; ok {
+		var throttle struct {
+			Suppressed int `json:"suppressed"`
+		}
+		if json.Unmarshal(raw, &throttle) == nil {
+			view.Suppressed = throttle.Suppressed
 		}
 	}
 	if raw, ok := ev.Contexts["log"]; ok {
@@ -331,6 +343,7 @@ func buildTimeline(ctx timelineContext) *timelineView {
 		Total:         int(math.Round(ctx.Ms)),
 		Hidden:        ctx.Hidden,
 		HiddenUnderMs: int(math.Round(ctx.HiddenUnderMs)),
+		Skipped:       ctx.Skipped,
 		Breakdown:     ctx.Breakdown,
 		Spans:         ctx.Spans,
 	}

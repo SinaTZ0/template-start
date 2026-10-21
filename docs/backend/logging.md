@@ -56,6 +56,18 @@ log.error({ err, mediaId }, "could not clean up the variants");
 | Browser errors                                            | The SDK's handlers, plus `onCaughtError` for boundary errors   |
 | Slow requests                                             | A warning from the request instrumentation (below)             |
 
+**Repeats are throttled.** Every server report reaches the error viewer from one address, and the viewer's answer to
+a burst past its limit makes the SDK stop sending everything for a while. So during an incident the app sends only the
+first few of each kind of report (`app/lib/report-throttle.server.ts`):
+
+- **Errors:** at most 5 a minute with the same type, message (digits and UUIDs ignored) and first stack frame in the
+  app's own code. Errors that differ in any of these never hold each other back. The next one sent carries how many were
+  left out (`throttle.suppressed`), and the viewer shows it above the event.
+- **Slow requests:** one report a minute per method and route (see [Reading the Output](#reading-the-output)).
+
+The log line is still written every time: only the report is left out. Up to 500 keys are tracked; past that, the
+least recently seen is forgotten.
+
 A user who sees a 500 gets its `errorId`. Paste it into the error viewer's search box to find the full error, then
 click its `reqId` to see everything else that request reported.
 
@@ -127,7 +139,10 @@ INFO: GET /notes 200 45ms (loader 2×30ms, procedure 1×28ms, db 2×5ms) {"modul
 
 `loader 2×30ms` means two loaders ran, taking 30 ms in total. A 5xx is an error line. A request slower than
 `LOG_SLOW_REQUEST_MS` is a warning line, and is also **reported to the error viewer** as
-`Slow request: GET /notes/:id (1420ms)`, of kind `slow`. Search `route:/notes/:id` to see every slow hit on one route.
+`Slow request: GET /notes/:id (1420ms)`, of kind `slow`. Search `route:/notes/:id` to see the slow hits on one route.
+Only one report per method and route is sent a minute, so a slow database doesn't flood the viewer and crowd out the
+errors. The next report carries how many were left out (`timeline.skipped`), shown as "N more slow requests on this
+route since the last report". The warning line is written for every one.
 
 The report has no stack trace (a stack shows where code is, not where time went). Its **Timeline** shows the time per
 kind and draws the request's spans as a waterfall, one row each:

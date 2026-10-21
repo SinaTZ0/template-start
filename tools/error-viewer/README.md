@@ -70,6 +70,10 @@ stored is ignored, since SDKs retry. Each row keeps the columns the list filters
 exception, `message` the rest (`captureMessage` attaches a synthetic exception only to carry a stack). The list shows
 browser events (`platform: javascript`) as `browser`.
 
+**Throttled repeats.** The app sends only the first few of a run of alike reports. The next one it sends carries the
+count it left out: a slow request's `timeline.skipped`, shown in its Timeline card ("N more slow requests on this route
+since the last report"), and an error's `throttle.suppressed`, shown above the event.
+
 **Dashboard.** Every page works without JavaScript: the filters are a GET form, "Load more" is a link, deletes are
 POST forms. htmx swaps the results in place, pushes the URL and runs auto-refresh. The CSP is `default-src 'self'`:
 htmx's injected indicator styles are turned off in `layout.html` and styled in `app.css`, and the copy buttons and

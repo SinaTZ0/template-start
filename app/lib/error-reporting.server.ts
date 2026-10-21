@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/node";
 import type { ErrorEvent } from "@sentry/node";
 
 import { env } from "~/env.server";
+import { createReportThrottle, errorThrottleKey } from "~/lib/report-throttle.server";
 import { currentTrace } from "~/lib/trace.server";
 import type { SpanKind, Timeline } from "~/lib/trace.server";
 
@@ -49,6 +50,13 @@ if (env.SENTRY_DSN && !Sentry.isInitialized()) {
   });
 }
 
+/*===== Throttling =====*/
+// The error viewer limits each address, and every server report comes from one, so repeats must not use up the budget
+// the errors that differ need (`app/lib/report-throttle.server.ts`). One slow report per route a minute is enough to
+// see a route is slow; its log line is still written for every request.
+const throttleError = createReportThrottle({ limit: 5 });
+const throttleSlowRequest = createReportThrottle({ limit: 1 });
+
 /*===== Reporting =====*/
 /**
  * Tags every report with the request it came from, so its log lines can be found by `reqId`, and with the browser's
@@ -67,7 +75,8 @@ function requestTags(): Record<string, string> {
 
 /**
  * Sends an error to the tracker. The logger calls it for every `log.error({ err }, …)`, so app code logs errors and
- * never calls this directly.
+ * never calls this directly. At most 5 alike errors a minute are sent (`errorThrottleKey`); the next one sent carries
+ * how many were left out as `throttle.suppressed`.
  *
  * @param fields The log line's other fields. `errorId` (the ID a client receives for a 500) and `module` become
  * searchable tags; the rest is attached as context.
@@ -82,6 +91,8 @@ export function reportError({
   fields: Record<string, unknown>;
 }) {
   if (!Sentry.isEnabled()) return;
+  const suppressed = throttleError(errorThrottleKey(err));
+  if (suppressed === undefined) return;
 
   const { errorId, module, ...rest } = fields;
   Sentry.captureException(err, {
@@ -90,14 +101,15 @@ export function reportError({
       ...(typeof errorId === "string" && { errorId }),
       ...(typeof module === "string" && { module }),
     },
-    contexts: { log: { message, ...rest } },
+    contexts: { log: { message, ...rest }, ...(suppressed > 0 && { throttle: { suppressed } }) },
   });
 }
 
 /**
  * Reports a request slower than `LOG_SLOW_REQUEST_MS` as a warning. The fingerprint starts with `slow-request`, which
  * is how the error viewer tells these apart from errors; a grouping tracker (Bugsink, Sentry) would also group them by
- * method and route pattern.
+ * method and route pattern. Only one report per method and route is sent a minute; the next one carries how many were
+ * left out as `timeline.skipped`.
  *
  * @param kinds Count and total time per kind of work, in the order each kind first ran (`traceTotals`).
  * @param timeline The request's spans as a tree (`traceTimeline`).
@@ -116,6 +128,8 @@ export function reportSlowRequest({
   timeline: Timeline;
 }) {
   if (!Sentry.isEnabled()) return;
+  const skipped = throttleSlowRequest(`${method} ${route}`);
+  if (skipped === undefined) return;
 
   // `captureEvent` rather than `captureMessage`, which would attach the stack of this call: the same for every slow
   // request, and no clue to where the time went. The timeline is that clue (docs/backend/logging.md → Request Timing).
@@ -126,7 +140,11 @@ export function reportSlowRequest({
     fingerprint: ["slow-request", method, route],
     tags: { ...requestTags(), route },
     contexts: {
-      timeline: { ...timeline, kinds: Object.entries(kinds).map(([kind, total]) => ({ kind, ...total })) },
+      timeline: {
+        ...timeline,
+        kinds: Object.entries(kinds).map(([kind, total]) => ({ kind, ...total })),
+        ...(skipped > 0 && { skipped }),
+      },
     },
   });
 }

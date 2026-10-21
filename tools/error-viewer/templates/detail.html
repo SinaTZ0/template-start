@@ -31,6 +31,13 @@
       </section>
     {{end}}
 
+    {{if .Suppressed}}
+      <p class="hint throttled">
+        {{.Suppressed}} more like this {{if eq .Suppressed 1}}was{{else}}were{{end}} not sent since the last report: the app
+        sends at most 5 alike errors a minute.
+      </p>
+    {{end}}
+
     {{if .Message}}
       <section class="card">
         <h2>Message</h2>
@@ -89,6 +96,13 @@
         </div>
 
         {{/*------ Time per Kind ------*/}}
+        {{if .Skipped}}
+          <p class="hint">
+            {{.Skipped}} more slow request{{if gt .Skipped 1}}s{{end}} on this route since the last report: the app
+            reports one a minute per route.
+          </p>
+        {{end}}
+
         {{if .Kinds}}
           <ul class="kinds" aria-label="Time per kind of work">
             {{range .Kinds}}
