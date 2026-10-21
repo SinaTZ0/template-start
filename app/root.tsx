@@ -9,6 +9,7 @@ import { Toaster } from "~/components/primitive/toast/toast";
 import { TooltipProvider } from "~/components/primitive/tooltip/tooltip";
 import { SITE_ORIGIN } from "~/lib/site.server";
 import { THEME_INIT_SCRIPT } from "~/lib/theme";
+import { currentTrace } from "~/lib/trace.server";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -62,6 +63,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </html>
   );
 }
+
+/*===== Middleware =====*/
+/**
+ * Returns the request's `reqId` as `X-Request-Id`, so it shows in the browser's devtools and can be quoted in a bug
+ * report. The root's middleware runs for every request the router handles: documents, `.data` requests and resource
+ * routes, `/rpc/*` included. `next()` never throws (errors become the boundary's response), so failed requests get the
+ * header too. A URL that matches no route runs no middleware; `entry.server.tsx` covers its 404.
+ */
+const requestIdMiddleware: Route.MiddlewareFunction = async (_, next) => {
+  const response = await next();
+  const id = currentTrace()?.id;
+  if (id) response.headers.set("X-Request-Id", id);
+  return response;
+};
+
+export const middleware: Route.MiddlewareFunction[] = [requestIdMiddleware];
 
 /*===== Loader =====*/
 /** The public origin, for the absolute URLs in every page's meta tags (`absoluteUrl` in `app/lib/seo.ts`). */

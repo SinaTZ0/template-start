@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 /*===== Types =====*/
@@ -19,7 +19,11 @@ type Span = {
 
 /** The timings collected while one request is handled. */
 export type RequestTrace = {
-  /** Short ID the logger adds to every line written during the request, so one request's lines can be grouped. */
+  /**
+   * The ID the logger adds to every line written during the request, so one request's lines can be grouped, and that
+   * the response returns as `X-Request-Id`. 16 hex characters (64 bits), so it stays unique across months of logs. Not
+   * a UUID: the error viewer tells it from an `errorId` (a UUID) by its shape.
+   */
   id: string;
   /**
    * The request line, without the query string (it can carry tokens), and the browser's client ID
@@ -45,7 +49,7 @@ const MAX_SPANS = 300;
 /** Runs `fn` with a fresh trace that every span recorded inside it lands in. */
 export function runWithTrace<T>(request: RequestTrace["request"], fn: (trace: RequestTrace) => T): T {
   const trace: RequestTrace = {
-    id: randomUUID().slice(0, 8),
+    id: randomBytes(8).toString("hex"),
     request,
     start: performance.now(),
     spans: [],

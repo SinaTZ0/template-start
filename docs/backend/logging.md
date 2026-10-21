@@ -42,6 +42,8 @@ log.error({ err, mediaId }, "could not clean up the variants");
 - The global oRPC middleware logs every unexpected procedure failure once, with the `errorId` the client receives.
   Don't log and rethrow the same error in services: it would become two reports.
 - Every line written while a request is handled carries its `reqId`. Search for it to see everything one request did.
+  It is 16 hex characters, and every response returns it as an `X-Request-Id` header (set by the root middleware in
+  `app/root.tsx`), so it can be read from the browser's devtools and quoted in a bug report.
 
 ## Error Reporting
 
@@ -149,7 +151,7 @@ Outside a request (startup, `pnpm db:seed`, tests) `span` just runs the function
 Every request writes one line:
 
 ```text
-INFO: GET /notes 200 45ms (loader 2×30ms, procedure 1×28ms, db 2×5ms) {"module":"http","reqId":"638455eb"}
+INFO: GET /notes 200 45ms (loader 2×30ms, procedure 1×28ms, db 2×5ms) {"module":"http","reqId":"638455eb2c7f1a90"}
 ```
 
 `loader 2×30ms` means two loaders ran, taking 30 ms in total. A 5xx is an error line. A request slower than
@@ -213,7 +215,7 @@ is down. Its settings and internals are in [its README](../../tools/error-viewer
   environment and time, a 14-day count strip and an auto-refresh toggle. Every view is a URL you can bookmark.
   Consecutive events with the same `clientId` are drawn as one card, with the client and its event count on the first
   row. Only neighbors group: a client whose events are interleaved with another's shows as separate cards.
-- **Search box:** a UUID finds an `errorId`, 8 hex characters a `reqId`; `errorId:`, `reqId:`, `path:`, `route:`,
+- **Search box:** a UUID finds an `errorId`, 16 hex characters a `reqId` (8 for events stored before reqIds grew); `errorId:`, `reqId:`, `path:`, `route:`,
   `module:` and `clientId:` match that field exactly; anything else is searched in titles.
 - **Detail** (`/events/<id>`): tags (each `errorId`, `reqId`, `path`, `route` and `clientId` links to the list filtered by it), the
   exception chain with source lines for the app's own frames, the timeline of a slow request, the log line's fields,

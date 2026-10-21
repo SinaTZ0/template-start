@@ -19,7 +19,7 @@ func TestBuildRowServerError(t *testing.T) {
 			{"type": "Error", "value": "connect ECONNREFUSED"},
 			{"type": "DrizzleQueryError", "value": "Failed query: select 1\nparams: (hidden)"}
 		]},
-		"tags": {"errorId": "4f1c2b9e-0000-4000-8000-000000000000", "reqId": "638455eb", "method": "GET", "path": "/notes", "module": "orpc",
+		"tags": {"errorId": "4f1c2b9e-0000-4000-8000-000000000000", "reqId": "638455eb2c7f1a90", "method": "GET", "path": "/notes", "module": "orpc",
 			"clientId": "0f4a9c2e8b7d4e1fa3c5b6d7e8f90a1b"}
 	}`
 	row, err := buildRow([]byte(payload), "", time.UnixMilli(1000))
@@ -32,7 +32,7 @@ func TestBuildRowServerError(t *testing.T) {
 		Level: "error", Platform: "node", Environment: "production",
 		// The thrown error is the last value; only its first line.
 		Title:   "DrizzleQueryError: Failed query: select 1",
-		ErrorID: "4f1c2b9e-0000-4000-8000-000000000000", ReqID: "638455eb", Method: "GET", Path: "/notes",
+		ErrorID: "4f1c2b9e-0000-4000-8000-000000000000", ReqID: "638455eb2c7f1a90", Method: "GET", Path: "/notes",
 		Module: "orpc", ClientID: "0f4a9c2e8b7d4e1fa3c5b6d7e8f90a1b",
 	}
 	if !reflect.DeepEqual(row, want) {
@@ -45,7 +45,7 @@ func TestBuildRowSlowRequest(t *testing.T) {
 		"message": "Slow request: GET /notes (3012ms)",
 		"level": "warning",
 		"fingerprint": ["slow-request", "GET", "/notes"],
-		"tags": [["route", "/notes"], ["reqId", "638455eb"]]
+		"tags": [["route", "/notes"], ["reqId", "638455eb2c7f1a90"]]
 	}`
 	row, err := buildRow([]byte(payload), "9ec79c33ec9942ab8353589fcb2e04dc", time.Now())
 	if err != nil {
@@ -55,7 +55,7 @@ func TestBuildRowSlowRequest(t *testing.T) {
 		t.Errorf("kind/level/title = %q %q %q", row.Kind, row.Level, row.Title)
 	}
 	// Tags sent as pairs, and the envelope's ID when the event has none.
-	if row.Route != "/notes" || row.ReqID != "638455eb" || row.ID != "9ec79c33ec9942ab8353589fcb2e04dc" {
+	if row.Route != "/notes" || row.ReqID != "638455eb2c7f1a90" || row.ID != "9ec79c33ec9942ab8353589fcb2e04dc" {
 		t.Errorf("route/reqId/id = %q %q %q", row.Route, row.ReqID, row.ID)
 	}
 }

@@ -9,6 +9,7 @@ import { renderToPipeableStream } from "react-dom/server";
 import { isRouteErrorResponse, ServerRouter } from "react-router";
 import type {
   EntryContext,
+  HandleDataRequestFunction,
   HandleErrorFunction,
   InstrumentationHandlerResult,
   InstrumentationServerHandlerResult,
@@ -20,7 +21,7 @@ import { env } from "~/env.server";
 import { readClientId } from "~/lib/client-id";
 import { reportSlowRequest } from "~/lib/error-reporting.server";
 import { createLogger } from "~/lib/logger.server";
-import { runWithTrace, span, traceTimeline, traceTotals } from "~/lib/trace.server";
+import { currentTrace, runWithTrace, span, traceTimeline, traceTotals } from "~/lib/trace.server";
 import type { RequestTrace, SpanKind } from "~/lib/trace.server";
 import { startMediaCleanup } from "~/orpc/media/cleanup.server";
 
@@ -41,6 +42,8 @@ export default function handleRequest(
   routerContext: EntryContext,
   _loadContext: RouterContextProvider,
 ) {
+  setRequestIdHeader(responseHeaders);
+
   // https://httpwg.org/specs/rfc9110.html#HEAD
   if (request.method.toUpperCase() === "HEAD") {
     return new Response(null, { status: responseStatusCode, headers: responseHeaders });
@@ -85,6 +88,22 @@ export default function handleRequest(
     });
   });
 }
+
+/*===== Request ID =====*/
+/**
+ * The root middleware sets `X-Request-Id` on every routed response (`app/root.tsx`). A URL no route matches runs no
+ * middleware, but its 404 still passes through `handleRequest` (a page) or `handleDataRequest` (a client navigation's
+ * `.data` request), which set it here.
+ */
+function setRequestIdHeader(headers: Headers) {
+  const id = currentTrace()?.id;
+  if (id) headers.set("X-Request-Id", id);
+}
+
+export const handleDataRequest: HandleDataRequestFunction = (response) => {
+  setRequestIdHeader(response.headers);
+  return response;
+};
 
 /*===== Error Logging =====*/
 /** Logs errors thrown by loaders, actions and rendering. React Router doesn't call it for thrown responses. */
@@ -178,7 +197,9 @@ export const instrumentations: ServerInstrumentation[] = [
     },
     route(route) {
       route.instrument({
-        middleware: timeRouteHandler({ kind: "middleware", routeId: route.id }),
+        // The root's middleware only sets `X-Request-Id` around the whole request (`app/root.tsx`). Timed, its span
+        // would hold every other span and count the whole request as middleware time.
+        ...(route.id !== "root" && { middleware: timeRouteHandler({ kind: "middleware", routeId: route.id }) }),
         loader: timeRouteHandler({ kind: "loader", routeId: route.id }),
         action: timeRouteHandler({ kind: "action", routeId: route.id }),
       });
