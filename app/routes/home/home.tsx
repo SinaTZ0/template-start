@@ -1,28 +1,29 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeftIcon } from "lucide-react";
-import { Link } from "react-router";
 
 import { buttonVariants } from "~/components/primitive/button/button.styles";
-import { absoluteUrl, pageMeta } from "~/lib/seo";
+import { absoluteUrl, jsonLd, pageMeta } from "~/lib/seo";
 import { SITE_NAME } from "~/lib/site";
 
-import type { Route } from "./+types/home";
-
-/*===== Meta =====*/
-// A public page: the full set of tags, plus structured data that tells search engines the site's name.
-export const meta: Route.MetaFunction = (args) => [
-  ...pageMeta({ args }),
-  {
-    "script:ld+json": {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: SITE_NAME,
-      url: absoluteUrl({ matches: args.matches, path: "/" }),
-    },
-  },
-];
+/*===== Route =====*/
+export const Route = createFileRoute("/_site-layout/")({
+  // A public page: the full set of tags, plus structured data that tells search engines the site's name.
+  head: (args) => ({
+    ...pageMeta({ args }),
+    scripts: [
+      jsonLd({
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: SITE_NAME,
+        url: absoluteUrl({ matches: args.matches, path: "/" }),
+      }),
+    ],
+  }),
+  component: Home,
+});
 
 /*===== Home =====*/
-export default function Home() {
+function Home() {
   return (
     <section className="mx-auto flex max-w-site flex-col items-start gap-6 px-4 py-20 sm:px-6">
       <h1 className="text-display">{SITE_NAME}</h1>

@@ -1,5 +1,5 @@
+import { Link } from "@tanstack/react-router";
 import { LogOutIcon, UserIcon } from "lucide-react";
-import { Link, NavLink } from "react-router";
 
 import { Button } from "~/components/primitive/button/button";
 import { buttonVariants } from "~/components/primitive/button/button.styles";
@@ -15,20 +15,14 @@ import {
 import { ThemeToggle } from "~/components/shared/theme-toggle/theme-toggle";
 import { useSignOut } from "~/hooks/use-sign-out";
 import { SITE_NAME } from "~/lib/site";
-
-/*===== Viewer =====*/
-/** The signed-in person the header greets. Visitors are `null`, not a viewer. */
-export type Viewer = {
-  name: string;
-  email: string;
-};
+import type { Viewer } from "~/lib/viewer";
 
 /*===== Navigation =====*/
 
 const NAV_ITEMS = [
   { label: "خانه", to: "/" },
   { label: "یادداشت‌ها", to: "/notes" },
-];
+] as const;
 
 // The current page gets the primary underline; hover and focus tint the text.
 const navItemClasses =
@@ -79,9 +73,11 @@ export function SiteHeader({ viewer }: { viewer: Viewer | null }) {
 
         <nav aria-label="منوی اصلی" className="flex items-center">
           {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to} end className={navItemClasses}>
+            // The active link gets `aria-current="page"`, which the classes style. `exact` keeps "/" from matching
+            // every page.
+            <Link key={item.to} to={item.to} activeOptions={{ exact: true }} className={navItemClasses}>
               {item.label}
-            </NavLink>
+            </Link>
           ))}
         </nav>
 

@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 /*===== Vitest Config =====*/
-// Kept separate from vite.config.ts so the React Router plugin doesn't run during unit tests.
+// Kept separate from vite.config.ts so the TanStack Start and Nitro plugins don't run during unit tests.
 export default defineConfig({
   resolve: {
     tsconfigPaths: true,

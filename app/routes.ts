@@ -1,16 +1,19 @@
-import { type RouteConfig, index, layout, route } from "@react-router/dev/routes";
+import { index, layout, rootRoute, route } from "@tanstack/virtual-file-routes";
 
-export default [
-  layout("routes/site_layout/site-layout.tsx", [
-    index("routes/home/home.tsx"),
-    route("auth", "routes/auth/auth.tsx"),
-    layout("routes/notes_layout/notes-layout.tsx", [route("notes", "routes/notes/notes.tsx")]),
+// The route tree, declared in code so route slices stay flat folders under `app/routes/` (CLAUDE.md → Route Slices).
+// File paths are relative to `app/routes/`. The TanStack Start plugin turns this into `app/routeTree.gen.ts`.
+export const routes = rootRoute("../root.tsx", [
+  layout("site_layout/site-layout.tsx", [
+    index("home/home.tsx"),
+    route("/auth", "auth/auth.tsx"),
+    layout("notes_layout/notes-layout.tsx", [route("/notes", "notes/notes.tsx")]),
   ]),
 
-  /*===== Resource Routes =====*/
-  route("api/auth/*", "routes/api_auth/api-auth.ts"),
-  route("rpc/*", "routes/rpc/rpc.ts"),
-  route("healthz", "routes/healthz/healthz.ts"),
-  route("robots.txt", "routes/robots/robots.ts"),
-  route("sitemap.xml", "routes/sitemap/sitemap.ts"),
-] satisfies RouteConfig;
+  /*===== Server Routes =====*/
+  // No component: each answers HTTP requests itself (`server.handlers`).
+  route("/api/auth/$", "api_auth/api-auth.ts"),
+  route("/rpc/$", "rpc/rpc.ts"),
+  route("/healthz", "healthz/healthz.ts"),
+  route("/robots.txt", "robots/robots.ts"),
+  route("/sitemap.xml", "sitemap/sitemap.ts"),
+]);

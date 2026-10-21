@@ -11,14 +11,10 @@
 *.key
 *.pfx
 
-# React Router
-/.react-router/
-/build/
-
-# TanStack Start app being built beside the React Router one until it replaces it
-/start/node_modules/
-/start/.output/
-/start/.tanstack/
+# TanStack Start and Nitro build output
+/.output/
+/.tanstack/
+/.nitro/
 .tmp-claude
 
 # Playwright

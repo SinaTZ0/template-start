@@ -56,8 +56,8 @@ if (!parsed.success) {
 /**
  * Validated, typed server environment.
  *
- * Server-only: the `.server` suffix makes React Router fail the build if this
- * module is imported into client code, keeping secrets out of the browser bundle.
+ * Server-only: the `.server` suffix makes Start's import protection fail the build if this module is imported into
+ * client code, keeping secrets out of the browser bundle.
  */
 export const env = parsed.data;
 

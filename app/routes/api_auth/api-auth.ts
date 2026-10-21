@@ -1,7 +1,7 @@
+import { createFileRoute } from "@tanstack/react-router";
+
 import { auth } from "~/lib/auth.server";
 import { limitRequest, RATE_LIMITED_MESSAGE, type RateLimitPolicy } from "~/lib/rate-limit.server";
-
-import type { Route } from "./+types/api-auth";
 
 /*===== Rate Limits =====*/
 // The app's limiter replaces Better-Auth's (`rateLimit` is off in `auth.server.ts`), so the API and auth share one
@@ -23,29 +23,27 @@ const AUTH_RATE_LIMIT: RateLimitPolicy = { name: "auth", limit: 120, windowMs: 6
 
 /**
  * Answers over-limit requests with a 429 in Better-Auth's error shape, so the auth client reports it like any other
- * failure (`describeAuthError` shows the Persian line for status 429).
+ * failure (`describeAuthError` shows the Persian line for status 429). Returns nothing when the request may go on.
  */
-export const middleware: Route.MiddlewareFunction[] = [
-  ({ request }) => {
-    const path = new URL(request.url).pathname.replace(/^\/api\/auth/, "");
-    const policy = CREDENTIAL_PATHS.has(path) ? CREDENTIAL_RATE_LIMIT : AUTH_RATE_LIMIT;
-    const result = limitRequest({ headers: request.headers, policy });
-    if (result.allowed) return;
+function rejectOverLimit(request: Request): Response | undefined {
+  const path = new URL(request.url).pathname.replace(/^\/api\/auth/, "");
+  const policy = CREDENTIAL_PATHS.has(path) ? CREDENTIAL_RATE_LIMIT : AUTH_RATE_LIMIT;
+  const result = limitRequest({ headers: request.headers, policy });
+  if (result.allowed) return;
 
-    return Response.json(
-      { code: "TOO_MANY_REQUESTS", message: RATE_LIMITED_MESSAGE },
-      { status: 429, headers: { "Retry-After": String(result.retryAfterSeconds) } },
-    );
-  },
-];
+  return Response.json(
+    { code: "TOO_MANY_REQUESTS", message: RATE_LIMITED_MESSAGE },
+    { status: 429, headers: { "Retry-After": String(result.retryAfterSeconds) } },
+  );
+}
 
 /*===== Better-Auth Endpoints =====*/
-// Resource route (no default export): Better-Auth answers every `/api/auth/*` request itself.
-
-export function loader({ request }: Route.LoaderArgs) {
-  return auth.handler(request);
+/** Better-Auth answers every `/api/auth/*` request itself, once the rate limit lets it through. */
+function handleRequest({ request }: { request: Request }) {
+  return rejectOverLimit(request) ?? auth.handler(request);
 }
 
-export function action({ request }: Route.ActionArgs) {
-  return auth.handler(request);
-}
+/*===== Route =====*/
+export const Route = createFileRoute("/api/auth/$")({
+  server: { handlers: { GET: handleRequest, POST: handleRequest } },
+});

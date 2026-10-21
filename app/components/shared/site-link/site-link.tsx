@@ -1,5 +1,5 @@
+import { Link } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
-import { Link } from "react-router";
 
 /*===== Site Link =====*/
 

@@ -1,48 +1,46 @@
-import { redirect, useNavigate, useRevalidator } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/primitive/card/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/primitive/tabs/tabs";
-import { getRequestSession } from "~/lib/auth.server";
+import { redirectToParam } from "~/lib/search-params";
 import { pageMeta } from "~/lib/seo";
+import { viewerQueryOptions } from "~/lib/viewer";
 import { SignInForm } from "~/routes/auth/components/sign-in-form";
 import { SignUpForm } from "~/routes/auth/components/sign-up-form";
-
-import type { Route } from "./+types/auth";
 
 /** Where people land after signing in when nothing asked for a page. */
 const DEFAULT_REDIRECT = "/notes";
 
-/*===== Meta =====*/
-// Sign-in has nothing to find in search results.
-export const meta: Route.MetaFunction = (args) => pageMeta({ args, title: "ورود", index: false });
+const searchSchema = z.object({
+  redirectTo: redirectToParam,
+});
 
-/*===== Loader =====*/
-export async function loader({ request }: Route.LoaderArgs) {
-  const redirectTo = safeRedirect(new URL(request.url).searchParams.get("redirectTo"));
-  const session = await getRequestSession(request.headers);
-
-  // Signed-in people have nothing to do here.
-  if (session) throw redirect(redirectTo);
-
-  return { redirectTo };
-}
-
-/**
- * Only same-site paths, so a crafted `?redirectTo=` link can't send someone to another site after signing in.
- * Backslashes are rejected because browsers read `/\evil.com` as the protocol-relative `//evil.com`.
- */
-function safeRedirect(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : DEFAULT_REDIRECT;
-}
+/*===== Route =====*/
+export const Route = createFileRoute("/_site-layout/auth")({
+  validateSearch: searchSchema,
+  // Sign-in has nothing to find in search results.
+  head: (args) => pageMeta({ args, title: "ورود", index: false }),
+  beforeLoad: async ({ context, search }) => {
+    // Signed-in people have nothing to do here.
+    const viewer = await context.queryClient.ensureQueryData(viewerQueryOptions);
+    if (viewer) throw redirect({ href: search.redirectTo ?? DEFAULT_REDIRECT });
+  },
+  component: AuthPage,
+});
 
 /*===== Page =====*/
-export default function AuthPage({ loaderData }: Route.ComponentProps) {
+function AuthPage() {
+  const redirectTo = Route.useSearch({ select: (search) => search.redirectTo ?? DEFAULT_REDIRECT });
   const navigate = useNavigate();
-  const revalidator = useRevalidator();
-  // A plain navigation keeps the mounted layout's loader data, so revalidate for the header to pick up the session.
+  const queryClient = useQueryClient();
+
+  // The cached viewer still says "signed out": refetch it first, so the header updates and the next page's guard sees
+  // the session.
   const goOn = async () => {
-    await navigate(loaderData.redirectTo, { replace: true });
-    await revalidator.revalidate();
+    await queryClient.invalidateQueries({ queryKey: viewerQueryOptions.queryKey });
+    await navigate({ href: redirectTo, replace: true });
   };
 
   return (

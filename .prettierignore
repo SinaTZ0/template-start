@@ -1,15 +1,12 @@
-build/
-.react-router/
+.output/
+.tanstack/
+.nitro/
 playwright-report/
 test-results/
 storybook-static/
 pnpm-lock.yaml
 app/components/ui/
-start/.output/
-start/.tanstack/
-start/pnpm-lock.yaml
-start/app/components/ui/
-start/app/routeTree.gen.ts
+app/routeTree.gen.ts
 drizzle/
 # Vendored, and Go templates (Prettier would reflow their {{ }} actions).
 tools/error-viewer/static/htmx.min.js

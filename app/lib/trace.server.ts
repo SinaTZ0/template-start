@@ -3,9 +3,8 @@ import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 /*===== Types =====*/
-/** What a span measured. Kinds nest: a loader's time includes the procedures and queries it ran. */
-export type SpanKind =
-  "middleware" | "loader" | "action" | "procedure" | "service" | "repository" | "db" | "storage" | "task";
+/** What a span measured. Kinds nest: a server function's time includes the procedures and queries it ran. */
+export type SpanKind = "server-fn" | "procedure" | "service" | "repository" | "db" | "storage" | "task";
 
 type Span = {
   id: number;
@@ -123,9 +122,9 @@ export function recordSpan({
 /**
  * Times `fn` as one span of the current request: `await span({ kind: "task", name: "media.processImage" }, () => ...)`.
  * Spans started inside `fn` become its children. Use it around anything that may be slow and isn't already traced
- * (loaders, actions, procedures, services, repositories, queries and S3 calls are).
+ * (server functions, procedures, services, repositories, queries and S3 calls are).
  *
- * @param isFailure For work that reports failure in its result instead of throwing (React Router's instrumentation).
+ * @param isFailure For work that reports failure in its result instead of throwing.
  */
 export async function span<T>(
   { kind, name, isFailure }: { kind: SpanKind; name: string; isFailure?: (result: T) => boolean },

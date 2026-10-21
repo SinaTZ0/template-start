@@ -39,7 +39,8 @@ ENV PORT=3000
 ENV NODE_OPTIONS=--enable-source-maps
 
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=build /app/build ./build
+# Nitro's Node server and the static assets it serves (`vite.config.ts`).
+COPY --from=build /app/.output ./.output
 # The server source, read by the error reporter: with source maps, stack frames name `/app/app/<file>.ts`, and the
 # Sentry SDK reads each frame's lines from that path to attach them to the report. Without it, reports carry no source.
 COPY --from=build /app/app ./app
@@ -49,4 +50,4 @@ COPY deploy/migrate.mjs deploy/init-storage.mjs ./deploy/
 
 USER node
 EXPOSE 3000
-CMD ["node_modules/.bin/react-router-serve", "./build/server/index.js"]
+CMD ["node", ".output/server/index.mjs"]

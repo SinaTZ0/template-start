@@ -1,3 +1,4 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { SITE_ORIGIN } from "~/lib/site.server";
 
 /*===== Entries =====*/
@@ -10,10 +11,10 @@ const STATIC_ENTRIES: SitemapEntry[] = [{ path: "/" }];
 /**
  * `GET /sitemap.xml`: the pages search engines should list, for `robots.txt` to point at.
  *
- * Content pages (articles, products) add one entry each here, read through `createServerClient(request)` from a
+ * Content pages (articles, products) add one entry each here, read through the oRPC `client` (`~/orpc/client`) from a
  * procedure that returns only published items, with `lastModified` from their update time (`docs/frontend/seo.md`).
  */
-export function loader() {
+function handleGet() {
   const entries = STATIC_ENTRIES;
 
   const urls = entries.map(({ path, lastModified }) => {
@@ -36,3 +37,8 @@ function escapeXml(value: string): string {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
 }
+
+/*===== Route =====*/
+export const Route = createFileRoute("/sitemap.xml")({
+  server: { handlers: { GET: handleGet } },
+});

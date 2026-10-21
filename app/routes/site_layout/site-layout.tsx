@@ -1,30 +1,30 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
 import { useEffect, ViewTransition } from "react";
-import { Outlet, useLocation } from "react-router";
 
 import { SiteFooter } from "~/components/shared/site-footer/site-footer";
-import { SiteHeader, type Viewer } from "~/components/shared/site-header/site-header";
-import { getRequestSession } from "~/lib/auth.server";
-import { setReportedUser } from "~/lib/error-reporting.client";
+import { SiteHeader } from "~/components/shared/site-header/site-header";
+import { setReportedUser } from "~/lib/error-reporting.browser";
+import { viewerQueryOptions } from "~/lib/viewer";
 
-import type { Route } from "./+types/site-layout";
-
-/*===== Loader =====*/
-export async function loader({ request }: Route.LoaderArgs) {
-  const session = await getRequestSession(request.headers);
-  const viewer: Viewer | null = session ? { name: session.user.name, email: session.user.email } : null;
-  return { viewer, userId: session?.user.id ?? null };
-}
+/*===== Route =====*/
+export const Route = createFileRoute("/_site-layout")({
+  // The header needs the viewer on every page, so it is loaded before any page renders.
+  beforeLoad: ({ context }) => context.queryClient.ensureQueryData(viewerQueryOptions),
+  component: SiteLayout,
+});
 
 /*===== Site Layout =====*/
 
 /** The chrome shared by every page: skip link, header, `main` landmark and footer. */
-export default function SiteLayout({ loaderData }: Route.ComponentProps) {
-  const { pathname } = useLocation();
-  const { userId } = loaderData;
+function SiteLayout() {
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const { data: viewer } = useSuspenseQuery(viewerQueryOptions);
+  const userId = viewer?.id ?? null;
 
   /*------ Error Reports ------*/
-  // Browser reports carry the signed-in user's ID, like the server's (docs/backend/logging.md → User ID). The loader
-  // revalidates on sign-in and sign-out, which updates it.
+  // Browser reports carry the signed-in user's ID, like the server's (docs/backend/logging.md → User ID). Sign-in and
+  // sign-out invalidate the viewer query, which updates it.
   useEffect(() => setReportedUser(userId), [userId]);
 
   return (
@@ -35,12 +35,11 @@ export default function SiteLayout({ loaderData }: Route.ComponentProps) {
       >
         پرش به محتوای اصلی
       </a>
-      <SiteHeader viewer={loaderData.viewer} />
+      <SiteHeader viewer={viewer} />
       <main id="main" className="flex-1">
         {/*===== Page Transition =====*/}
-        {/* Keyed by pathname, so moving to another page swaps the boundary and plays exit + enter (the fade). Query
-            changes (nuqs), revalidations and hash links keep the key, and `default="none"` keeps those updates
-            instant. React Router commits navigations inside `startTransition`, which is what activates it. */}
+        {/* Keyed by pathname, so moving to another page swaps the boundary and plays exit + enter (the fade). Search
+            changes, refetches and hash links keep the key, and `default="none"` keeps those updates instant. */}
         <ViewTransition key={pathname} enter="page" exit="page" default="none">
           <Outlet />
         </ViewTransition>

@@ -8,7 +8,6 @@ pre-commit:
       # The untouched shadcn source and the vendored agent skills are reference only and aren't linted (`.oxlintrc.json`).
       exclude:
         - "app/components/ui/**"
-        - "start/app/components/ui/**"
         - ".agents/**"
         - ".claude/**"
       run: pnpm exec oxlint {staged_files}
