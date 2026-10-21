@@ -258,6 +258,9 @@ projects. Do that when you need what the viewer leaves out: grouping into issues
 | `LOG_QUERY_PARAMS`    | `false` | Log and report a failed query's parameters (personal data risk) |
 | `SENTRY_DSN`          | (empty) | The error viewer's DSN, for the server and the browser          |
 
+`.env.example` turns `LOG_QUERY_PARAMS` on, since development data is your own and the values help debugging.
+Production leaves it off unless you set it.
+
 At `LOG_LEVEL=warn`, only the slow, failed and erroring requests are written, which suits development next to the
 error viewer and a busy production server. `fatal` and `silent` also stop error reports, which are sent from the logger.
 

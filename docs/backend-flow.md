@@ -20,7 +20,8 @@ The `note` feature (`app/orpc/note/`) is the worked example. Copy its shape.
    Errors are uniform and safe).
 2. **Validation**: write the domain schemas in `validation.ts`. They check meaning (trimming, normalization, allowed
    values), not structure, which the contract already checks. Their messages are Persian, because they reach the user
-   as field errors ([architecture.md](./backend/architecture.md) → Validation happens twice).
+   as field errors. Free-text fields use `persianText()` ([architecture.md](./backend/architecture.md) → Validation
+   happens twice, Free text is normalized).
 
 ## Implement
 

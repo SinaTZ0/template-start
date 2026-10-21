@@ -73,6 +73,19 @@ import their contract's types (`Note`, `Media`), because the contract is the pub
 - Rules that need I/O (uniqueness, existence, ownership) are checked in the service after parsing.
 - Browser form schemas are separate from service schemas, even when they currently match.
 
+#### Free text is normalized
+
+Every free-text field (a title, a body, a display name, a search query) is declared with `persianText()`
+(`app/lib/persian-text.ts`) in place of `z.string().trim()`, in its service schema and its form schema. It converts
+Arabic yeh and kaf to Persian, Arabic-Indic digits to Persian, removes direction marks, the BOM and tatweel, turns NBSP
+into a space, drops stray ZWNJs, applies NFC and trims. Text that looks the same is then stored the same, so searches
+and comparisons match what the user sees. The checks chained after it (`.min()`, `.max()`) see the normalized value.
+
+- Never use it on emails, passwords, IDs, tokens, URLs or captcha payloads: those must stay byte-exact.
+- A search normalizes its input with `normalizePersianText`, so it matches the stored text.
+- The sign-up name goes through Better-Auth, not a service schema; `databaseHooks` in `app/lib/auth.server.ts`
+  normalize it on create and update.
+
 ### Services return outcomes, procedures throw errors
 
 Expected failures are data, not exceptions. A service returns a discriminated union; the procedure translates each

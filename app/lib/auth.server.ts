@@ -9,6 +9,7 @@ import { env } from "~/env.server";
 import { verifyAltchaPayload } from "~/lib/altcha.server";
 import { ACCOUNT_BLOCKED_CODE, ALTCHA_HEADER, CAPTCHA_FAILED_CODE } from "~/lib/auth-constants";
 import { createLogger } from "~/lib/logger.server";
+import { normalizePersianText } from "~/lib/persian-text";
 import { CLIENT_ADDRESS_HEADER } from "~/lib/rate-limit.server";
 import { setTraceUser } from "~/lib/trace.server";
 
@@ -54,6 +55,22 @@ export const auth = betterAuth({
       // Never from the client: everyone signs up as `user`; only server code promotes or blocks (`user-constants.ts`).
       role: { type: "string", required: false, defaultValue: "user", input: false },
       status: { type: "string", required: false, defaultValue: "active", input: false },
+    },
+  },
+
+  /*------ Display Name ------*/
+  // The name is the account's one free-text field, so it is normalized like the app's other free text
+  // (`app/lib/persian-text.ts`), on sign-up and on every update. The email and password are left exactly as sent.
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => ({ data: { ...user, name: normalizePersianText(user.name) } }),
+      },
+      update: {
+        before: async (user) => ({
+          data: typeof user.name === "string" ? { ...user, name: normalizePersianText(user.name) } : user,
+        }),
+      },
     },
   },
 
