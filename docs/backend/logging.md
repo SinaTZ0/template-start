@@ -81,6 +81,21 @@ because the cookie is set once that page runs.
 (`dataCollection` in both setups). A failed query's parameters are replaced with `(hidden)` unless `LOG_QUERY_PARAMS` is
 on.
 
+**Secrets are redacted** before a line is written or a report is sent (`app/lib/redact.server.ts`, adapted from
+`@nestjs/observe`). The logger redacts a line's fields once, for both its output and the report; the error serializer
+and the server SDK's `beforeSend` redact the error's message and stack.
+
+- **By key:** a field whose name ends in `password`, `secret`, `token`, `credential(s)`, `signature`, `jwt`, `cookie`,
+  `apiKey`, `privateKey`, `accessKey`, `secretKey`, `sessionId` or `authorization` (`resetToken`, `client_secret`), or
+  contains the words `password`, `secret` or `credential` (`passwordConfirm`), or is exactly `pwd` or `auth`, becomes
+  `[REDACTED]`, nested objects included. Look-alikes such as `maxTokens` or `author` are kept.
+- **In text:** PEM private keys, `Bearer`/`Basic`/`Token` credentials, `key=value` and `"key": "value"` for those keys,
+  JWTs, AWS access key IDs and card numbers that pass the Luhn check.
+- **In a URL:** the values of those query keys, plus `code`, `state`, `sig` and `key`.
+
+It is a safety net, not a guarantee: a secret logged in a shape none of these match still goes out. Don't log
+credentials. Ordinary text, Persian included, is never changed.
+
 **Stacks point at source files.** The server bundle ships with source maps and runs with `--enable-source-maps`
 (`Dockerfile`), so stacks are mapped before they are logged or sent. The dev server maps them itself. The image also
 ships the server source (`app/`), because the SDK reads each frame's lines from the file it names: without it, reports

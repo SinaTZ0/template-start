@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/node";
 import type { ErrorEvent } from "@sentry/node";
 
 import { env } from "~/env.server";
+import { redactText, redactUrl } from "~/lib/redact.server";
 import { createReportThrottle, errorThrottleKey } from "~/lib/report-throttle.server";
 import { currentTrace } from "~/lib/trace.server";
 import type { SpanKind, Timeline } from "~/lib/trace.server";
@@ -16,11 +17,17 @@ export function hideQueryParams(text: string): string {
   return text.replace(/\nparams: [\s\S]*$/, "\nparams: (hidden)");
 }
 
-/** Applies `hideQueryParams` to every exception in the event, causes included. */
+/**
+ * Hides secrets and failed queries' parameters in what the SDK took from the error itself: every exception's message
+ * (causes included), the event message and the request URL. The log line's fields (`contexts.log`) arrive already
+ * redacted from the logger, which redacts them once for both the log line and the report. Tags are IDs and paths.
+ */
 function scrubEvent(event: ErrorEvent): ErrorEvent {
   for (const exception of event.exception?.values ?? []) {
-    if (exception.value) exception.value = hideQueryParams(exception.value);
+    if (exception.value) exception.value = redactText(hideQueryParams(exception.value));
   }
+  if (event.message) event.message = redactText(event.message);
+  if (event.request?.url) event.request.url = redactUrl(event.request.url);
   return event;
 }
 

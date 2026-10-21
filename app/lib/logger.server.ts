@@ -2,19 +2,27 @@ import pino from "pino";
 
 import { env } from "~/env.server";
 import { hideQueryParams, reportError } from "~/lib/error-reporting.server";
+import { redactFields } from "~/lib/redact.server";
 import { currentTrace } from "~/lib/trace.server";
 
 /*===== Error Serializer =====*/
 const MAX_CAUSE_DEPTH = 5;
 
 /**
- * pino's standard serializer, minus failed queries' parameters. Drizzle puts them at the end of its error's message
- * and on the error itself; they can hold personal data, so both are hidden unless `LOG_QUERY_PARAMS` is on.
+ * pino's standard serializer, minus secrets (`redactFields`, over the message, stack and the error's own fields) and
+ * failed queries' parameters. Drizzle puts those at the end of its error's message and on the error itself; they can
+ * hold personal data, so both are hidden unless `LOG_QUERY_PARAMS` is on.
  *
  * pino joins the messages and stacks of the whole cause chain into one string each, with a cause's message following
  * the parameters, so each error's own message is scrubbed and swapped in rather than cutting the joined text.
  */
 function serializeError(value: unknown): unknown {
+  const serialized = hideErrorQueryParams(value);
+  // pino builds it on its own prototype, which `redactFields` doesn't walk; its own fields are all that is written.
+  return typeof serialized === "object" && serialized !== null ? redactFields({ ...serialized }) : serialized;
+}
+
+function hideErrorQueryParams(value: unknown): unknown {
   const serialized = pino.stdSerializers.err(value as Error) as unknown;
   if (env.LOG_QUERY_PARAMS || typeof serialized !== "object" || serialized === null) return serialized;
 
@@ -62,15 +70,24 @@ export const logger = pino(
     },
     hooks: {
       logMethod(args, method, level) {
-        // pino only calls this hook for enabled levels, so `LOG_LEVEL=fatal` or `silent` also stops error reports.
         const [first, second] = args as unknown[];
-        if (level >= pino.levels.values.error && typeof first === "object" && first !== null && "err" in first) {
-          const { err, ...fields } = first as Record<string, unknown>;
-          reportError({
-            err,
-            message: typeof second === "string" ? second : undefined,
-            fields: { ...this.bindings(), ...fields },
-          });
+        if (typeof first === "object" && first !== null && !(first instanceof Error)) {
+          /*------ Redaction ------*/
+          // Once, here, for both the log line and the error report (`app/lib/redact.server.ts`). `err` is left to its
+          // serializer and to the reporter's `beforeSend`, which each redact the error's own text.
+          const { err, ...rest } = first as Record<string, unknown>;
+          const fields = redactFields(rest);
+          args[0] = "err" in first ? { err, ...fields } : fields;
+
+          /*------ Reporting ------*/
+          // pino only calls this hook for enabled levels, so `LOG_LEVEL=fatal` or `silent` also stops error reports.
+          if (level >= pino.levels.values.error && "err" in first) {
+            reportError({
+              err,
+              message: typeof second === "string" ? second : undefined,
+              fields: { ...this.bindings(), ...fields },
+            });
+          }
         }
         method.apply(this, args);
       },
