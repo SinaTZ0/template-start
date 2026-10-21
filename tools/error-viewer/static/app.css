@@ -698,6 +698,36 @@ pre.timeline {
   font-size: 12.5px;
   color: var(--muted-foreground);
 }
+/* A value again with its hidden and look-alike characters as markers (the "reveal" template). */
+.reveal {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--warning);
+  border-radius: 4px;
+  background: var(--muted);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  /* Inside a `.pre` cell too: only the value keeps its spacing, not the template's. */
+  white-space: normal;
+  word-break: break-word;
+}
+.reveal-text {
+  white-space: pre-wrap;
+}
+.reveal-label {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--font);
+  color: var(--muted-foreground);
+}
+.reveal mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--warning-surface);
+  color: var(--warning);
+  font-weight: 600;
+}
+
 /* The count of alike errors the app left out, between the header and the first card. */
 .hint.throttled {
   margin: -8px 0 16px;

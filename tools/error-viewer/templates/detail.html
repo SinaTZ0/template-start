@@ -42,6 +42,7 @@
       <section class="card">
         <h2>Message</h2>
         <pre class="block">{{.Message}}</pre>
+        {{template "reveal" .MessageReveal}}
       </section>
     {{end}}
 
@@ -56,6 +57,7 @@
               <td class="mono">
                 {{if .Link}}<a href="{{.Link}}" title="Every event with this {{.Key}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}
                 <button type="button" class="copy" data-copy="{{.Value}}" aria-label="Copy {{.Key}}">Copy</button>
+                {{template "reveal" .Reveal}}
               </td>
             </tr>
           {{end}}
@@ -68,7 +70,7 @@
       <section class="card exception">
         <h2>{{if .CausedBy}}Caused by{{else}}Exception{{end}}</h2>
         <p class="mono ex-title"><b>{{.Type}}</b>{{if .Mechanism}} <span class="muted">· {{.Mechanism}}</span>{{end}}</p>
-        {{if .Value}}<pre class="block">{{.Value}}</pre>{{end}}
+        {{if .Value}}<pre class="block">{{.Value}}</pre>{{template "reveal" .ValueReveal}}{{end}}
         {{range .Groups}}
           {{if .InApp}}
             <ol class="frames">
@@ -181,7 +183,7 @@
     {{if or .LogMessage .LogFields}}
       <section class="card">
         <h2>Log</h2>
-        {{if .LogMessage}}<p class="mono">{{.LogMessage}}</p>{{end}}
+        {{if .LogMessage}}<p class="mono">{{.LogMessage}}</p>{{template "reveal" .LogMessageReveal}}{{end}}
         {{if .LogFields}}{{template "fields" .LogFields}}{{end}}
       </section>
     {{end}}
@@ -191,7 +193,12 @@
       <section class="card">
         <h2>{{if .Browser}}Browser{{else}}Request{{end}}</h2>
         <table class="kv">
-          {{if .Request}}<tr><th scope="row">Request</th><td class="mono">{{.Request}}</td></tr>{{end}}
+          {{if .Request}}
+            <tr>
+              <th scope="row">Request</th>
+              <td class="mono">{{.Request}}{{template "reveal" .RequestReveal}}</td>
+            </tr>
+          {{end}}
           {{range .Browser}}<tr><th scope="row">{{.Key}}</th><td>{{.Value}}</td></tr>{{end}}
         </table>
         {{if .Component}}
@@ -230,12 +237,26 @@
   </li>
 {{end}}
 
+{{/* A value again with its hidden and look-alike characters as markers (hidden.go). Nothing for a plain value. Every
+     part is escaped text. `dir="auto"` lays the value out by its own first strong character, and each marker is an
+     isolated left-to-right run, so its Latin label isn't reordered by the Persian text around it. */}}
+{{define "reveal"}}
+  {{- if .}}
+    <p class="reveal">
+      <span class="reveal-label">Hidden characters:</span>
+      <span class="reveal-text" dir="auto">
+        {{- range .}}{{if .Hidden}}<mark dir="ltr" title="{{.Title}}">[{{if .Text}}{{.Text}} {{end}}{{.Label}}]</mark>{{else}}{{.Text}}{{end}}{{end -}}
+      </span>
+    </p>
+  {{- end -}}
+{{end}}
+
 {{define "fields"}}
   <table class="kv">
     {{range .}}
       <tr>
         <th scope="row">{{.Key}}</th>
-        <td class="mono pre">{{.Value}}</td>
+        <td class="mono pre">{{.Value}}{{template "reveal" .Reveal}}</td>
       </tr>
     {{end}}
   </table>

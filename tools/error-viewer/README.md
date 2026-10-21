@@ -52,6 +52,7 @@ Checks: `go vet ./...`, `gofmt -l .` and `go test ./...` in this folder.
 | `store.go`     | SQLite: schema, the writer goroutine, list and search queries, retention                       |
 | `web.go`       | Dashboard routes, sign-in and sessions, security headers                                       |
 | `detail.go`    | The detail page's view of an event                                                             |
+| `hidden.go`    | Finds hidden and look-alike characters in a value, for the detail page                         |
 | `ratelimit.go` | Token buckets and the client address                                                           |
 
 **Ingest.** The key comes from `X-Sentry-Auth` or the `sentry_key` query parameter (the browser SDK's way) and is
@@ -84,6 +85,14 @@ POST forms. htmx swaps the results in place, pushes the URL and runs auto-refres
 htmx's injected indicator styles are turned off in `layout.html` and styled in `app.css`, and the copy buttons and
 relative times live in `static/app.js`. Dashboard pages are `no-store`, because the list URL serves both the page and
 the htmx fragment.
+
+**Hidden characters.** On the detail page, a value that holds a character which looks like Persian but isn't, or
+doesn't show at all, is shown a second time under itself with each such character as a marker:
+`عل[ي U+064A Arabic yeh]`. Hovering a marker says what Persian uses instead. It covers the exception messages, the event message, tags,
+the request and the log line's fields. Flagged: Arabic yeh, alef maksura and kaf (U+064A, U+0649, U+0643), tatweel,
+ZWNJ and ZWJ, direction marks, embeddings, overrides and isolates, NBSP, the BOM, Arabic-Indic digits, and Latin digits
+in text that also has Persian ones. The markers are built in Go (`hidden.go`) and rendered as escaped text like every
+other value; a value with none of these renders as before.
 
 **Security.** One password; a session is an HMAC-signed expiry in an `HttpOnly`, `SameSite=Strict` cookie (`Secure`
 when `BASE_URL` is HTTPS) for seven days. Changing `ADMIN_PASSWORD` or `SESSION_SECRET` signs everyone out. Sign-in

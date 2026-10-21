@@ -226,7 +226,11 @@ is down. Its settings and internals are in [its README](../../tools/error-viewer
   else is searched in titles.
 - **Detail** (`/events/<id>`): tags (each `errorId`, `reqId`, `path`, `route`, `clientId` and `userId` links to the
   list filtered by it), the exception chain with source lines for the app's own frames, the timeline of a slow
-  request, the log line's fields, browser details and the raw JSON.
+  request, the log line's fields, browser details and the raw JSON. A value holding a hidden or look-alike character
+  (Arabic `ي` or `ك`, a direction mark, a ZWNJ, NBSP, a BOM, Arabic-Indic digits, mixed digit systems) is shown again
+  under itself with each such character marked, e.g. `عل[ي U+064A Arabic yeh]`. Text the app accepts is normalized
+  on the way in ([architecture.md](./architecture.md) → Free text is normalized); this shows what got through
+  anyway.
 
 ### Development
 

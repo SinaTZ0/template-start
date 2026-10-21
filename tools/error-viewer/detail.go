@@ -15,32 +15,39 @@ import (
 // detailView is the detail page's data, built from the stored payload. Every value in it comes from the SDK and is
 // rendered as text: html/template escapes it, and none of it is ever marked as trusted HTML.
 type detailView struct {
-	Missing    bool
-	Event      eventRow
-	Message    string // the full message when it says more than the title (several lines)
-	Suppressed int    // alike errors the app left out since its previous report of this one (`throttle` context)
-	Request    string
-	Tags       []tagView
-	Exceptions []exceptionView
-	Timeline   *timelineView
-	LogMessage string
-	LogFields  []field
-	Browser    []field
-	Component  string // React's component stack
-	Contexts   []contextView
-	RawJSON    string
+	Missing bool
+	Event   eventRow
+	Message string // the full message when it says more than the title (several lines)
+	// The values below, revealed (`revealHidden`) when they hold hidden or look-alike characters; nil otherwise.
+	MessageReveal    []segment
+	RequestReveal    []segment
+	LogMessageReveal []segment
+	Suppressed       int // alike errors the app left out since its previous report of this one (`throttle` context)
+	Request          string
+	Tags             []tagView
+	Exceptions       []exceptionView
+	Timeline         *timelineView
+	LogMessage       string
+	LogFields        []field
+	Browser          []field
+	Component        string // React's component stack
+	Contexts         []contextView
+	RawJSON          string
 }
 
 type tagView struct {
 	Key, Value, Link string
+	Reveal           []segment
 }
 
 type field struct {
 	Key, Value string
+	Reveal     []segment
 }
 
 type exceptionView struct {
 	Type, Value string
+	ValueReveal []segment
 	Mechanism   string
 	CausedBy    bool
 	Groups      []frameGroup
@@ -155,14 +162,16 @@ func buildDetail(row eventRow) detailView {
 
 	if message := strings.TrimSpace(ev.message()); message != "" && message != row.Title {
 		view.Message = message
+		view.MessageReveal = revealHidden(message)
 	}
 	if ev.Request != nil && ev.Request.URL != "" {
 		view.Request = strings.TrimSpace(ev.Request.Method + " " + ev.Request.URL)
+		view.RequestReveal = revealHidden(view.Request)
 	}
 
 	/*------ Tags ------*/
 	for key, value := range ev.tags() {
-		tag := tagView{Key: key, Value: value}
+		tag := tagView{Key: key, Value: value, Reveal: revealHidden(value)}
 		if prefix, ok := tagLinks[key]; ok && value != "" {
 			tag.Link = searchURL(prefix, value)
 		}
@@ -197,6 +206,7 @@ func buildDetail(row eventRow) detailView {
 		for _, f := range fields {
 			if f.Key == "message" {
 				view.LogMessage = f.Value
+				view.LogMessageReveal = f.Reveal
 			} else {
 				view.LogFields = append(view.LogFields, f)
 			}
@@ -235,7 +245,7 @@ func buildDetail(row eventRow) detailView {
 }
 
 func buildException(ex exception, causedBy bool) exceptionView {
-	view := exceptionView{Type: ex.Type, Value: ex.Value, CausedBy: causedBy}
+	view := exceptionView{Type: ex.Type, Value: ex.Value, ValueReveal: revealHidden(ex.Value), CausedBy: causedBy}
 	if ex.Mechanism != nil && ex.Mechanism.Type != "" {
 		view.Mechanism = ex.Mechanism.Type
 		if ex.Mechanism.Handled != nil && !*ex.Mechanism.Handled {
@@ -308,7 +318,8 @@ func objectFields(raw json.RawMessage) []field {
 	}
 	fields := make([]field, 0, len(object))
 	for key, value := range object {
-		fields = append(fields, field{Key: key, Value: jsonText(value)})
+		text := jsonText(value)
+		fields = append(fields, field{Key: key, Value: text, Reveal: revealHidden(text)})
 	}
 	slices.SortFunc(fields, func(a, b field) int { return strings.Compare(a.Key, b.Key) })
 	return fields
