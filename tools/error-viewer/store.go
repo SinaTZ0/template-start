@@ -77,6 +77,17 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 	}
+	if version < 3 {
+		// Events stored before this have no user ID; a `userId:` search doesn't find them.
+		_, err := db.Exec(`
+			alter table events add column user_id text;
+			create index if not exists events_user_id on events (user_id, received_at desc) where user_id is not null;
+			pragma user_version = 3;
+		`)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -164,8 +175,8 @@ func (s *store) insert(rows []eventRow) error {
 
 	stmt, err := tx.Prepare(`
 		insert into events (id, received_at, occurred_at, kind, level, platform, environment, title, error_id, req_id,
-			method, path, route, module, client_id, payload)
-		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			method, path, route, module, client_id, user_id, payload)
+		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		on conflict (id) do nothing`)
 	if err != nil {
 		return err
@@ -179,7 +190,8 @@ func (s *store) insert(rows []eventRow) error {
 		}
 		_, err := stmt.Exec(r.ID, r.ReceivedAt, occurredAt, r.Kind, r.Level, nullable(r.Platform),
 			nullable(r.Environment), r.Title, nullable(r.ErrorID), nullable(r.ReqID), nullable(r.Method),
-			nullable(r.Path), nullable(r.Route), nullable(r.Module), nullable(r.ClientID), r.Payload)
+			nullable(r.Path), nullable(r.Route), nullable(r.Module), nullable(r.ClientID),
+			nullable(r.UserID), r.Payload)
 		if err != nil {
 			return err
 		}
@@ -227,7 +239,8 @@ type eventFilter struct {
 	Platform    string
 	Environment string
 	Since       int64 // unix ms; 0 is "all time"
-	// One column matched exactly (`error_id`, `req_id`, `path`, `route`, `module` or `client_id`), from the search box.
+	// One column matched exactly (`error_id`, `req_id`, `path`, `route`, `module`, `client_id` or `user_id`), from the
+	// search box.
 	Column string
 	Value  string
 	// Matched anywhere in the title.
@@ -237,7 +250,7 @@ type eventFilter struct {
 // searchColumns are the columns a search may match exactly. It also keeps `Column` from carrying anything else into
 // the SQL text.
 var searchColumns = map[string]bool{
-	"error_id": true, "req_id": true, "path": true, "route": true, "module": true, "client_id": true,
+	"error_id": true, "req_id": true, "path": true, "route": true, "module": true, "client_id": true, "user_id": true,
 }
 
 // where returns the filter as SQL conditions joined by `and` (starting with `where`, or empty) and their arguments.
@@ -314,11 +327,12 @@ func parseCursor(s string) (cursor, bool) {
 
 const listColumns = `id, received_at, coalesce(occurred_at, 0), kind, level, coalesce(platform, ''),
 	coalesce(environment, ''), title, coalesce(error_id, ''), coalesce(req_id, ''), coalesce(method, ''),
-	coalesce(path, ''), coalesce(route, ''), coalesce(module, ''), coalesce(client_id, '')`
+	coalesce(path, ''), coalesce(route, ''), coalesce(module, ''), coalesce(client_id, ''),
+	coalesce(user_id, '')`
 
 func scanRow(rows interface{ Scan(...any) error }, r *eventRow) error {
 	return rows.Scan(&r.ID, &r.ReceivedAt, &r.OccurredAt, &r.Kind, &r.Level, &r.Platform, &r.Environment, &r.Title,
-		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID)
+		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID, &r.UserID)
 }
 
 // list returns up to limit events matching f, newest first, starting after `before` (nil for the newest). `more`
@@ -377,7 +391,7 @@ func (s *store) get(ctx context.Context, id string) (eventRow, error) {
 	var compressed []byte
 	row := s.db.QueryRowContext(ctx, "select "+listColumns+", payload from events where id = ?", id)
 	err := row.Scan(&r.ID, &r.ReceivedAt, &r.OccurredAt, &r.Kind, &r.Level, &r.Platform, &r.Environment, &r.Title,
-		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID, &compressed)
+		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID, &r.UserID, &compressed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, errNotFound
 	}

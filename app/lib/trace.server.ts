@@ -30,6 +30,8 @@ export type RequestTrace = {
    * (`app/lib/client-id.ts`) when it sent one. Error reports carry them.
    */
   request?: { method: string; path: string; clientId?: string };
+  /** The signed-in user's database ID, once the request's session is read (`setTraceUser`). Never the email or name. */
+  userId?: string;
   start: number;
   spans: Span[];
   totals: Partial<Record<SpanKind, { count: number; ms: number }>>;
@@ -63,6 +65,15 @@ export function runWithTrace<T>(request: RequestTrace["request"], fn: (trace: Re
 /** The trace of the request being handled, or `undefined` outside one (startup, scripts, tests). */
 export function currentTrace(): RequestTrace | undefined {
   return storage.getStore();
+}
+
+/**
+ * Records who the current request is from, so its later log lines and error reports carry the user's ID. Called where
+ * the session is read (`getRequestSession` in `app/lib/auth.server.ts`). Outside a request it does nothing.
+ */
+export function setTraceUser(userId: string) {
+  const trace = currentTrace();
+  if (trace) trace.userId = userId;
 }
 
 /** The span the calling code runs inside. Read it when the work starts, for a span recorded later (`recordSpan`). */

@@ -71,8 +71,9 @@ exception, `message` the rest (`captureMessage` attaches a synthetic exception o
 browser events (`platform: javascript`) as `browser`.
 
 **Search.** A bare UUID is an `errorId` and 16 hex characters a `reqId` (8 still work, for events stored before the
-app's reqIds grew to 64 bits). `errorId:`, `reqId:`, `path:`, `route:`, `module:` and `clientId:` match that column
-exactly; anything else is searched in titles. The parsing is `listQuery.filter` in `web.go`.
+app's reqIds grew to 64 bits). `errorId:`, `reqId:`, `path:`, `route:`, `module:`, `clientId:` and `userId:` match that
+column exactly (`userId:` as typed, since the app's user IDs are mixed-case); anything else is searched in titles. The
+parsing is `listQuery.filter` in `web.go`.
 
 **Throttled repeats.** The app sends only the first few of a run of alike reports. The next one it sends carries the
 count it left out: a slow request's `timeline.skipped`, shown in its Timeline card ("N more slow requests on this route

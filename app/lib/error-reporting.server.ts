@@ -66,8 +66,8 @@ const throttleSlowRequest = createReportThrottle({ limit: 1 });
 
 /*===== Reporting =====*/
 /**
- * Tags every report with the request it came from, so its log lines can be found by `reqId`, and with the browser's
- * `clientId`, so the viewer can group it with that browser's own errors.
+ * Tags every report with the request it came from, so its log lines can be found by `reqId`, with the browser's
+ * `clientId`, so the viewer can group it with that browser's own errors, and with the signed-in user's `userId`.
  */
 function requestTags(): Record<string, string> {
   const trace = currentTrace();
@@ -77,6 +77,7 @@ function requestTags(): Record<string, string> {
     reqId: trace.id,
     ...(method && path && { method, path }),
     ...(clientId && { clientId }),
+    ...(trace.userId && { userId: trace.userId }),
   };
 }
 

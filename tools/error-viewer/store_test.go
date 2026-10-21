@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 /*===== Migrations =====*/
 
-// A database made before client IDs existed must open, keep its events, and store client IDs from then on.
+// A database made before client and user IDs existed must open, keep its events, and store both IDs from then on,
+// searchable with `userId:`.
 func TestMigrateKeepsVersion1Events(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "errors.db")
 	old, err := sql.Open("sqlite", "file:"+path)
@@ -35,7 +37,7 @@ func TestMigrateKeepsVersion1Events(t *testing.T) {
 	t.Cleanup(func() { st.close() })
 
 	newer := eventRow{ID: "1ec79c33ec9942ab8353589fcb2e04dc", ReceivedAt: 2, Kind: "error", Level: "error",
-		Title: "new", ClientID: "0f4a9c2e8b7d4e1fa3c5b6d7e8f90a1b", Payload: []byte{}}
+		Title: "new", ClientID: "0f4a9c2e8b7d4e1fa3c5b6d7e8f90a1b", UserID: "Hq3ZkV9xT2bLwA7mRc5NdY8e", Payload: []byte{}}
 	if err := st.insert([]eventRow{newer}); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +46,17 @@ func TestMigrateKeepsVersion1Events(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 2 || events[0].ClientID != newer.ClientID || events[1].ClientID != "" {
+	if len(events) != 2 || events[0].ClientID != newer.ClientID || events[0].UserID != newer.UserID ||
+		events[1].ClientID != "" || events[1].UserID != "" {
 		t.Errorf("events = %+v", events)
+	}
+
+	byUser := listQuery{Q: "userId:" + newer.UserID}.filter(time.Now())
+	events, _, err = st.list(context.Background(), byUser, nil, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].ID != newer.ID {
+		t.Errorf("userId search = %+v", events)
 	}
 }

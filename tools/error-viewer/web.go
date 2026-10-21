@@ -321,11 +321,13 @@ var (
 		"route":    {"route", false},
 		"module":   {"module", false},
 		"clientid": {"client_id", true},
+		// Better-Auth's IDs are mixed-case, so this one is matched as typed.
+		"userid": {"user_id", false},
 	}
 )
 
 // filter turns the URL state into a store filter. The search box understands a bare errorId (a UUID), a bare reqId
-// (16 hex characters, or 8 for older events), `column:value` for errorId / reqId / path / route / module / clientId, and otherwise searches
+// (16 hex characters, or 8 for older events), `column:value` for errorId / reqId / path / route / module / clientId / userId, and otherwise searches
 // titles.
 func (q listQuery) filter(now time.Time) eventFilter {
 	f := eventFilter{Level: q.Level, Kind: q.Kind, Platform: q.Platform, Environment: q.Env}

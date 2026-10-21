@@ -1,17 +1,18 @@
-import { ViewTransition } from "react";
+import { useEffect, ViewTransition } from "react";
 import { Outlet, useLocation } from "react-router";
 
 import { SiteFooter } from "~/components/shared/site-footer/site-footer";
 import { SiteHeader, type Viewer } from "~/components/shared/site-header/site-header";
-import { auth } from "~/lib/auth.server";
+import { getRequestSession } from "~/lib/auth.server";
+import { setReportedUser } from "~/lib/error-reporting.client";
 
 import type { Route } from "./+types/site-layout";
 
 /*===== Loader =====*/
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getRequestSession(request.headers);
   const viewer: Viewer | null = session ? { name: session.user.name, email: session.user.email } : null;
-  return { viewer };
+  return { viewer, userId: session?.user.id ?? null };
 }
 
 /*===== Site Layout =====*/
@@ -19,6 +20,12 @@ export async function loader({ request }: Route.LoaderArgs) {
 /** The chrome shared by every page: skip link, header, `main` landmark and footer. */
 export default function SiteLayout({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
+  const { userId } = loaderData;
+
+  /*------ Error Reports ------*/
+  // Browser reports carry the signed-in user's ID, like the server's (docs/backend/logging.md → User ID). The loader
+  // revalidates on sign-in and sign-out, which updates it.
+  useEffect(() => setReportedUser(userId), [userId]);
 
   return (
     <div className="flex min-h-svh flex-col">

@@ -58,15 +58,16 @@ const prettyStream =
  *
  * Log errors under the `err` key: `log.error({ err, errorId }, "message")`. Every such line at `error` level or above
  * is also sent to the error tracker (`app/lib/error-reporting.server.ts`), so app code never reports errors itself.
- * Lines written while a request is handled carry its `reqId`.
+ * Lines written while a request is handled carry its `reqId`, and the user's `userId` once the session is read.
  */
 export const logger = pino(
   {
     level: env.LOG_LEVEL,
     serializers: { err: serializeError },
     mixin: () => {
-      const id = currentTrace()?.id;
-      return id ? { reqId: id } : {};
+      const trace = currentTrace();
+      if (!trace) return {};
+      return trace.userId ? { reqId: trace.id, userId: trace.userId } : { reqId: trace.id };
     },
     hooks: {
       logMethod(args, method, level) {

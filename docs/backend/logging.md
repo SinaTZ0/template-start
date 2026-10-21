@@ -79,9 +79,15 @@ browser's requests, so one visitor's errors on both sides can be read together. 
 device, and identifies nobody: clearing cookies gives a new one. A browser's very first page load has no ID yet,
 because the cookie is set once that page runs.
 
-**What isn't sent.** Cookies, headers, request bodies, query strings, IP addresses and local variables are all off
-(`dataCollection` in both setups). A failed query's parameters are replaced with `(hidden)` unless `LOG_QUERY_PARAMS` is
-on.
+**User ID.** Once a request's session is read (`getRequestSession` in `app/lib/auth.server.ts`, which every session
+lookup goes through), its log lines and reports carry the signed-in user's database ID as `userId`. The browser sets
+the same tag after hydration, from the site layout's loader, and clears it on sign-out. Only the ID is sent, never the
+email or name. It does tie events to a person: the viewer is self-hosted, behind its password, and keeps events for
+30 days (`RETENTION_DAYS`), which is the accepted trade-off for finding one user's errors with `userId:`.
+
+**What isn't sent.** Cookies, headers, request bodies, query strings, IP addresses, local variables and the user's
+email and name are all off (`dataCollection` in both setups); the user's ID is the one thing set on purpose. A failed
+query's parameters are replaced with `(hidden)` unless `LOG_QUERY_PARAMS` is on.
 
 **Secrets are redacted** before a line is written or a report is sent (`app/lib/redact.server.ts`, adapted from
 `@nestjs/observe`). The logger redacts a line's fields once, for both its output and the report; the error serializer
@@ -215,11 +221,12 @@ is down. Its settings and internals are in [its README](../../tools/error-viewer
   environment and time, a 14-day count strip and an auto-refresh toggle. Every view is a URL you can bookmark.
   Consecutive events with the same `clientId` are drawn as one card, with the client and its event count on the first
   row. Only neighbors group: a client whose events are interleaved with another's shows as separate cards.
-- **Search box:** a UUID finds an `errorId`, 16 hex characters a `reqId` (8 for events stored before reqIds grew); `errorId:`, `reqId:`, `path:`, `route:`,
-  `module:` and `clientId:` match that field exactly; anything else is searched in titles.
-- **Detail** (`/events/<id>`): tags (each `errorId`, `reqId`, `path`, `route` and `clientId` links to the list filtered by it), the
-  exception chain with source lines for the app's own frames, the timeline of a slow request, the log line's fields,
-  browser details and the raw JSON.
+- **Search box:** a UUID finds an `errorId`, 16 hex characters a `reqId` (8 for events stored before reqIds grew);
+  `errorId:`, `reqId:`, `path:`, `route:`, `module:`, `clientId:` and `userId:` match that field exactly; anything
+  else is searched in titles.
+- **Detail** (`/events/<id>`): tags (each `errorId`, `reqId`, `path`, `route`, `clientId` and `userId` links to the
+  list filtered by it), the exception chain with source lines for the app's own frames, the timeline of a slow
+  request, the log line's fields, browser details and the raw JSON.
 
 ### Development
 

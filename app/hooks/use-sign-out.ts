@@ -3,6 +3,7 @@ import { useNavigate, useRevalidator } from "react-router";
 
 import { toast } from "~/components/primitive/toast/toast";
 import { authClient } from "~/lib/auth-client";
+import { setReportedUser } from "~/lib/error-reporting.client";
 
 /*===== Sign Out =====*/
 /** Signs out and goes home, then forgets this account's cached data. */
@@ -17,6 +18,8 @@ export function useSignOut() {
       if (error) throw new Error(error.message ?? "Sign-out failed");
     },
     onSuccess: async () => {
+      // At once: the layout clears it too, but only once its loader has revalidated.
+      setReportedUser(null);
       await navigate("/");
       // A plain navigation keeps the mounted layout's loader data, so the header would still show the account.
       await revalidator.revalidate();

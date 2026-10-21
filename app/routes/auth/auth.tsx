@@ -2,7 +2,7 @@ import { redirect, useNavigate, useRevalidator } from "react-router";
 
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/primitive/card/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/primitive/tabs/tabs";
-import { auth } from "~/lib/auth.server";
+import { getRequestSession } from "~/lib/auth.server";
 import { pageMeta } from "~/lib/seo";
 import { SignInForm } from "~/routes/auth/components/sign-in-form";
 import { SignUpForm } from "~/routes/auth/components/sign-up-form";
@@ -19,7 +19,7 @@ export const meta: Route.MetaFunction = (args) => pageMeta({ args, title: "ور�
 /*===== Loader =====*/
 export async function loader({ request }: Route.LoaderArgs) {
   const redirectTo = safeRedirect(new URL(request.url).searchParams.get("redirectTo"));
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getRequestSession(request.headers);
 
   // Signed-in people have nothing to do here.
   if (session) throw redirect(redirectTo);

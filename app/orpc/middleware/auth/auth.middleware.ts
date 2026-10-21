@@ -1,6 +1,6 @@
 import { ORPCError, os } from "@orpc/server";
 
-import { auth } from "~/lib/auth.server";
+import { getRequestSession } from "~/lib/auth.server";
 import type { UserRole } from "~/lib/user-constants";
 
 /*===== Require User =====*/
@@ -12,7 +12,7 @@ import type { UserRole } from "~/lib/user-constants";
  * accounts can't sign in, but a session from before the block may still exist until it is revoked.
  */
 export const requireUserMiddleware = os.$context<{ headers: Headers }>().middleware(async ({ context, next }) => {
-  const session = await auth.api.getSession({ headers: context.headers });
+  const session = await getRequestSession(context.headers);
 
   if (!session || session.user.status === "blocked") {
     throw new ORPCError("UNAUTHORIZED", {

@@ -10,6 +10,7 @@ import { verifyAltchaPayload } from "~/lib/altcha.server";
 import { ACCOUNT_BLOCKED_CODE, ALTCHA_HEADER, CAPTCHA_FAILED_CODE } from "~/lib/auth-constants";
 import { createLogger } from "~/lib/logger.server";
 import { CLIENT_ADDRESS_HEADER } from "~/lib/rate-limit.server";
+import { setTraceUser } from "~/lib/trace.server";
 
 const log = createLogger("auth");
 
@@ -17,8 +18,7 @@ const log = createLogger("auth");
 /**
  * Better-Auth server instance: email + password accounts with database sessions.
  *
- * Mounted at `/api/auth/*` (see `app/routes/api_auth/`). Server code reads the session with
- * `auth.api.getSession({ headers })`.
+ * Mounted at `/api/auth/*` (see `app/routes/api_auth/`). Server code reads the session with `getRequestSession`.
  */
 export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
@@ -87,6 +87,17 @@ export const auth = betterAuth({
 });
 
 export type AuthSession = typeof auth.$Infer.Session;
+
+/*===== Session =====*/
+/**
+ * The session the request's cookies belong to, or `null`. Read it through this rather than `auth.api.getSession`, so
+ * the rest of the request's log lines and error reports carry the signed-in user's ID (`setTraceUser`).
+ */
+export async function getRequestSession(headers: Headers): Promise<AuthSession | null> {
+  const session = await auth.api.getSession({ headers });
+  if (session) setTraceUser(session.user.id);
+  return session;
+}
 
 /*===== Session Revocation =====*/
 /** Signs a user out everywhere by deleting all their sessions, e.g. once they are blocked. */
