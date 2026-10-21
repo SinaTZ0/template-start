@@ -6,11 +6,26 @@ import { logRequest } from "~/lib/request-log.server";
 import { runWithTrace } from "~/lib/trace.server";
 import { startMediaCleanup } from "~/orpc/media/cleanup.server";
 
+import { getRouter } from "./router";
+
 const log = createLogger("http");
 
 /*===== Background Jobs =====*/
 // The server entry is loaded once when the server starts, which makes it the place to start in-process jobs.
 startMediaCleanup();
+
+/*===== Route Patterns =====*/
+// A router kept only to match paths: it never loads or renders anything.
+const routeMatcher = getRouter();
+
+/**
+ * The route pattern a path matched (`/notes/$id`), so the request log and slow-request reports group a route's
+ * requests together. Paths no route matches (server functions, assets, 404s) are returned as they are.
+ */
+function routePattern(path: string): string {
+  const [, , foundRoute] = routeMatcher.getMatchedRoutes(path);
+  return foundRoute?.fullPath ?? path;
+}
 
 /*===== Request Handling =====*/
 /** Sets a header, copying the response first when its headers are immutable (`Response.redirect`, a proxied fetch). */
@@ -50,8 +65,7 @@ export default createServerEntry({
 
       // Shows in the browser's devtools, so a bug report can quote the ID its log lines carry.
       response = withHeader({ response, name: "X-Request-Id", value: trace.id });
-      // Grouped by path: procedure calls (`/rpc/note/list`) already name what ran.
-      logRequest({ request: line, status: response.status, route: line.path, trace });
+      logRequest({ request: line, status: response.status, route: routePattern(line.path), trace });
       return response;
     });
   },
