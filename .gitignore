@@ -10,6 +10,8 @@
 /backups/
 *.key
 *.pfx
+# Tools deploy/deploy.sh downloads for itself (gum).
+/deploy/.bin/
 
 # TanStack Start and Nitro build output
 /.output/

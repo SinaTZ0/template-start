@@ -5,7 +5,8 @@
 #   deploy/deploy.sh <command>   the same actions without the menu, for cron and scripts (`deploy/deploy.sh help`)
 #
 # Needs bash, git, Docker with Compose 2.23.1+, openssl and curl. Without a terminal (cron) it never asks: it uses the
-# flags or the defaults, or stops with an error naming the flag to pass.
+# flags or the defaults, or stops with an error naming the flag to pass. On a terminal it draws its prompts with gum,
+# which it downloads into deploy/.bin (Prompts below); NO_GUM=1 keeps the plain ones.
 set -euo pipefail
 shopt -s inherit_errexit
 
@@ -22,6 +23,8 @@ SERVICES=(app caddy error-viewer db seaweedfs)
 MIN_COMPOSE="2.23.1"
 # Reads and writes the image store's volume for media backups. Any image with `sh`, `find` and `tar` works.
 HELPER_IMAGE="busybox:1.37"
+# Tools the script downloads for itself (gitignored).
+BIN_DIR="$SCRIPT_DIR/.bin"
 
 if [[ -t 0 && -t 1 ]]; then INTERACTIVE=1; else INTERACTIVE=0; fi
 
@@ -42,15 +45,79 @@ die() {
   exit 1
 }
 
+# ===== gum =====
+# gum (https://github.com/charmbracelet/gum) draws the prompts on a terminal: arrow-key menus, answers that can be
+# edited in place, spinners. It's one binary, pinned and checked against its release checksum, kept in deploy/.bin.
+# Nothing depends on it: without a terminal, with NO_GUM=1, or when it can't be downloaded (GitHub unreachable), the
+# prompts are plain `read`s.
+GUM_VERSION="2.0.2"
+declare -A GUM_SHA256=(
+  [x86_64]=d842e06d93dbed90af48cb8dd10698db6f22e331fc40346bb37bbc753109edc2
+  [arm64]=8ebf8b54ec1e8c81f2bb58b59ff9b70998186a4d11375f0cf357b80e0ccfa1d5
+)
+GUM=""
+
+# Sets GUM, downloading gum the first time. A failed download is remembered, so a server that can't reach GitHub
+# doesn't wait for it on every run.
+find_gum() {
+  local bin="$BIN_DIR/gum-$GUM_VERSION" arch url work
+  [[ $INTERACTIVE == 1 && -z ${NO_GUM:-} ]] || return 0
+  # gum lays itself out by the terminal's size, and crashes on one that reports none.
+  [[ $(stty size 2>/dev/null) =~ ^[1-9][0-9]*\ [1-9][0-9]*$ ]] || return 0
+
+  if [[ ! -x $bin && ! -f $bin.unavailable ]]; then
+    case $(uname -m) in
+      x86_64 | amd64) arch=x86_64 ;;
+      aarch64 | arm64) arch=arm64 ;;
+      *) return 0 ;;
+    esac
+    command -v sha256sum >/dev/null && mkdir -p "$BIN_DIR" 2>/dev/null || return 0
+    url="https://github.com/charmbracelet/gum/releases/download/v$GUM_VERSION/gum_${GUM_VERSION}_Linux_$arch.tar.gz"
+    printf '%sDownloading gum %s for the menus (once)…%s\n' "$DIM" "$GUM_VERSION" "$RESET" >&2
+    work=$(mktemp -d)
+    if curl -fsSL --connect-timeout 5 --max-time 60 -o "$work/gum.tar.gz" "$url" &&
+      [[ $(sha256sum "$work/gum.tar.gz" | cut -d' ' -f1) == "${GUM_SHA256[$arch]}" ]] &&
+      tar xzf "$work/gum.tar.gz" -C "$work" --strip-components 1 "gum_${GUM_VERSION}_Linux_$arch/gum" &&
+      mv "$work/gum" "$bin"; then
+      # Other versions' binaries and failure marks: a version bump downloads (or retries) its own.
+      find "$BIN_DIR" -maxdepth 1 -name 'gum-*' ! -name "gum-$GUM_VERSION" -delete
+    else
+      touch "$bin.unavailable" 2>/dev/null || true
+      warn "Couldn't download gum, so the prompts stay plain. To try again: rm $bin.unavailable"
+    fi
+    rm -rf "$work"
+  fi
+  if [[ -x $bin ]]; then GUM=$bin; fi
+}
+
+# Runs a gum prompt and prints its answer. gum reads the keys itself, so Ctrl-C never reaches the script as a signal:
+# Esc and Ctrl-C give up by sending SIGINT to the process group, as Ctrl-C at a plain prompt would. That ends the
+# action, or the script outside the menu, which ignores it and comes back.
+gum_prompt() {
+  local rc=0
+  "$GUM" "$@" || rc=$?
+  if ((rc != 0)); then
+    kill -INT 0
+    exit 130
+  fi
+}
+
+# gum clears a prompt once it's answered; this leaves the question and its answer in the scrollback.
+show_answer() { printf '%s%s%s  %s\n' "$DIM" "$1" "$RESET" "$2" >&2; }
+
 # ===== Prompts =====
 # Each prompt reads from the terminal and prints the answer, so it's used as `answer=$(ask …)`. Without a terminal it
 # stops the script; `flag` tells the caller what to pass instead.
 
-# ask <question> [default] [flag]
+# ask <question> [default] [flag]: with gum, the default is filled in, ready to edit.
 ask() {
   local question=$1 default=${2:-} flag=${3:-} answer
   [[ $INTERACTIVE == 1 ]] || die "No terminal to ask \"$question\"${flag:+: pass $flag}."
-  if [[ -n $default ]]; then
+  if [[ -n $GUM ]]; then
+    answer=$(gum_prompt input --header "$question" --header.foreground 99 --value "$default" --placeholder "" \
+      --char-limit 0)
+    show_answer "$question" "${answer:-(none)}"
+  elif [[ -n $default ]]; then
     read -r -p "$question [$default]: " answer
   else
     read -r -p "$question: " answer
@@ -60,11 +127,21 @@ ask() {
 
 # confirm <question> <y|n>: the default is what Enter answers, and what runs without a terminal.
 confirm() {
-  local question=$1 default=$2 answer hint="[y/N]"
+  local question=$1 default=$2 answer hint="[y/N]" rc=0
   [[ $default == y ]] && hint="[Y/n]"
   if [[ $INTERACTIVE != 1 ]]; then
     [[ $default == y ]]
     return
+  fi
+  if [[ -n $GUM ]]; then
+    # 1 is No, and also Esc; only Ctrl-C (130) gives up.
+    "$GUM" confirm "$question" "--default=$([[ $default == y ]] && echo true || echo false)" || rc=$?
+    if ((rc == 130)); then
+      kill -INT 0
+      exit 130
+    fi
+    show_answer "$question" "$( ((rc == 0)) && echo yes || echo no)"
+    return "$rc"
   fi
   read -r -p "$question $hint " answer
   answer=${answer:-$default}
@@ -73,9 +150,17 @@ confirm() {
 
 # choose <question> <option>…: prints the chosen option's number, from 1.
 choose() {
-  local question=$1 i answer
+  local question=$1 i answer options=()
   shift
   [[ $INTERACTIVE == 1 ]] || die "No terminal to ask \"$question\"."
+  if [[ -n $GUM ]]; then
+    # `label<TAB>number`: gum shows the label and prints the number.
+    for i in $(seq 1 $#); do options+=("${!i}"$'\t'"$i"); done
+    answer=$(gum_prompt choose --header "$question" --label-delimiter $'\t' --height 15 "${options[@]}")
+    show_answer "$question" "${!answer}"
+    printf '%s' "$answer"
+    return
+  fi
   info "$question" >&2
   for i in $(seq 1 $#); do printf '  %s) %s\n' "$i" "${!i}" >&2; done
   while true; do
@@ -92,9 +177,46 @@ choose() {
 ask_secret() {
   local question=$1 answer
   [[ $INTERACTIVE == 1 ]] || die "No terminal to ask \"$question\"."
+  if [[ -n $GUM ]]; then
+    answer=$(gum_prompt input --header "$question" --header.foreground 99 --password --placeholder "" --char-limit 0)
+    show_answer "$question" "$([[ -n $answer ]] && echo "(hidden)" || echo "(none)")"
+    printf '%s' "$answer"
+    return
+  fi
   read -r -s -p "$question: " answer
   printf '\n' >&2
   printf '%s' "$answer"
+}
+
+# spin <title> <command…>: runs the command with a spinner. The command runs in the background with its stderr held
+# back until it ends, so its messages don't tear through the spinner; gum only watches for it to finish. Nothing but
+# the command writes to stdout, which callers redirect into files (a dump).
+spin() {
+  local title=$1 pid err rc=0
+  shift
+  if [[ -z $GUM ]]; then
+    printf '%s%s…%s\n' "$DIM" "$title" "$RESET" >&2
+    "$@"
+    return
+  fi
+  err=$(mktemp)
+  # `<&0`: a background command's stdin is /dev/null otherwise, and a restore streams its dump in through it.
+  "$@" <&0 2>"$err" &
+  pid=$!
+  "$GUM" spin --title "$title" -- sh -c 'while kill -0 "$1" 2>/dev/null; do sleep 0.2; done' sh "$pid" \
+    </dev/tty || rc=$?
+  if ((rc == 130)); then
+    rm -f "$err"
+    # Background jobs ignore SIGINT, so the command needs its own signal.
+    kill "$pid" 2>/dev/null || true
+    kill -INT 0
+    exit 130
+  fi
+  rc=0
+  wait "$pid" || rc=$?
+  cat "$err" >&2
+  rm -f "$err"
+  return "$rc"
 }
 
 DOMAIN_RE='^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'
@@ -919,11 +1041,10 @@ running app and the database as they were. Once it's fixed, choose Settings → 
   # The containers now run with this .env, even if the app turns out unhealthy below.
   record_applied "$fingerprint"
 
-  step "Waiting for the app to turn healthy"
-  wait_healthy app ||
+  spin "Waiting for the app to turn healthy" wait_healthy app ||
     die "The app didn't turn healthy. Its logs: deploy/deploy.sh logs app. Once it's fixed, choose Settings → Apply."
   ok "App is healthy"
-  if wait_healthy error-viewer 60; then
+  if spin "Waiting for the error viewer" wait_healthy error-viewer 60; then
     ok "Error viewer is healthy"
   else
     warn "The error viewer didn't turn healthy. Its logs: deploy/deploy.sh logs error-viewer"
@@ -1175,7 +1296,7 @@ backup_db() {
   local dir=$1 file="$1/db-$2${3:-}.dump"
   [[ $(container_state db) == healthy ]] || die "The database isn't running, so it can't be backed up."
   mkdir -p "$dir"
-  if ! (umask 077 && dc exec -T db pg_dump -U app -Fc app </dev/null >"$file.part"); then
+  if ! (umask 077 && spin "Dumping the database" dc exec -T db pg_dump -U app -Fc app </dev/null >"$file.part"); then
     rm -f "$file.part"
     die "pg_dump failed (see above)."
   fi
@@ -1192,7 +1313,8 @@ backup_media() {
   mkdir -p "$dir"
   step "Stopping the image store (images don't load until it's back)"
   dc stop seaweedfs
-  (umask 077 && docker run --rm --volumes-from "$id" "$HELPER_IMAGE" tar czf - -C /data . >"$file.part") || rc=$?
+  (umask 077 && spin "Copying the media" docker run --rm --volumes-from "$id" "$HELPER_IMAGE" tar czf - -C /data . \
+    >"$file.part") || rc=$?
   dc start seaweedfs
   if ((rc != 0)); then
     rm -f "$file.part"
@@ -1509,12 +1631,13 @@ restore_db() {
   backup_db "$dir" "$(date +%Y%m%d-%H%M%S)" "-pre-restore"
   step "Stopping the app"
   dc stop app
-  step "Restoring $(basename "$file")"
-  dc exec -T db pg_restore -U app -d app --clean --if-exists --no-owner --single-transaction <"$file" || rc=$?
+  spin "Restoring $(basename "$file")" \
+    dc exec -T db pg_restore -U app -d app --clean --if-exists --no-owner --single-transaction <"$file" || rc=$?
   step "Starting the app"
   dc start app
   ((rc == 0)) || die "The restore failed and was rolled back: the database is as it was, and the app is running."
-  wait_healthy app || warn "The app didn't turn healthy. Its logs: deploy/deploy.sh logs app"
+  spin "Waiting for the app to turn healthy" wait_healthy app ||
+    warn "The app didn't turn healthy. Its logs: deploy/deploy.sh logs app"
   ok "Database restored from $(basename "$file")"
 }
 
@@ -1527,8 +1650,7 @@ restore_media() {
   fi
   step "Stopping the image store"
   dc stop seaweedfs
-  step "Restoring $(basename "$file")"
-  docker run --rm -i --volumes-from "$id" "$HELPER_IMAGE" \
+  spin "Restoring $(basename "$file")" docker run --rm -i --volumes-from "$id" "$HELPER_IMAGE" \
     sh -c 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} + && tar xzf - -C /data' <"$file" || rc=$?
   dc start seaweedfs
   ((rc == 0)) || die "The restore failed part-way, so the media may be incomplete. Restore a backup again."
@@ -1836,6 +1958,12 @@ draw_menu() {
   local i rule="─────────────────────────────────────────────────────"
   printf '\e[H\e[2J'
   printf '%sDeploy%s  %s\n\n' "$BOLD" "$RESET" "$(env_get DOMAIN)"
+  # With gum the status comes first, boxed, and pick_action lists the actions under it.
+  if [[ -n $GUM ]]; then
+    status_box
+    printf '\n'
+    return
+  fi
   for i in "${!MENU_KEYS[@]}"; do
     if menu_available "${MENU_KEYS[$i]}"; then
       printf '  %s) %-17s %s%s%s\n' "$((i + 1))" "${MENU_LABELS[$i]}" "$DIM" "${MENU_HINTS[$i]}" "$RESET"
@@ -1851,17 +1979,45 @@ draw_menu() {
   printf '  %s%s%s\n\n' "$DIM" "$rule" "$RESET"
 }
 
+# The status lines in a box. A box as wide as its longest line breaks apart on a narrower terminal, so a line that
+# doesn't fit (a long list of missing settings) makes the box the terminal's width, and gum wraps it.
+status_box() {
+  local lines cols longest width=()
+  lines=$(render_status | sed 's/^  //')
+  cols=$(stty size 2>/dev/null | cut -d' ' -f2)
+  longest=$(sed 's/\x1b\[[0-9;]*m//g' <<<"$lines" | awk '{ if (length > n) n = length } END { print n + 0 }')
+  ((longest + 4 <= ${cols:-80})) || width=(--width "$((${cols:-80} - 2))")
+  "$GUM" style --border rounded --border-foreground 240 --padding "0 1" "${width[@]}" <<<"$lines"
+}
+
+# Prints the key of the action picked from gum's list, or `quit`. Only the available actions are listed.
+pick_action() {
+  local i options=()
+  for i in "${!MENU_KEYS[@]}"; do
+    menu_available "${MENU_KEYS[$i]}" || continue
+    options+=("$(printf '%-17s %s' "${MENU_LABELS[$i]}" "${MENU_HINTS[$i]}")"$'\t'"${MENU_KEYS[$i]}")
+  done
+  options+=("Quit"$'\t'"quit")
+  # Esc and Ctrl-C quit too.
+  "$GUM" choose --header "" --label-delimiter $'\t' --height "${#options[@]}" "${options[@]}" || echo quit
+}
+
 menu() {
   [[ $INTERACTIVE == 1 ]] || die "No terminal for the menu: pass a command (deploy/deploy.sh help)."
   local choice key rc
   while true; do
     draw_menu
-    read -r -p "Choose: " choice || exit 0
-    case $choice in
-      0 | q | Q) exit 0 ;;
-      [1-9]) key=${MENU_KEYS[choice - 1]} ;;
-      *) continue ;;
-    esac
+    if [[ -n $GUM ]]; then
+      key=$(pick_action)
+      [[ $key != quit ]] || exit 0
+    else
+      read -r -p "Choose: " choice || exit 0
+      case $choice in
+        0 | q | Q) exit 0 ;;
+        [1-9]) key=${MENU_KEYS[choice - 1]} ;;
+        *) continue ;;
+      esac
+    fi
     if ! menu_available "$key"; then
       warn "Not available: $([[ $key == setup ]] && echo "this server is already set up" || echo "set up first")."
       pause
@@ -1916,6 +2072,8 @@ EOF
 
 main() {
   local command=${1:-menu}
+  # Not for the script downloaded on its own, outside a checkout: it would leave deploy/.bin wherever it was saved.
+  if is_checkout; then find_gum; fi
   (($# == 0)) || shift
   case $command in
     menu) menu ;;

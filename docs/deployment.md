@@ -62,6 +62,14 @@ only Set up is available; after it, everything else.
 Every action is also a command, for cron and scripts: `deploy/deploy.sh help` lists them. Without a terminal the
 script never asks: it uses the flags or the defaults, or stops and names the flag it needs.
 
+**gum.** On a terminal the script draws its prompts with [gum](https://github.com/charmbracelet/gum): the status in a
+box with the actions in an arrow-key list under it, answers you can edit in place (a default is filled in), hidden
+password input and a spinner on the slow steps (waiting for health, dumps, restores). Esc or Ctrl-C at a prompt gives
+up on the action and goes back to the menu. gum is one binary: the first run downloads the version pinned in the
+script into `deploy/.bin/` (gitignored) and checks it against the release's checksum. Nothing depends on it. When the
+download fails (the server can't reach GitHub) the script says so once and keeps the plain numbered prompts above;
+`rm deploy/.bin/gum-*.unavailable` tries again. `NO_GUM=1 deploy/deploy.sh` uses the plain prompts on purpose.
+
 ## First Deploy
 
 Needs a server with Docker and Compose 2.23.1 or later, git, openssl and curl, DNS records for the domain and the error
