@@ -159,8 +159,8 @@ server can reach, and deploy again (Settings: edit `.env`, then apply).
 
 Choose Update (`deploy/deploy.sh update`). It stops if files on the server were changed (`git pull` could clash with
 them), dumps the database first (`db-<time>-pre-update.dump`: a migration can't be undone by going back a commit),
-pulls, then hands over to the pulled copy of the script, which checks `.env` (Settings below), rebuilds, waits for the
-app to turn healthy and removes the stack's old images (only its own). The pulled copy, because its settings registry
+pulls, then hands over to the pulled copy of the script, which checks `.env` (Settings below), rebuilds, replaces the
+app without downtime (below) and removes the stack's old images (only its own). The pulled copy, because its settings registry
 knows the variables the new commits added: they're added to `.env` and filled in or asked for before the build. Without
 a terminal (cron), a new value it can't generate stops the update after the pull and before the build, naming the
 variable: the app that was running keeps running. By hand:
@@ -170,10 +170,27 @@ git pull
 docker compose -f compose.prod.yaml up -d --build
 ```
 
-Compose builds the new image, runs `migrate` and `storage-init`, and starts the new app container only once both have
-succeeded. A failing migration stops the deploy there: the database is unchanged (pending migrations run in one
-transaction), and the app isn't started on the new image. Expect a few seconds of downtime while the app container is
-replaced.
+By hand, Compose builds the new image, runs `migrate` and `storage-init`, and starts the new app container only once
+both have succeeded; expect a few seconds of downtime while the app container is replaced.
+
+**Without downtime.** Update and Apply replace a healthy app the way
+[docker-rollout](https://github.com/wowu/docker-rollout) does, without installing it:
+
+1. Build the images. A failed build changes nothing.
+2. Update every other service (`up --no-deps`, so Compose leaves the app alone), then run `migrate` and
+   `storage-init` on the new image. A failing migration stops here: the database is unchanged (pending migrations run
+   in one transaction) and the old app keeps serving.
+3. Start a second app container on the new image beside the old one, and wait for it to turn healthy. Caddy proxies
+   to `app`, which Docker's DNS resolves to both, and retries a request that can't connect for up to 5 seconds
+   (`lb_try_duration` in `deploy/Caddyfile`).
+4. Stop and remove the old container. It finishes what it's serving on SIGTERM.
+
+A new container that doesn't turn healthy within 3 minutes is removed, its last log lines are printed, and the old one
+keeps serving. The migrations it ran stay applied; the pre-update dump has the database from before them. When the app
+isn't running (the first deploy, or after a crash), the script starts the whole stack at once instead. The deploy also
+reloads Caddy, which picks up an edited `deploy/Caddyfile` without dropping connections; Compose wouldn't, since the
+Caddyfile is a mounted file. The error viewer is restarted in place when its image changes, so it's down for a few
+seconds.
 
 ## Settings (.env)
 
@@ -246,8 +263,9 @@ Database. Production runs exactly these files, through the `migrate` job.
 Generated SQL can't move data, so for a rename or a backfill, edit the generated file before committing it (or start an
 empty one with `pnpm db:generate --custom`).
 
-The old app keeps running while `migrate` applies a new migration, for the seconds until it's replaced. A migration
-that drops or renames something the old code still reads can fail its requests in that window. For a busy app, split
+The old app keeps running while `migrate` applies a new migration, and keeps serving beside the new one until the new
+one is healthy (Updating above). A migration that drops or renames something the old code still reads can fail its
+requests in that window. For a busy app, split
 such changes over two deploys: first add the new shape and ship code that uses it, then remove the old shape.
 
 ## Rate Limiting

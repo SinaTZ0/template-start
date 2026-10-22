@@ -988,8 +988,13 @@ require_tools() {
     die "Can't reach Docker. Is it running, and is $(whoami) in the docker group (or run this with sudo)?"
 }
 
-# healthy | unhealthy | starting for a service with a health check, else running | exited | …; missing when there's no
-# container (or no stack yet).
+# healthy | unhealthy | starting for a container with a health check, else running | exited | …; missing when it's gone.
+id_state() {
+  docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null ||
+    echo missing
+}
+
+# A service's state, as id_state; missing when it has no container (or there's no stack yet).
 container_state() {
   local id
   id=$(dc ps -a -q "$1" 2>/dev/null | head -n 1 || true)
@@ -997,7 +1002,7 @@ container_state() {
     echo missing
     return
   fi
-  docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id"
+  id_state "$id"
 }
 
 # wait_healthy <service> [seconds]. An unhealthy container may still recover inside the wait, so only a stopped one
@@ -1015,18 +1020,36 @@ wait_healthy() {
   return 1
 }
 
-# Builds and starts the stack. Compose runs `migrate` and `storage-init` first and starts the new app only if both
-# succeed, so a failure here leaves the database and the running app as they were. Always `--build`: SENTRY_DSN is a
-# build argument of the browser bundle, so an .env change can need a new image.
+# wait_container <id> [seconds]: wait_healthy for one container.
+wait_container() {
+  local id=$1 timeout=${2:-180} waited=0
+  while ((waited < timeout)); do
+    case $(id_state "$id") in
+      healthy | running) return 0 ;;
+      exited | dead | missing) return 1 ;;
+    esac
+    sleep 3
+    waited=$((waited + 3))
+  done
+  return 1
+}
+
+# Builds the images and starts the stack. A running, healthy app is replaced without downtime (rollout_app); otherwise
+# (the first deploy, or an app that's down anyway) Compose starts everything at once. Either way `migrate` and
+# `storage-init` run before the new app starts, and a failed build or migration leaves the running app and the database
+# as they were. Always a build: SENTRY_DSN is a build argument of the browser bundle, so an .env change can need a new
+# image.
 deploy_stack() {
   # Docker would create a missing bind-mount folder as root, which this script then couldn't write certificates into.
   mkdir -p "$CERT_DIR"
-
-  step "Building and starting the stack"
-  local log fingerprint
+  local log fingerprint rolling=0 service others=()
   fingerprint=$(env_fingerprint "$ENV_FILE")
+  if [[ $(container_state app) == healthy ]]; then rolling=1; fi
+
+  # ------ Build ------
+  step "Building"
   log=$(mktemp)
-  if ! dc up -d --build --remove-orphans 2>&1 | tee "$log"; then
+  if ! dc build 2>&1 | tee "$log"; then
     # Where Google blocks the region, the error viewer's build gets 403 from Go's module proxy (docs/deployment.md).
     if grep -q 'proxy.golang.org.*403 Forbidden' "$log"; then
       rm -f "$log"
@@ -1034,16 +1057,46 @@ deploy_stack() {
 (e.g. GOPROXY=https://goproxy.cn): choose Settings, edit .env, then apply (deploy/deploy.sh apply)."
     fi
     rm -f "$log"
-    die "The deploy stopped (see above). Nothing that was running was replaced: a failed build or migration leaves the
-running app and the database as they were. Once it's fixed, choose Settings → Apply (deploy/deploy.sh apply)."
+    die "The build failed (see above). Nothing that was running was replaced. Once it's fixed, choose Settings → Apply
+(deploy/deploy.sh apply)."
   fi
   rm -f "$log"
-  # The containers now run with this .env, even if the app turns out unhealthy below.
-  record_applied "$fingerprint"
 
-  spin "Waiting for the app to turn healthy" wait_healthy app ||
-    die "The app didn't turn healthy. Its logs: deploy/deploy.sh logs app. Once it's fixed, choose Settings → Apply."
+  if ((rolling)); then
+    # ------ Everything But the App ------
+    # `--no-deps`, so Compose leaves the app alone: only rollout_app replaces it.
+    step "Updating the other services"
+    for service in "${SERVICES[@]}"; do [[ $service == app ]] || others+=("$service"); done
+    dc up -d --no-deps --remove-orphans "${others[@]}" ||
+      die "Starting the other services failed (see above). The app that was running still runs."
+
+    step "Running migrations"
+    dc run --rm -T migrate </dev/null && dc run --rm -T storage-init </dev/null ||
+      die "The migration or the bucket setup failed (see above). The app that was running still runs, and pending
+migrations run in one transaction, so the database is as it was. Once it's fixed, choose Settings → Apply."
+
+    rollout_app
+    record_applied "$fingerprint"
+  else
+    # ------ Everything at Once ------
+    step "Starting the stack"
+    dc up -d --remove-orphans ||
+      die "The deploy stopped (see above). A failed migration leaves the database as it was. Once it's fixed, choose
+Settings → Apply (deploy/deploy.sh apply)."
+    # The containers now run with this .env, even if the app turns out unhealthy below.
+    record_applied "$fingerprint"
+    spin "Waiting for the app to turn healthy" wait_healthy app ||
+      die "The app didn't turn healthy. Its logs: deploy/deploy.sh logs app. Once it's fixed, choose Settings → Apply."
+  fi
   ok "App is healthy"
+
+  # ------ Caddy and the Error Viewer ------
+  # Compose recreates Caddy only when its own config changes, not the mounted Caddyfile. A reload applies an edited
+  # Caddyfile without dropping connections, and does nothing when it's unchanged.
+  if [[ $(container_state caddy) == running ]]; then
+    dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile </dev/null >/dev/null 2>&1 ||
+      warn "Caddy didn't reload its Caddyfile. Its logs: deploy/deploy.sh logs caddy"
+  fi
   if spin "Waiting for the error viewer" wait_healthy error-viewer 60; then
     ok "Error viewer is healthy"
   else
@@ -1057,6 +1110,37 @@ running app and the database as they were. Once it's fixed, choose Settings → 
   if [[ -n $project ]]; then
     docker image prune -f --filter "label=com.docker.compose.project=$project" >/dev/null
   fi
+}
+
+# Replaces the running app without downtime: a new app container starts beside the old one, and the old one stops once
+# the new one is healthy. Caddy proxies to `app`, which Docker's DNS resolves to every running app container, so
+# requests reach whichever is up; the old one finishes what it's serving on SIGTERM. A new container that doesn't turn
+# healthy is removed and the old one keeps serving. The steps of docker-rollout (github.com/wowu/docker-rollout),
+# without installing it.
+rollout_app() {
+  local old new count old_ids
+  old=$(dc ps -q app)
+  count=$(grep -c . <<<"$old")
+
+  step "Starting the new app beside the old one"
+  # `--no-recreate` keeps the old container as it is; the larger scale adds one on the new image.
+  dc up -d --no-deps --no-recreate --scale "app=$((count + 1))" app ||
+    die "The new app didn't start (see above). The old one still serves."
+  new=$(dc ps -q app | grep -vxF "$old" | head -n 1 || true)
+  [[ -n $new ]] || die "Compose started no new app container. The old one still serves."
+
+  if ! spin "Waiting for the new app to turn healthy" wait_container "$new"; then
+    docker logs --tail 30 "$new" 2>&1 || true
+    docker rm -f "$new" >/dev/null
+    die "The new app didn't turn healthy (its last log lines are above), so it was removed: the old one still serves.
+Migrations the new version ran stay applied (Update's pre-update dump has the database from before them). Once it's
+fixed, choose Settings → Apply (deploy/deploy.sh apply)."
+  fi
+
+  step "Stopping the old app"
+  mapfile -t old_ids <<<"$old"
+  docker stop "${old_ids[@]}" >/dev/null
+  docker rm "${old_ids[@]}" >/dev/null
 }
 
 # ===== Ports =====

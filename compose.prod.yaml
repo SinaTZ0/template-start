@@ -49,9 +49,9 @@ services:
       # Certificates and their keys: keep this volume, or every restart requests new ones (and hits rate limits).
       - caddy_data:/data
       - caddy_config:/config
-    depends_on:
-      - app
-      - error-viewer
+    # No `depends_on`: Caddy resolves `app` and `error-viewer` per request, not at startup. And `deploy/deploy.sh`
+    # updates everything but the app with `up --no-deps`, which drops unselected services from a `depends_on` label,
+    # so Caddy's config would look changed and Compose would recreate it mid-update, dropping requests.
     logging: *logging
 
   app:

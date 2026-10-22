@@ -63,6 +63,9 @@
 			# The app rate-limits by the visitor's address, which it reads from X-Real-IP (`app/lib/rate-limit.server.ts`).
 			# Setting it replaces any value the visitor sent.
 			header_up X-Real-IP {remote_host}
+			# During an update `app` resolves to the old and the new container (deploy/deploy.sh, rollout_app). A request
+			# that can't connect to the one that's stopping is retried for up to 5 seconds instead of failing.
+			lb_try_duration 5s
 		}
 	}
 }
