@@ -21,6 +21,8 @@ APPLIED_FILE="$ROOT/.env.applied"
 CERT_DIR="$ROOT/certs"
 SERVICES=(app caddy error-viewer db seaweedfs)
 MIN_COMPOSE="2.23.1"
+# App images kept for Roll back, newest first, tagged with their commit (Versions below).
+KEEP_VERSIONS=3
 # Reads and writes the image store's volume for media backups. Any image with `sh`, `find` and `tar` works.
 HELPER_IMAGE="busybox:1.37"
 # Tools the script downloads for itself (gitignored).
@@ -988,10 +990,12 @@ require_tools() {
     die "Can't reach Docker. Is it running, and is $(whoami) in the docker group (or run this with sudo)?"
 }
 
-# healthy | unhealthy | starting for a container with a health check, else running | exited | …; missing when it's gone.
+# healthy | unhealthy | starting for a running container with a health check, else running | exited | restarting | …;
+# missing when it's gone. A stopped container keeps its last health status, so that only counts while it runs.
 id_state() {
-  docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null ||
-    echo missing
+  local format='{{if not .State.Running}}{{.State.Status}}'
+  format+='{{else if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}'
+  docker inspect -f "$format" "$1" 2>/dev/null || echo missing
 }
 
 # A service's state, as id_state; missing when it has no container (or there's no stack yet).
@@ -1042,7 +1046,7 @@ wait_container() {
 deploy_stack() {
   # Docker would create a missing bind-mount folder as root, which this script then couldn't write certificates into.
   mkdir -p "$CERT_DIR"
-  local log fingerprint rolling=0 service others=()
+  local log fingerprint rolling=0 service others=() image
   fingerprint=$(env_fingerprint "$ENV_FILE")
   if [[ $(container_state app) == healthy ]]; then rolling=1; fi
 
@@ -1061,6 +1065,8 @@ deploy_stack() {
 (deploy/deploy.sh apply)."
   fi
   rm -f "$log"
+  image=$(app_image)
+  docker tag "$image" "$image:$(checkout_version)"
 
   if ((rolling)); then
     # ------ Everything But the App ------
@@ -1075,7 +1081,9 @@ deploy_stack() {
       die "The migration or the bucket setup failed (see above). The app that was running still runs, and pending
 migrations run in one transaction, so the database is as it was. Once it's fixed, choose Settings → Apply."
 
-    rollout_app
+    rollout_app ||
+      die "Migrations the new version ran stay applied (Update's pre-update dump has the database from before them).
+Once it's fixed, choose Settings → Apply (deploy/deploy.sh apply)."
     record_applied "$fingerprint"
   else
     # ------ Everything at Once ------
@@ -1103,6 +1111,7 @@ Settings → Apply (deploy/deploy.sh apply)."
     warn "The error viewer didn't turn healthy. Its logs: deploy/deploy.sh logs error-viewer"
   fi
 
+  prune_versions "$image"
   # Each build leaves the previous images behind, untagged; on a small disk they add up. Only this stack's: Compose
   # labels what it builds with the project, and other projects' untagged images on the server aren't ours to remove.
   local project
@@ -1115,8 +1124,8 @@ Settings → Apply (deploy/deploy.sh apply)."
 # Replaces the running app without downtime: a new app container starts beside the old one, and the old one stops once
 # the new one is healthy. Caddy proxies to `app`, which Docker's DNS resolves to every running app container, so
 # requests reach whichever is up; the old one finishes what it's serving on SIGTERM. A new container that doesn't turn
-# healthy is removed and the old one keeps serving. The steps of docker-rollout (github.com/wowu/docker-rollout),
-# without installing it.
+# healthy is removed and the old one keeps serving (returns 1). The steps of docker-rollout
+# (github.com/wowu/docker-rollout), without installing it.
 rollout_app() {
   local old new count old_ids
   old=$(dc ps -q app)
@@ -1124,23 +1133,71 @@ rollout_app() {
 
   step "Starting the new app beside the old one"
   # `--no-recreate` keeps the old container as it is; the larger scale adds one on the new image.
-  dc up -d --no-deps --no-recreate --scale "app=$((count + 1))" app ||
-    die "The new app didn't start (see above). The old one still serves."
+  if ! dc up -d --no-deps --no-recreate --scale "app=$((count + 1))" app; then
+    warn "The new app didn't start (see above). The old one still serves."
+    return 1
+  fi
   new=$(dc ps -q app | grep -vxF "$old" | head -n 1 || true)
-  [[ -n $new ]] || die "Compose started no new app container. The old one still serves."
+  if [[ -z $new ]]; then
+    warn "Compose started no new app container. The old one still serves."
+    return 1
+  fi
 
   if ! spin "Waiting for the new app to turn healthy" wait_container "$new"; then
     docker logs --tail 30 "$new" 2>&1 || true
     docker rm -f "$new" >/dev/null
-    die "The new app didn't turn healthy (its last log lines are above), so it was removed: the old one still serves.
-Migrations the new version ran stay applied (Update's pre-update dump has the database from before them). Once it's
-fixed, choose Settings → Apply (deploy/deploy.sh apply)."
+    warn "The new app didn't turn healthy (its last log lines are above), so it was removed: the old one still serves."
+    return 1
   fi
 
+  # Callers test the result, which turns `set -e` off in here: every failure is handled explicitly.
   step "Stopping the old app"
   mapfile -t old_ids <<<"$old"
-  docker stop "${old_ids[@]}" >/dev/null
-  docker rm "${old_ids[@]}" >/dev/null
+  docker stop "${old_ids[@]}" >/dev/null && docker rm "${old_ids[@]}" >/dev/null ||
+    warn "The old app container didn't stop cleanly (see above); the new one serves. Remove the old one:
+  docker rm -f ${old_ids[*]}"
+}
+
+# ===== Versions =====
+# Every build tags the app's image with the commit it was built from (`template-app:381286c`), next to the `latest` tag
+# Compose runs. Roll back points `latest` at an older tag and replaces the app with it; the newest KEEP_VERSIONS stay.
+
+checkout_version() { git -C "$ROOT" rev-parse --short=7 HEAD; }
+
+# The app's image name, as `image:` in compose.prod.yaml sets it. Read from Compose's resolved config, where each
+# service is a two-space-indented key under `services:`.
+app_image() {
+  dc config | awk '/^services:/ { s = 1; next } s && /^[^ ]/ { exit } s && /^  [^ ]/ { svc = $1 }
+    svc == "app:" && /^    image:/ { print $2; exit }'
+}
+
+# The kept versions, newest first, as `<tag> <built, e.g. "2 days ago">` lines.
+list_versions() {
+  docker image ls "$1" --format '{{.Tag}} {{.CreatedSince}}' | grep -v '^latest \|^<none> ' || true
+}
+
+# The version the app container runs: the tag of its image, other than `latest`. Empty without a container, or for an
+# image built before versions were tagged.
+running_version() {
+  local id image_id image
+  id=$(dc ps -a -q app 2>/dev/null | head -n 1 || true)
+  [[ -n $id ]] || return 0
+  image_id=$(docker inspect -f '{{.Image}}' "$id")
+  image=$(docker inspect -f '{{.Config.Image}}' "$id")
+  docker image ls "${image%:*}" --no-trunc --format '{{.ID}} {{.Tag}}' |
+    awk -v id="$image_id" '$1 == id && $2 != "latest" && $2 != "<none>" { print $2; exit }'
+}
+
+# Removes the tags beyond the newest KEEP_VERSIONS, never the running one or the one `latest` points at. The image
+# goes with its last tag.
+prune_versions() {
+  local image=$1 running latest_id tag _
+  running=$(running_version)
+  latest_id=$(docker image inspect -f '{{.Id}}' "$image" 2>/dev/null || true)
+  list_versions "$image" | tail -n +$((KEEP_VERSIONS + 1)) | while read -r tag _; do
+    [[ $tag != "$running" && $(docker image inspect -f '{{.Id}}' "$image:$tag") != "$latest_id" ]] || continue
+    docker rmi "$image:$tag" >/dev/null || true
+  done
 }
 
 # ===== Ports =====
@@ -1534,6 +1591,83 @@ Keep them with git stash, or drop them with git checkout -- <file>, then update 
   ok "Updated to $after"
 }
 
+# ------ Roll Back ------
+# Runs a kept older image of the app. Only the app goes back: the checkout, .env, the other services and the database
+# stay as they are, so the next Update or Apply deploys the checkout again.
+cmd_rollback() {
+  is_set_up || die "Set up first."
+  require_tools
+  local version=${1:-} image current head previous kept=() labels=() tag built subject n
+  image=$(app_image)
+  current=$(running_version)
+  head=$(checkout_version)
+  while read -r tag built; do
+    [[ -n $tag && $tag != "$current" ]] || continue
+    kept+=("$tag")
+    subject=$(git -C "$ROOT" log -1 --format=%s "$tag" 2>/dev/null || true)
+    labels+=("$(printf '%-9s %-12s %s' "$tag" "$built" "${subject:0:60}")")
+  done < <(list_versions "$image")
+  ((${#kept[@]} > 0)) ||
+    die "No other version is kept to roll back to. Each deploy keeps its own (the newest $KEEP_VERSIONS)."
+
+  # ------ Pick ------
+  if [[ -z $version ]]; then
+    [[ $INTERACTIVE == 1 ]] || die "Pass the version: deploy/deploy.sh rollback <version>. Kept: ${kept[*]}"
+    info "Running: ${current:-unknown}"
+    n=$(choose "Roll back to which version? (newest first)" "${labels[@]}")
+    version=${kept[n - 1]}
+  fi
+  [[ $version != "$current" ]] || die "The app already runs $version."
+  docker image inspect "$image:$version" >/dev/null 2>&1 || die "No kept version $version. Kept: ${kept[*]}"
+  if [[ $version == "$head" ]]; then
+    info "$version is the checkout's version: this undoes a roll back."
+  else
+    warn "Only the app goes back to $version. The checkout stays at $head: the next Update or Apply deploys that again."
+  fi
+  confirm "Switch the app to $version?" y || die "Nothing was changed."
+
+  # ------ Replace ------
+  # `latest` is what Compose runs. A healthy app is replaced without downtime; a broken one is simply recreated.
+  previous=$(docker image inspect -f '{{.Id}}' "$image")
+  docker tag "$image:$version" "$image"
+  if [[ $(container_state app) == healthy ]]; then
+    if ! rollout_app; then
+      docker tag "$previous" "$image"
+      die "Nothing was changed: the app still runs ${current:-the version it ran}."
+    fi
+  else
+    step "Recreating the app on $version"
+    dc up -d --no-deps --force-recreate app
+    spin "Waiting for the app to turn healthy" wait_healthy app ||
+      die "The app didn't turn healthy on $version either. Its logs: deploy/deploy.sh logs app"
+  fi
+  ok "The app runs $version."
+
+  # Back on the checkout's version, the database already fits it.
+  if [[ $version != "$head" ]]; then offer_pre_update_restore "$image" "$version"; fi
+}
+
+# The old version runs on the database as the newer one's migrations left it. That works as long as they only added
+# things; when it doesn't, the dump Update took before replacing this version has the database from back then: the
+# oldest pre-update dump newer than the version's image.
+offer_pre_update_restore() {
+  local image=$1 version=$2 built dump="" when path
+  built=$(date -d "$(docker image inspect -f '{{.Created}}' "$image:$version")" +%s)
+  while read -r when path; do
+    [[ $path == *-pre-update.dump ]] && ((${when%.*} > built)) && dump=$path
+  done < <(list_backups "$(backup_dir)")
+  [[ -n $dump ]] || return 0
+  info ""
+  info "The database stays as the newer version left it. If $version fails on it (a column it needs was dropped or"
+  info "renamed), restore $(basename "$dump"), the dump taken when $version was replaced."
+  info "What was written since is lost."
+  if [[ $INTERACTIVE == 1 ]] && confirm "Restore it now?" n; then
+    cmd_restore "$dump"
+  else
+    info "Later: deploy/deploy.sh restore $dump --confirm $(env_get DOMAIN)"
+  fi
+}
+
 # ------ Settings ------
 cmd_env() {
   is_set_up || die "Set up first."
@@ -1857,6 +1991,30 @@ status_project() {
   fi
 }
 
+# The version the app runs and its health. Yellow when it isn't the checkout (rolled back, or an update that didn't
+# finish).
+status_app() {
+  local state version head color=green text
+  state=$(container_state app)
+  if [[ $state == missing ]]; then
+    status_line red App "not running"
+    return
+  fi
+  version=$(running_version)
+  head=$(checkout_version)
+  text="${version:-untagged}  $state"
+  case $state in
+    healthy) ;;
+    starting) color=yellow ;;
+    *) color=red ;;
+  esac
+  if [[ -n $version && $version != "$head" ]]; then
+    text+="  (the checkout is $head)"
+    [[ $color == red ]] || color=yellow
+  fi
+  status_line "$color" App "$text"
+}
+
 # Requests the domain's /healthz from outside, through Caddy, the way a visitor would.
 status_url() {
   local label=$1 domain=$2 code rc=0
@@ -2006,6 +2164,7 @@ render_status() {
 
 render_status_lines() {
   status_project
+  if is_set_up; then status_app; fi
   status_settings
   status_url Site "$(env_get DOMAIN)"
   status_url Errors "$(env_get ERRORS_DOMAIN)"
@@ -2015,11 +2174,14 @@ render_status_lines() {
 }
 
 # ===== Menu =====
-MENU_KEYS=(setup update env backup restore cert status logs admin)
-MENU_LABELS=("Set up" "Update" "Settings" "Back up" "Restore" "SSL certificate" "Status" "Logs" "Make admin")
+MENU_KEYS=(setup update rollback env backup restore cert status logs admin)
+MENU_LABELS=(
+  "Set up" "Update" "Roll back" "Settings" "Back up" "Restore" "SSL certificate" "Status" "Logs" "Make admin"
+)
 MENU_HINTS=(
   "clone, create .env, first build"
-  "back up, pull, rebuild, wait for healthy"
+  "back up, pull, rebuild, swap in the new app"
+  "run an earlier version of the app"
   "check, edit .env, apply"
   "database and/or media"
   "from a backup file"
@@ -2050,11 +2212,11 @@ draw_menu() {
   fi
   for i in "${!MENU_KEYS[@]}"; do
     if menu_available "${MENU_KEYS[$i]}"; then
-      printf '  %s) %-17s %s%s%s\n' "$((i + 1))" "${MENU_LABELS[$i]}" "$DIM" "${MENU_HINTS[$i]}" "$RESET"
+      printf ' %2s) %-17s %s%s%s\n' "$((i + 1))" "${MENU_LABELS[$i]}" "$DIM" "${MENU_HINTS[$i]}" "$RESET"
     elif [[ ${MENU_KEYS[$i]} == setup ]]; then
-      printf '  %s%s) %-17s (already set up)%s\n' "$DIM" "$((i + 1))" "${MENU_LABELS[$i]}" "$RESET"
+      printf ' %s%2s) %-17s (already set up)%s\n' "$DIM" "$((i + 1))" "${MENU_LABELS[$i]}" "$RESET"
     else
-      printf '  %s%s) %-17s (set up first)%s\n' "$DIM" "$((i + 1))" "${MENU_LABELS[$i]}" "$RESET"
+      printf ' %s%2s) %-17s (set up first)%s\n' "$DIM" "$((i + 1))" "${MENU_LABELS[$i]}" "$RESET"
     fi
   done
   printf '  0) Quit\n\n'
@@ -2098,9 +2260,10 @@ menu() {
       read -r -p "Choose: " choice || exit 0
       case $choice in
         0 | q | Q) exit 0 ;;
-        [1-9]) key=${MENU_KEYS[choice - 1]} ;;
+        [1-9] | [1-9][0-9]) ((choice <= ${#MENU_KEYS[@]})) || continue ;;
         *) continue ;;
       esac
+      key=${MENU_KEYS[choice - 1]}
     fi
     if ! menu_available "$key"; then
       warn "Not available: $([[ $key == setup ]] && echo "this server is already set up" || echo "set up first")."
@@ -2139,6 +2302,8 @@ With no command, a menu with the stack's status under it.
 
   setup                         clone (when run outside a checkout), create .env, first build
   update                        back up the database, git pull, then apply with the pulled script
+  rollback [<version>]          run an earlier image of the app (the newest $KEEP_VERSIONS are kept); without a
+                                terminal, the version is needed
   env [--check]                 check .env (fill in what can be generated, ask for the rest), edit it in nano
                                 or vi, apply it; --check only reports, and exits 1 when something is missing
   apply                         check .env, then rebuild and restart the stack with it
@@ -2163,6 +2328,7 @@ main() {
     menu) menu ;;
     setup) cmd_setup ;;
     update) cmd_update ;;
+    rollback) cmd_rollback "$@" ;;
     env) cmd_env "$@" ;;
     apply) cmd_apply "$@" ;;
     backup) cmd_backup "$@" ;;

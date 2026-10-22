@@ -34,17 +34,19 @@ gets the `admin` key.
 
 ```text
   1) Set up            clone, create .env, first build
-  2) Update            back up, pull, rebuild, wait for healthy
-  3) Settings          check, edit .env, apply
-  4) Back up           database and/or media
-  5) Restore           from a backup file
-  6) SSL certificate   automatic or your own files
-  7) Status            containers, health, disk
-  8) Logs              pick a service, follow
-  9) Make admin        promote an account by email
+  2) Update            back up, pull, rebuild, swap in the new app
+  3) Roll back         run an earlier version of the app
+  4) Settings          check, edit .env, apply
+  5) Back up           database and/or media
+  6) Restore           from a backup file
+  7) SSL certificate   automatic or your own files
+  8) Status            containers, health, disk
+  9) Logs              pick a service, follow
+ 10) Make admin        promote an account by email
   0) Quit
 
   ● Project      up to date  (381286c)
+  ● App          381286c  healthy
   ● Settings     applied 2026-10-15 14:02
   ● Site         https://app.example.com        200 OK
   ● Errors       https://errors.example.com     200 OK
@@ -54,7 +56,8 @@ gets the `admin` key.
 ```
 
 Green is fine, yellow needs attention (commits to pull, an edit to apply, a certificate under 30 days, a backup older
-than a week), red is missing or broken. **Project** compares the checkout with its upstream branch. **Settings** says
+than a week), red is missing or broken. **Project** compares the checkout with its upstream branch. **App** is the
+version the app container runs and its health, yellow when it isn't the checkout's (Rolling Back below). **Settings** says
 whether `.env` is complete and whether the running stack uses it (Settings below). **Site** and **Errors** request
 `/healthz` from outside, through Caddy. **Ports** says whether Caddy holds 80 and 443, or what else does. Before setup,
 only Set up is available; after it, everything else.
@@ -191,6 +194,25 @@ isn't running (the first deploy, or after a crash), the script starts the whole 
 reloads Caddy, which picks up an edited `deploy/Caddyfile` without dropping connections; Compose wouldn't, since the
 Caddyfile is a mounted file. The error viewer is restarted in place when its image changes, so it's down for a few
 seconds.
+
+## Rolling Back
+
+Every build tags the app's image with the commit it was built from (`template-app:381286c`), and the newest three are
+kept (`KEEP_VERSIONS` in the script); older tags are removed after each deploy, never the running one. Choose Roll back
+(`deploy/deploy.sh rollback [<version>]`), pick a version, and the script points the image Compose runs at it and
+replaces the app the way Update does, without downtime (an app that's down is simply recreated). It takes seconds:
+nothing is built.
+
+Only the app goes back. The checkout, `.env`, the other services and the database stay as they are, and the App status
+line turns yellow (`381286c  healthy  (the checkout is 9e5efa5)`) until the checkout runs again. The next Update or
+Apply builds and deploys the checkout, so push the fix (or revert the commit) first. Rolling back to the checkout's own
+version undoes a roll back.
+
+**The database.** The old version runs on the database as the newer version's migrations left it. That works as long
+as they only added things (the two-deploy rule in Database Changes below). When it doesn't, the script offers the dump
+Update took when that version was replaced (the oldest `db-*-pre-update.dump` newer than its image) and restores it
+after you type the domain, the same as Restore. Everything written since that dump is lost, so it's off by default.
+Without a terminal it only prints the restore command.
 
 ## Settings (.env)
 
