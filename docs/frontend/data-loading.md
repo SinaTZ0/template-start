@@ -1,8 +1,7 @@
 # Data Loading
 
 How pages get their data, keep it fresh, and refresh it after a change. TanStack Query is the one cache; the router
-fills it before a page renders, and components read from it. Why this design, and how it differs from React Router's
-loaders: [tanstack-start-vs-react-router-data.md](../tanstack-start-vs-react-router-data.md).
+fills it before a page renders, and components read from it.
 
 ## The Pieces
 
@@ -85,6 +84,18 @@ function ProductsPage() {
 
 Return only the params the loader uses from `loaderDeps`; anything else would refetch for no reason.
 
+### Query Keys
+
+Don't write query keys for procedures: `orpc.<feature>.<procedure>.queryOptions()` builds them from the contract, as
+`[path, { input, type }]` (`[["note", "list"], { type: "query" }]`). A typo is a type error, renaming a procedure renames
+its keys, and since TanStack Query matches a key against the start of longer keys, the levels for invalidation come for
+free ([After a Mutation](#after-a-mutation)).
+
+A query that isn't a procedure (a `createServerFn` read) defines its `queryOptions` once, in the module that owns the
+data, and every caller imports it: `viewerQueryOptions` in `src/lib/viewer.ts`, with the key `["viewer"]`. Never write
+the key array inline at a call site. Start the key with a string naming the data; oRPC keys start with an array, so
+the two never collide.
+
 ## Preloading
 
 `defaultPreload: "intent"` (`src/router.tsx`): hovering or focusing a `<Link>` runs the target route's `beforeLoad`
@@ -126,7 +137,8 @@ const refresh = () => void queryClient.invalidateQueries({ queryKey: orpc.note.l
 ```
 
 - `orpc.<feature>.<procedure>.key()` is the key of that procedure's queries, all inputs included;
-  `orpc.<feature>.key()` covers every procedure of the feature. Invalidate the narrowest key that covers the change.
+  `orpc.<feature>.<procedure>.key({ input })` only that input's; `orpc.<feature>.key()` covers every
+  procedure of the feature. Invalidate the narrowest key that covers the change.
 - Invalidation refetches the queries the page is showing right away, and marks the rest stale, so they refetch the
   next time they are used.
 - Slice components that own a mutation tell the page through a callback (`onCreated`, `onDeleted`), and the page

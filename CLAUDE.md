@@ -4,7 +4,7 @@ These instructions apply to the entire repository unless overridden by a more sp
 
 This is a TanStack Start application (TanStack Router + TanStack Query, built by Vite and served by Nitro), started from the project template. The application's user-facing content is in Persian and right-to-left. Its look and feel is defined in `docs/frontend/app-identity.md`.
 
-The docs have two entry points. Start backend work at `docs/backend-flow.md` and frontend work at `docs/frontend-flow.md`. Each one is a list of steps that links to the rule docs in `docs/backend/` and `docs/frontend/` at the step where they apply. When a new project starts from the template, `docs/customize-template.md` turns its homepage design into the app's design system.
+The docs have two entry points. Start backend work at `docs/backend-flow.md` and frontend work at `docs/frontend-flow.md`. Each one is a list of steps that links to the rule docs in `docs/backend/` and `docs/frontend/` at the step where they apply. Work that spans both (a new feature, a new field shown on a page) follows the backend flow first, then the frontend flow. When a new project starts from the template, `docs/customize-template.md` turns its homepage design into the app's design system.
 
 - Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, per-address rate limits on the API and auth endpoints (`docs/backend/architecture.md` → Rate limiting), Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing, plus error and slow-request reports to the error viewer, a small Go service in `tools/error-viewer/` (`docs/backend/logging.md`).
 - Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`), TanStack Query as the one data cache, filled by route loaders and preloaded on hover (`docs/frontend/data-loading.md`), typed search params (`docs/frontend/search-params.md`), and page meta through `pageMeta` (`docs/frontend/seo.md`).
@@ -50,7 +50,7 @@ src/routes/
 
 ## Data Loading
 
-The rules are in `docs/frontend/data-loading.md`; the reasons in `docs/tanstack-start-vs-react-router-data.md`.
+The rules are in `docs/frontend/data-loading.md`.
 
 - Route `beforeLoad` and `loader` are isomorphic: they run on the server for the first request and in the browser afterwards. Server-only modules (`*.server.ts`, the database, `env`) are only used inside a `createServerFn` handler or behind an oRPC procedure, never directly in route code; feature data comes from procedures, small framework reads from `createServerFn`.
 - Read page data in loaders with `context.queryClient.ensureQueryData(options)` and in components with `useSuspenseQuery` on the same options. `useQuery` doesn't run during SSR, so it renders an empty page on the server.
