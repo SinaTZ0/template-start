@@ -11,7 +11,7 @@ decide. The `notes` route (`app/routes/notes/`) is the worked example.
 | [frontend/components.md](./frontend/components.md)             | Primitives, shared components, style maps, lint rules     |
 | [frontend/search-params.md](./frontend/search-params.md)       | URL state                                                 |
 | [frontend/jotai.md](./frontend/jotai.md)                       | Shared client state                                       |
-| [frontend/view-transitions.md](./frontend/view-transitions.md) | The page fade                                             |
+| [frontend/view-transitions.md](./frontend/view-transitions.md) | The page fade and slide                                   |
 | [frontend/seo.md](./frontend/seo.md)                           | Page meta, link previews, what to index, the sitemap      |
 | [backend/media.md](./backend/media.md)                         | Uploading and rendering images                            |
 

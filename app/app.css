@@ -308,6 +308,42 @@
   animation-duration: 200ms;
 }
 
+/*------ Direction ------*/
+/* Forward and back navigations (types `page-forward` / `page-back`) also slide the new page in. Only the new snapshot
+   names `#main` (`data-page-entering`, set by `markEnteringPage` in `app/router.tsx`), so the old page still fades out
+   whole while the new content arrives from one side and the header and footer cross-fade in place. Forward points left
+   in RTL (docs/frontend/app-identity.md), so a forward page arrives from the left and a back page from the right. */
+:root {
+  --page-shift: 2rem;
+}
+:root[dir="rtl"] {
+  --page-shift: -2rem;
+}
+
+:root[data-page-entering]:active-view-transition-type(page-forward, page-back) #main {
+  view-transition-name: page;
+}
+
+:root:active-view-transition-type(page-forward)::view-transition-new(page) {
+  animation: 200ms ease-out both page-in-forward;
+}
+:root:active-view-transition-type(page-back)::view-transition-new(page) {
+  animation: 200ms ease-out both page-in-back;
+}
+
+@keyframes page-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(var(--page-shift));
+  }
+}
+@keyframes page-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--page-shift) * -1));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* Colour transitions and hover lifts are removed entirely */
   *,

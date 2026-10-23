@@ -90,9 +90,9 @@ The full rules are in [data-loading.md](./data-loading.md). In short:
   and search as objects (`<Link to="/auth" search={{ redirectTo }}>`). An active link gets `aria-current="page"` and
   `data-status="active"`; style those instead of a separate `NavLink`. For hrefs that come from content data, use
   `SiteLink` (`app/components/shared/site-link/`).
-- Moving to another pathname fades the page on its own; search and hash updates stay instant. See
-  [`view-transitions.md`](./view-transitions.md). Don't pass the router's `viewTransition` option: it starts a second
-  view transition that cancels React's.
+- Moving to another pathname fades the page and slides it in the direction of travel on its own; search and hash
+  updates stay instant. See [`view-transitions.md`](./view-transitions.md). Don't pass the router's `viewTransition`
+  option: it replaces the default for that navigation.
 
 ## Forms
 
