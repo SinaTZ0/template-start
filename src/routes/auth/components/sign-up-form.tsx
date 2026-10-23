@@ -9,9 +9,10 @@ import { Spinner } from "#/components/primitive/spinner/spinner";
 import { FormAlert } from "#/components/shared/form-alert/form-alert";
 import { authClient } from "#/lib/auth-client";
 import { ALTCHA_HEADER } from "#/lib/auth-constants";
+import { m } from "#/paraglide/messages";
 import { describeAuthError } from "#/routes/auth/auth-errors";
 import { useCaptcha } from "#/routes/auth/hooks/use-captcha";
-import { signUpSchema, type SignUpValues } from "#/routes/auth/schema";
+import { PASSWORD_MIN_LENGTH, signUpSchema, type SignUpValues } from "#/routes/auth/schema";
 
 /*===== Sign Up Form =====*/
 /** Creates an account and signs in. A proof-of-work captcha is solved in the background while submitting. */
@@ -29,7 +30,7 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
 
     /*------ Captcha ------*/
     const payload = await solve().catch(() => null);
-    if (!payload) return setFormError("بررسی امنیتی انجام نشد. صفحه را دوباره بارگذاری کنید.");
+    if (!payload) return setFormError(m.auth_captcha_unavailable());
 
     /*------ Account ------*/
     const { error } = await authClient.signUp.email(values, { headers: { [ALTCHA_HEADER]: payload } });
@@ -43,13 +44,13 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
         <FormAlert message={formError} />
 
         <Field data-invalid={!!errors.name || undefined}>
-          <FieldLabel htmlFor="sign-up-name">نام</FieldLabel>
+          <FieldLabel htmlFor="sign-up-name">{m.auth_name_label()}</FieldLabel>
           <Input id="sign-up-name" autoComplete="name" aria-invalid={!!errors.name} {...form.register("name")} />
           <FieldError errors={[errors.name]} />
         </Field>
 
         <Field data-invalid={!!errors.email || undefined}>
-          <FieldLabel htmlFor="sign-up-email">ایمیل</FieldLabel>
+          <FieldLabel htmlFor="sign-up-email">{m.auth_email_label()}</FieldLabel>
           <Input
             id="sign-up-email"
             type="email"
@@ -62,7 +63,7 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
         </Field>
 
         <Field data-invalid={!!errors.password || undefined}>
-          <FieldLabel htmlFor="sign-up-password">رمز عبور</FieldLabel>
+          <FieldLabel htmlFor="sign-up-password">{m.auth_password_label()}</FieldLabel>
           <Input
             id="sign-up-password"
             type="password"
@@ -71,7 +72,7 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
             aria-invalid={!!errors.password}
             {...form.register("password")}
           />
-          <FieldDescription>حداقل ۸ نویسه.</FieldDescription>
+          <FieldDescription>{m.auth_password_hint({ min: PASSWORD_MIN_LENGTH })}</FieldDescription>
           <FieldError errors={[errors.password]} />
         </Field>
 
@@ -80,7 +81,7 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
 
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting && <Spinner data-icon="inline-start" />}
-          ساخت حساب
+          {m.auth_sign_up_submit()}
         </Button>
       </FieldGroup>
     </form>

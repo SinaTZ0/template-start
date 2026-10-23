@@ -1,0 +1,126 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_close": "Close",
+  "common_close_notification": "Close notification",
+  "common_loading": "Loading",
+  "common_skip_to_content": "Skip to main content",
+  "common_language": "Language",
+  "common_error_network": "Couldn't reach the server. Check your internet connection and try again.",
+  "common_error_signed_out": "You've been signed out. Refresh the page and sign in again.",
+  "common_error_with_reference": "{message} Reference: {errorId}",
+  "common_rate_limited": "Too many requests. Wait a moment and try again.",
+  "site_name": "Project Template",
+  "site_description": "A starting point for new projects.",
+  "nav_main": "Main menu",
+  "nav_home": "Home",
+  "nav_notes": "Notes",
+  "nav_sign_in": "Sign in",
+  "nav_account": "Account",
+  "nav_sign_out": "Sign out",
+  "nav_sign_out_failed": "Couldn't sign out. Try again.",
+  "theme_dark_mode": "Dark mode",
+  "root_error_title": "Something went wrong",
+  "root_error_details": "An unexpected error occurred. Refresh the page or try again in a moment.",
+  "root_not_found_title": "Page not found",
+  "root_not_found_details": "The page you're looking for doesn't exist or has moved.",
+  "home_intro": "Replace this page with an introduction to the project. The notes section is a complete example of sign-in, the API and image uploads.",
+  "home_go_to_notes": "Go to notes",
+  "notes_title": "Notes",
+  "notes_new_heading": "New note, {name}",
+  "notes_list_label": "Your notes",
+  "notes_empty": "You don't have any notes yet. Create your first one with the form.",
+  "notes_title_label": "Title",
+  "notes_body_label": "Text",
+  "notes_submit": "Add note",
+  "notes_save_failed": "The note wasn't saved.",
+  "notes_delete_label": "Delete “{title}”",
+  "notes_delete_failed": "The note wasn't deleted.",
+  "notes_form_title_required": "Enter a title.",
+  "notes_form_title_too_long": "The title is too long.",
+  "notes_form_body_too_long": "The text is too long.",
+  "notes_image_label": "Image (optional)",
+  "notes_image_preview": "Image preview",
+  "notes_image_choose": "Choose image",
+  "notes_image_remove": "Remove image",
+  "notes_image_upload_failed": "The image wasn't uploaded.",
+  "auth_title": "Sign in",
+  "auth_heading": "Sign in or sign up",
+  "auth_tab_sign_in": "Sign in",
+  "auth_tab_sign_up": "Sign up",
+  "auth_name_label": "Name",
+  "auth_email_label": "Email",
+  "auth_password_label": "Password",
+  "auth_password_hint": [
+    {
+      "declarations": ["input min", "local minText = min: number"],
+      "match": {
+        "": "At least {minText} characters."
+      }
+    }
+  ],
+  "auth_sign_in_submit": "Sign in",
+  "auth_sign_up_submit": "Create account",
+  "auth_captcha_unavailable": "The security check didn't complete. Reload the page.",
+  "auth_form_email_invalid": "Enter a valid email address.",
+  "auth_form_password_required": "Enter your password.",
+  "auth_form_name_required": "Enter your name.",
+  "auth_form_name_too_long": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "Your name can be at most {maxText} characters."
+      }
+    }
+  ],
+  "auth_form_password_too_short": [
+    {
+      "declarations": ["input min", "local minText = min: number"],
+      "match": {
+        "": "Your password must be at least {minText} characters."
+      }
+    }
+  ],
+  "auth_form_password_too_long": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "Your password can be at most {maxText} characters."
+      }
+    }
+  ],
+  "auth_error_invalid_credentials": "The email or password is incorrect.",
+  "auth_error_user_exists": "An account with this email already exists. Sign in instead.",
+  "auth_error_password_too_short": "The password is too short.",
+  "auth_error_captcha_failed": "The security check didn't complete. Try again.",
+  "auth_error_account_blocked": "This account has been blocked.",
+  "auth_error_unknown": "The request didn't go through. Check your internet connection and try again.",
+  "note_error_title_required": "Enter a title for the note.",
+  "note_error_title_too_long": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "The title can be at most {maxText} characters."
+      }
+    }
+  ],
+  "note_error_body_too_long": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "The text can be at most {maxText} characters."
+      }
+    }
+  ],
+  "note_error_image_unusable": "This image can't be used.",
+  "media_error_too_big": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "The image must be smaller than {maxText} MB."
+      }
+    }
+  ],
+  "media_error_too_many_pixels": "The image dimensions are too large. Choose a smaller image.",
+  "media_error_unsupported": "This image format isn't supported. Upload a JPG or PNG image.",
+  "media_error_unreadable": "This file isn't a valid image. Try another one."
+}

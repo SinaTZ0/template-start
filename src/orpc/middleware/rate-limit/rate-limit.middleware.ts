@@ -1,6 +1,6 @@
 import { ORPCError, os } from "@orpc/server";
 
-import { limitRequest, RATE_LIMITED_MESSAGE, type RateLimitPolicy } from "#/lib/rate-limit.server";
+import { limitRequest, rateLimitedMessage, type RateLimitPolicy } from "#/lib/rate-limit.server";
 
 /*===== Rate Limit =====*/
 /**
@@ -18,7 +18,7 @@ export function rateLimitMiddleware(policy: RateLimitPolicy) {
     if (!result.allowed) {
       throw new ORPCError("TOO_MANY_REQUESTS", {
         message: "Too many requests.",
-        data: { errors: [RATE_LIMITED_MESSAGE], fields: {}, retryAfterSeconds: result.retryAfterSeconds },
+        data: { errors: [rateLimitedMessage()], fields: {}, retryAfterSeconds: result.retryAfterSeconds },
       });
     }
     return next();

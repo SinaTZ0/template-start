@@ -1,0 +1,126 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_close": "بستن",
+  "common_close_notification": "بستن اعلان",
+  "common_loading": "در حال بارگذاری",
+  "common_skip_to_content": "پرش به محتوای اصلی",
+  "common_language": "زبان",
+  "common_error_network": "ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.",
+  "common_error_signed_out": "از حساب خارج شده‌اید. صفحه را تازه کنید و دوباره وارد شوید.",
+  "common_error_with_reference": "{message} کد پیگیری: {errorId}",
+  "common_rate_limited": "تعداد درخواست‌ها زیاد بود. کمی صبر کنید و دوباره امتحان کنید.",
+  "site_name": "قالب پروژه",
+  "site_description": "نقطه شروع پروژه‌های تازه.",
+  "nav_main": "منوی اصلی",
+  "nav_home": "خانه",
+  "nav_notes": "یادداشت‌ها",
+  "nav_sign_in": "ورود",
+  "nav_account": "حساب کاربری",
+  "nav_sign_out": "خروج",
+  "nav_sign_out_failed": "خروج انجام نشد. دوباره امتحان کنید.",
+  "theme_dark_mode": "حالت تیره",
+  "root_error_title": "مشکلی پیش آمد",
+  "root_error_details": "خطای غیرمنتظره‌ای رخ داد. صفحه را تازه کنید یا کمی بعد دوباره امتحان کنید.",
+  "root_not_found_title": "صفحه پیدا نشد",
+  "root_not_found_details": "صفحه‌ای که دنبالش هستید وجود ندارد یا جابه‌جا شده است.",
+  "home_intro": "این صفحه را با معرفی پروژه جایگزین کنید. بخش یادداشت‌ها نمونه‌ای کامل از ورود، API و بارگذاری عکس است.",
+  "home_go_to_notes": "رفتن به یادداشت‌ها",
+  "notes_title": "یادداشت‌ها",
+  "notes_new_heading": "یادداشت تازه، {name}",
+  "notes_list_label": "یادداشت‌های شما",
+  "notes_empty": "هنوز یادداشتی ندارید. اولین یادداشت را از فرم کنار بسازید.",
+  "notes_title_label": "عنوان",
+  "notes_body_label": "متن",
+  "notes_submit": "افزودن یادداشت",
+  "notes_save_failed": "یادداشت ذخیره نشد.",
+  "notes_delete_label": "حذف «{title}»",
+  "notes_delete_failed": "یادداشت حذف نشد.",
+  "notes_form_title_required": "عنوان را وارد کنید.",
+  "notes_form_title_too_long": "عنوان طولانی است.",
+  "notes_form_body_too_long": "متن طولانی است.",
+  "notes_image_label": "عکس (اختیاری)",
+  "notes_image_preview": "پیش‌نمایش عکس",
+  "notes_image_choose": "انتخاب عکس",
+  "notes_image_remove": "حذف عکس",
+  "notes_image_upload_failed": "بارگذاری عکس انجام نشد.",
+  "auth_title": "ورود",
+  "auth_heading": "ورود یا ثبت‌نام",
+  "auth_tab_sign_in": "ورود",
+  "auth_tab_sign_up": "ثبت‌نام",
+  "auth_name_label": "نام",
+  "auth_email_label": "ایمیل",
+  "auth_password_label": "رمز عبور",
+  "auth_password_hint": [
+    {
+      "declarations": ["input min", "local minText = min: number"],
+      "match": {
+        "": "حداقل {minText} نویسه."
+      }
+    }
+  ],
+  "auth_sign_in_submit": "ورود",
+  "auth_sign_up_submit": "ساخت حساب",
+  "auth_captcha_unavailable": "بررسی امنیتی انجام نشد. صفحه را دوباره بارگذاری کنید.",
+  "auth_form_email_invalid": "ایمیل معتبر وارد کنید.",
+  "auth_form_password_required": "رمز عبور را وارد کنید.",
+  "auth_form_name_required": "نام خود را وارد کنید.",
+  "auth_form_name_too_long": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "نام حداکثر {maxText} حرف است."
+      }
+    }
+  ],
+  "auth_form_password_too_short": [
+    {
+      "declarations": ["input min", "local minText = min: number"],
+      "match": {
+        "": "رمز عبور حداقل {minText} نویسه است."
+      }
+    }
+  ],
+  "auth_form_password_too_long": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "رمز عبور حداکثر {maxText} نویسه است."
+      }
+    }
+  ],
+  "auth_error_invalid_credentials": "ایمیل یا رمز عبور درست نیست.",
+  "auth_error_user_exists": "با این ایمیل قبلاً حساب ساخته شده است. وارد شوید.",
+  "auth_error_password_too_short": "رمز عبور کوتاه است.",
+  "auth_error_captcha_failed": "بررسی امنیتی انجام نشد. دوباره امتحان کنید.",
+  "auth_error_account_blocked": "این حساب مسدود شده است.",
+  "auth_error_unknown": "درخواست انجام نشد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.",
+  "note_error_title_required": "عنوان یادداشت را وارد کنید.",
+  "note_error_title_too_long": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "عنوان حداکثر {maxText} حرف است."
+      }
+    }
+  ],
+  "note_error_body_too_long": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "متن حداکثر {maxText} حرف است."
+      }
+    }
+  ],
+  "note_error_image_unusable": "این عکس قابل استفاده نیست.",
+  "media_error_too_big": [
+    {
+      "declarations": ["input max", "local maxText = max: number"],
+      "match": {
+        "": "حجم عکس باید کمتر از {maxText} مگابایت باشد."
+      }
+    }
+  ],
+  "media_error_too_many_pixels": "ابعاد عکس خیلی بزرگ است. عکسی با ابعاد کوچک‌تر انتخاب کنید.",
+  "media_error_unsupported": "فرمت عکس پشتیبانی نمی‌شود. لطفاً عکس را با فرمت JPG یا PNG بارگذاری کنید.",
+  "media_error_unreadable": "این فایل عکس سالمی نیست. عکس دیگری را امتحان کنید."
+}

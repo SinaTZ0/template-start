@@ -3,6 +3,8 @@ import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 
+import { m } from "#/paraglide/messages";
+
 import { Button } from "../button/button";
 import {
   sheetCloseClasses,
@@ -68,7 +70,7 @@ function SheetContent({
             render={<Button variant="ghost" className={sheetCloseClasses} size="icon-sm" />}
           >
             <XIcon />
-            <span className="sr-only">بستن</span>
+            <span className="sr-only">{m.common_close()}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>

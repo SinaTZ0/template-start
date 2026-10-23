@@ -8,6 +8,7 @@ import { Input } from "#/components/primitive/input/input";
 import { Spinner } from "#/components/primitive/spinner/spinner";
 import { FormAlert } from "#/components/shared/form-alert/form-alert";
 import { authClient } from "#/lib/auth-client";
+import { m } from "#/paraglide/messages";
 import { describeAuthError } from "#/routes/auth/auth-errors";
 import { signInSchema, type SignInValues } from "#/routes/auth/schema";
 
@@ -33,7 +34,7 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
         <FormAlert message={formError} />
 
         <Field data-invalid={!!errors.email || undefined}>
-          <FieldLabel htmlFor="sign-in-email">ایمیل</FieldLabel>
+          <FieldLabel htmlFor="sign-in-email">{m.auth_email_label()}</FieldLabel>
           <Input
             id="sign-in-email"
             type="email"
@@ -46,7 +47,7 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
         </Field>
 
         <Field data-invalid={!!errors.password || undefined}>
-          <FieldLabel htmlFor="sign-in-password">رمز عبور</FieldLabel>
+          <FieldLabel htmlFor="sign-in-password">{m.auth_password_label()}</FieldLabel>
           <Input
             id="sign-in-password"
             type="password"
@@ -60,7 +61,7 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
 
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting && <Spinner data-icon="inline-start" />}
-          ورود
+          {m.auth_sign_in_submit()}
         </Button>
       </FieldGroup>
     </form>

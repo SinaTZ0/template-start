@@ -14,10 +14,10 @@ import {
 import { toast } from "#/components/primitive/toast/toast";
 import { MediaImage } from "#/components/shared/media-image/media-image";
 import { describeApiFailure } from "#/lib/api-error";
+import { formatDate } from "#/lib/locale";
 import { orpc } from "#/orpc/client";
 import type { Note } from "#/orpc/note/contract";
-
-const dateFormat = new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium" });
+import { m } from "#/paraglide/messages";
 
 /*===== Note Card =====*/
 export function NoteCard({ note, onDeleted }: { note: Note; onDeleted: () => void }) {
@@ -25,8 +25,8 @@ export function NoteCard({ note, onDeleted }: { note: Note; onDeleted: () => voi
     orpc.note.delete.mutationOptions({
       onSuccess: onDeleted,
       onError: (error) => {
-        const { message } = describeApiFailure({ error, fallback: "یادداشت حذف نشد." });
-        toast.add({ title: message ?? "یادداشت حذف نشد.", type: "error" });
+        const { message } = describeApiFailure({ error, fallback: m.notes_delete_failed() });
+        toast.add({ title: message ?? m.notes_delete_failed(), type: "error" });
       },
     }),
   );
@@ -40,12 +40,12 @@ export function NoteCard({ note, onDeleted }: { note: Note; onDeleted: () => voi
       )}
       <CardHeader>
         <CardTitle>{note.title}</CardTitle>
-        <CardDescription>{dateFormat.format(note.createdAt)}</CardDescription>
+        <CardDescription>{formatDate(note.createdAt)}</CardDescription>
         <CardAction>
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={`حذف «${note.title}»`}
+            aria-label={m.notes_delete_label({ title: note.title })}
             disabled={remove.isPending}
             onClick={() => remove.mutate({ id: note.id })}
           >

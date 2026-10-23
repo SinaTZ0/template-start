@@ -10,7 +10,7 @@
     "build": "NODE_ENV=production vite build",
     "dev": "vite dev",
     "start": "node .output/server/index.mjs",
-    "typecheck": "tsc",
+    "typecheck": "pnpm i18n:compile && tsc",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "prettier --write .",
@@ -29,7 +29,8 @@
     "db:seed": "tsx src/db/seed.ts",
     "services": "docker compose -f compose.dev.yaml up -d && node --env-file=.env deploy/init-storage.mjs",
     "errors": "cd tools/error-viewer && PUBLIC_KEY=developmentkey ADMIN_PASSWORD=admin SESSION_SECRET=development-only-session-secret-at-least-32-characters ALLOWED_ORIGIN=http://localhost:5173,http://localhost:3000 BASE_URL=http://localhost:8000 DATA_DIR=./data go run .",
-    "prepare": "lefthook install",
+    "prepare": "lefthook install && pnpm i18n:compile",
+    "i18n:compile": "paraglide-js compile --silent",
     "generate-routes": "tsr generate"
   },
   "dependencies": {
@@ -37,6 +38,7 @@
     "@base-ui/react": "^1.9.0",
     "@fontsource-variable/vazirmatn": "^5.3.0",
     "@hookform/resolvers": "^6.0.0",
+    "@inlang/paraglide-js": "^2.29.1",
     "@orpc/client": "^2.0.0-beta.45",
     "@orpc/contract": "^2.0.0-beta.45",
     "@orpc/server": "^2.0.0-beta.45",

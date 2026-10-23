@@ -2,6 +2,8 @@ import { Toast as ToastPrimitive } from "@base-ui/react/toast";
 import { cn } from "cn";
 import { CircleCheckIcon, InfoIcon, Loader2Icon, CircleAlertIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
+
+import { m } from "#/paraglide/messages";
 import { Button } from "../button/button";
 import {
   toastActionClasses,
@@ -89,7 +91,7 @@ function ToastClose({
   return (
     <ToastPrimitive.Close
       data-slot="toast-close"
-      aria-label="بستن اعلان"
+      aria-label={m.common_close_notification()}
       render={render}
       className={cn(toastCloseClasses, className)}
       {...props}

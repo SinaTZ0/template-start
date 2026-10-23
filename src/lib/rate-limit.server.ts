@@ -1,5 +1,6 @@
 import { env } from "#/env.server";
 import { createLogger } from "#/lib/logger.server";
+import { m } from "#/paraglide/messages";
 
 const log = createLogger("rate-limit");
 
@@ -9,8 +10,10 @@ export type RateLimitPolicy = { name: string; limit: number; windowMs: number };
 
 export type RateLimitResult = { allowed: true } | { allowed: false; retryAfterSeconds: number };
 
-/** The Persian line shown to a person who hit a limit. */
-export const RATE_LIMITED_MESSAGE = "تعداد درخواست‌ها زیاد بود. کمی صبر کنید و دوباره امتحان کنید.";
+/** The line shown to a person who hit a limit, in the request's locale. A function: a constant would freeze one locale. */
+export function rateLimitedMessage(): string {
+  return m.common_rate_limited();
+}
 
 /*===== Store =====*/
 /**

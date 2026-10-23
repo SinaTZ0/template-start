@@ -10,6 +10,8 @@ import { Toaster } from "#/components/primitive/toast/toast";
 import { TooltipProvider } from "#/components/primitive/tooltip/tooltip";
 import { SITE_ORIGIN } from "#/lib/site.server";
 import { THEME_INIT_SCRIPT } from "#/lib/theme";
+import { m } from "#/paraglide/messages";
+import { getLocale, getTextDirection } from "#/paraglide/runtime";
 import type { RouterContext } from "#/router";
 import appCss from "#/styles.css?url";
 
@@ -33,10 +35,15 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 /*===== Document =====*/
 function RootDocument({ children }: { children: React.ReactNode }) {
+  // The URL decides the locale, on the server and in the browser alike (docs/frontend/i18n.md), and the locale decides
+  // the direction: Persian is right-to-left, English left-to-right.
+  const locale = getLocale();
+  const direction = getTextDirection(locale);
+
   return (
     // The theme script changes <html>'s class and style before hydration, so React must not
     // treat that as a mismatch.
-    <html lang="fa" dir="rtl" suppressHydrationWarning>
+    <html lang={locale} dir={direction} suppressHydrationWarning>
       <head>
         {/* First in <head>: applies the saved or system theme before anything paints. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
@@ -45,12 +52,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         {/*===== Global Providers =====*/}
         {/* Base UI reads direction from context, not the `dir` attribute, so popups, sliders, and
-            menus need the provider to position and navigate correctly in RTL. */}
+            menus need the provider to position and navigate correctly in either direction. */}
         {/* Without a Provider, Jotai uses a module-level default store that the server would
             share across requests, so each render tree gets its own store instead. */}
         {/* `QueryClientProvider` comes from the router (`setupRouterSsrQueryIntegration` in `src/router.tsx`). */}
         <JotaiProvider>
-          <DirectionProvider direction="rtl">
+          <DirectionProvider direction={direction}>
             <TooltipProvider>
               {children}
               <Toaster />
@@ -87,11 +94,11 @@ function ErrorMessage({ message, details, stack }: { message: string; details: s
 function RootError({ error }: ErrorComponentProps) {
   // Details only in development: production errors can carry internals the visitor shouldn't see.
   if (import.meta.env.DEV && error instanceof Error) {
-    return <ErrorMessage message="Error" details={error.message} stack={error.stack} />;
+    return <ErrorMessage message={m.root_error_title()} details={error.message} stack={error.stack} />;
   }
-  return <ErrorMessage message="Oops!" details="An unexpected error occurred." />;
+  return <ErrorMessage message={m.root_error_title()} details={m.root_error_details()} />;
 }
 
 function NotFound() {
-  return <ErrorMessage message="404" details="The requested page could not be found." />;
+  return <ErrorMessage message={m.root_not_found_title()} details={m.root_not_found_details()} />;
 }

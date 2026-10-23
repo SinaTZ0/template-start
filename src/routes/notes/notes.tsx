@@ -5,6 +5,7 @@ import { NotebookPenIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/primitive/card/card";
 import { pageMeta } from "#/lib/seo";
 import { orpc } from "#/orpc/client";
+import { m } from "#/paraglide/messages";
 import { NoteCard } from "#/routes/notes/components/note-card";
 import { NoteForm } from "#/routes/notes/components/note-form";
 
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/_site-layout/_notes-layout/notes")({
   // Fills the Query cache on the server, on preload and on navigation; the page reads the same query.
   loader: ({ context }) => context.queryClient.ensureQueryData(orpc.note.list.queryOptions()),
   // Behind a sign-in, so search engines shouldn't list it.
-  head: (args) => pageMeta({ args, title: "یادداشت‌ها", index: false }),
+  head: (args) => pageMeta({ args, title: m.notes_title(), index: false }),
   component: NotesPage,
 });
 
@@ -31,7 +32,7 @@ function NotesPage() {
       <Card className="self-start lg:w-88 lg:shrink-0">
         <CardHeader>
           <CardTitle>
-            <h1 className="text-h3">یادداشت تازه، {viewer.name}</h1>
+            <h1 className="text-h3">{m.notes_new_heading({ name: viewer.name })}</h1>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -40,11 +41,11 @@ function NotesPage() {
       </Card>
 
       {/*===== List =====*/}
-      <section aria-label="یادداشت‌های شما" className="min-w-0 flex-1">
+      <section aria-label={m.notes_list_label()} className="min-w-0 flex-1">
         {notes.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-16 text-center text-muted-foreground">
             <NotebookPenIcon className="size-8" />
-            <p>هنوز یادداشتی ندارید. اولین یادداشت را از فرم کنار بسازید.</p>
+            <p>{m.notes_empty()}</p>
           </div>
         ) : (
           <ul className="grid gap-5 sm:grid-cols-2">

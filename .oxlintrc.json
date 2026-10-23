@@ -44,6 +44,8 @@
     ".tanstack/",
     ".nitro/",
     "src/routeTree.gen.ts",
+    "src/paraglide/",
+    "project.inlang/cache/",
     "playwright-report/",
     "test-results/",
     "storybook-static/",

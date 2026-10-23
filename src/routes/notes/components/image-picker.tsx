@@ -10,6 +10,7 @@ import { describeApiFailure } from "#/lib/api-error";
 import { orpc } from "#/orpc/client";
 import { MEDIA_ACCEPTED_TYPES } from "#/orpc/media/constants";
 import type { Media } from "#/orpc/media/contract";
+import { m } from "#/paraglide/messages";
 
 /*===== Image Picker =====*/
 /**
@@ -29,22 +30,22 @@ export function ImagePicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useMutation(orpc.media.upload.mutationOptions({ onSuccess: onChange }));
   const failure = upload.error
-    ? describeApiFailure({ error: upload.error, fallback: "بارگذاری عکس انجام نشد." })
+    ? describeApiFailure({ error: upload.error, fallback: m.notes_image_upload_failed() })
     : null;
   const error = failure?.fields.file ?? failure?.message ?? serverError;
 
   return (
     <Field data-invalid={!!error || undefined}>
-      <FieldLabel htmlFor={inputId}>عکس (اختیاری)</FieldLabel>
+      <FieldLabel htmlFor={inputId}>{m.notes_image_label()}</FieldLabel>
 
       {value ? (
         <div className="relative w-40">
-          <MediaImage media={value} variant="thumb" alt="پیش‌نمایش عکس" className="w-40 rounded-md" />
+          <MediaImage media={value} variant="thumb" alt={m.notes_image_preview()} className="w-40 rounded-md" />
           <Button
             type="button"
             variant="secondary"
             size="icon-xs"
-            aria-label="حذف عکس"
+            aria-label={m.notes_image_remove()}
             className="absolute end-1 top-1"
             onClick={() => onChange(null)}
           >
@@ -60,7 +61,7 @@ export function ImagePicker({
           onClick={() => inputRef.current?.click()}
         >
           {upload.isPending ? <Spinner data-icon="inline-start" /> : <ImageIcon data-icon="inline-start" />}
-          انتخاب عکس
+          {m.notes_image_choose()}
         </Button>
       )}
 

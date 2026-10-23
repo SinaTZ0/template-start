@@ -6,6 +6,9 @@ node_modules
 .output
 .tanstack
 .nitro
+# Regenerated from messages/ by the build (docs/frontend/i18n.md).
+src/paraglide
+project.inlang/cache
 .tmp-claude
 .claude
 .agents

@@ -2,13 +2,9 @@ import type { Decorator, Preview } from "@storybook/react-vite";
 
 import { DirectionProvider } from "#/components/primitive/direction/direction";
 import { TooltipProvider } from "#/components/primitive/tooltip/tooltip";
+import { baseLocale, getTextDirection, isLocale, type Locale, locales, overwriteGetLocale } from "#/paraglide/runtime";
 
 import "../src/styles.css";
-
-/*===== Document =====*/
-// Mirror __root.tsx so stories render RTL, in Persian, with the app font.
-document.documentElement.lang = "fa";
-document.documentElement.dir = "rtl";
 
 /*===== Decorators =====*/
 type Theme = "light" | "dark" | "both";
@@ -37,19 +33,41 @@ const withTheme: Decorator = (Story, context) => {
   );
 };
 
-// Base UI reads direction from context, not the `dir` attribute (see __root.tsx).
-const withProviders: Decorator = (Story) => (
-  <DirectionProvider direction="rtl">
-    <TooltipProvider>
-      <Story />
-    </TooltipProvider>
-  </DirectionProvider>
-);
+/**
+ * Applies the toolbar locale the way `__root.tsx` does: `lang` and `dir` on <html>, and Base UI's direction context,
+ * which it reads instead of the `dir` attribute. Messages read the locale through `getLocale()`, which a story has no
+ * URL for, so it is overwritten with the toolbar's choice.
+ */
+const withLocale: Decorator = (Story, context) => {
+  const chosen = String(context.globals.locale ?? baseLocale);
+  const locale: Locale = isLocale(chosen) ? chosen : baseLocale;
+  const direction = getTextDirection(locale);
+  overwriteGetLocale(() => locale);
+  document.documentElement.lang = locale;
+  document.documentElement.dir = direction;
+
+  return (
+    <DirectionProvider direction={direction}>
+      <TooltipProvider>
+        <Story />
+      </TooltipProvider>
+    </DirectionProvider>
+  );
+};
 
 /*===== Preview =====*/
 const preview: Preview = {
-  decorators: [withTheme, withProviders],
+  decorators: [withTheme, withLocale],
   globalTypes: {
+    locale: {
+      description: "Language and direction",
+      toolbar: {
+        title: "Locale",
+        icon: "globe",
+        items: locales.map((locale) => ({ value: locale, title: `${locale} (${getTextDirection(locale)})` })),
+        dynamicTitle: true,
+      },
+    },
     theme: {
       description: "Color theme",
       toolbar: {
@@ -65,6 +83,7 @@ const preview: Preview = {
     },
   },
   initialGlobals: {
+    locale: baseLocale,
     theme: "light",
   },
   parameters: {

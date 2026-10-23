@@ -12,6 +12,7 @@ import { FormAlert } from "#/components/shared/form-alert/form-alert";
 import { describeApiFailure } from "#/lib/api-error";
 import { orpc } from "#/orpc/client";
 import type { Media } from "#/orpc/media/contract";
+import { m } from "#/paraglide/messages";
 import { ImagePicker } from "#/routes/notes/components/image-picker";
 import { noteFormSchema, type NoteFormValues } from "#/routes/notes/schema";
 
@@ -34,7 +35,7 @@ export function NoteForm({ onCreated }: { onCreated: () => void }) {
       },
     }),
   );
-  const failure = create.error ? describeApiFailure({ error: create.error, fallback: "یادداشت ذخیره نشد." }) : null;
+  const failure = create.error ? describeApiFailure({ error: create.error, fallback: m.notes_save_failed() }) : null;
 
   const onSubmit = form.handleSubmit((values) => create.mutate({ ...values, imageMediaId: image?.id }));
 
@@ -44,13 +45,13 @@ export function NoteForm({ onCreated }: { onCreated: () => void }) {
         <FormAlert message={failure?.message ?? undefined} />
 
         <Field data-invalid={!!(errors.title ?? failure?.fields.title) || undefined}>
-          <FieldLabel htmlFor="note-title">عنوان</FieldLabel>
+          <FieldLabel htmlFor="note-title">{m.notes_title_label()}</FieldLabel>
           <Input id="note-title" aria-invalid={!!errors.title} {...form.register("title")} />
           <FieldError>{errors.title?.message ?? failure?.fields.title}</FieldError>
         </Field>
 
         <Field data-invalid={!!(errors.body ?? failure?.fields.body) || undefined}>
-          <FieldLabel htmlFor="note-body">متن</FieldLabel>
+          <FieldLabel htmlFor="note-body">{m.notes_body_label()}</FieldLabel>
           <Textarea id="note-body" rows={4} aria-invalid={!!errors.body} {...form.register("body")} />
           <FieldError>{errors.body?.message ?? failure?.fields.body}</FieldError>
         </Field>
@@ -59,7 +60,7 @@ export function NoteForm({ onCreated }: { onCreated: () => void }) {
 
         <Button type="submit" className="self-start" disabled={create.isPending}>
           {create.isPending && <Spinner data-icon="inline-start" />}
-          افزودن یادداشت
+          {m.notes_submit()}
         </Button>
       </FieldGroup>
     </form>

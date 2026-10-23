@@ -3,7 +3,8 @@ import { ArrowLeftIcon } from "lucide-react";
 
 import { buttonVariants } from "#/components/primitive/button/button.styles";
 import { absoluteUrl, jsonLd, pageMeta } from "#/lib/seo";
-import { SITE_NAME } from "#/lib/site";
+import { m } from "#/paraglide/messages";
+import { localizeHref } from "#/paraglide/runtime";
 
 /*===== Route =====*/
 export const Route = createFileRoute("/_site-layout/")({
@@ -14,8 +15,8 @@ export const Route = createFileRoute("/_site-layout/")({
       jsonLd({
         "@context": "https://schema.org",
         "@type": "WebSite",
-        name: SITE_NAME,
-        url: absoluteUrl({ matches: args.matches, path: "/" }),
+        name: m.site_name(),
+        url: absoluteUrl({ matches: args.matches, path: localizeHref("/") }),
       }),
     ],
   }),
@@ -26,13 +27,12 @@ export const Route = createFileRoute("/_site-layout/")({
 function Home() {
   return (
     <section className="mx-auto flex max-w-site flex-col items-start gap-6 px-4 py-20 sm:px-6">
-      <h1 className="text-display">{SITE_NAME}</h1>
-      <p className="max-w-xl text-body-lg text-muted-foreground">
-        این صفحه را با معرفی پروژه جایگزین کنید. بخش یادداشت‌ها نمونه‌ای کامل از ورود، API و بارگذاری عکس است.
-      </p>
+      <h1 className="text-display">{m.site_name()}</h1>
+      <p className="max-w-xl text-body-lg text-muted-foreground">{m.home_intro()}</p>
       <Link to="/notes" className={buttonVariants({ variant: "highlight", size: "lg" })}>
-        رفتن به یادداشت‌ها
-        <ArrowLeftIcon data-icon="inline-end" />
+        {m.home_go_to_notes()}
+        {/* Points forward: left in Persian, flipped to point right in English. */}
+        <ArrowLeftIcon data-icon="inline-end" className="ltr:-scale-x-100" />
       </Link>
     </section>
   );

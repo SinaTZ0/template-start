@@ -5,6 +5,7 @@ import { toast } from "#/components/primitive/toast/toast";
 import { authClient } from "#/lib/auth-client";
 import { setReportedUser } from "#/lib/error-reporting.browser";
 import { viewerQueryOptions } from "#/lib/viewer";
+import { m } from "#/paraglide/messages";
 
 /*===== Sign Out =====*/
 /** Signs out and goes home, then forgets this account's cached data. */
@@ -27,7 +28,7 @@ export function useSignOut() {
       queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== viewerQueryOptions.queryKey[0] });
     },
     onError: () => {
-      toast.add({ title: "خروج انجام نشد. دوباره امتحان کنید.", type: "error" });
+      toast.add({ title: m.nav_sign_out_failed(), type: "error" });
     },
   });
 }

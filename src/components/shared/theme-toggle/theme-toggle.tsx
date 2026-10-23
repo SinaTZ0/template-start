@@ -2,6 +2,7 @@ import { MoonIcon, SunIcon } from "lucide-react";
 
 import { Button } from "#/components/primitive/button/button";
 import { useTheme } from "#/hooks/use-theme";
+import { m } from "#/paraglide/messages";
 
 /*===== Theme Toggle =====*/
 /**
@@ -16,7 +17,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <Button
       variant="ghost"
       size="icon"
-      aria-label="حالت تیره"
+      aria-label={m.theme_dark_mode()}
       aria-pressed={theme === null ? undefined : isDark}
       onClick={() => setTheme(isDark ? "light" : "dark")}
       className={className}

@@ -13,10 +13,4 @@ export function toLatinDigits(value: string): string {
   });
 }
 
-/*===== Formatting =====*/
-const faNumberFormat = new Intl.NumberFormat("fa-IR");
-
-/** Formats a number with Persian digits (`12` → `۱۲`), for any number shown to users. */
-export function formatNumberFa(value: number): string {
-  return faNumberFormat.format(value);
-}
+// Showing numbers is the locale's job: `formatNumber` in `src/lib/locale.ts`, or a message's `number` declaration.

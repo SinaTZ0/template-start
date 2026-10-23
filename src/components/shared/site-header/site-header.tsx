@@ -12,16 +12,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "#/components/primitive/dropdown-menu/dropdown-menu";
+import { LocaleSwitcher } from "#/components/shared/locale-switcher/locale-switcher";
 import { ThemeToggle } from "#/components/shared/theme-toggle/theme-toggle";
+import { useLocaleLinks } from "#/hooks/use-locale-links";
 import { useSignOut } from "#/hooks/use-sign-out";
-import { SITE_NAME } from "#/lib/site";
 import type { Viewer } from "#/lib/viewer";
+import { m } from "#/paraglide/messages";
 
 /*===== Navigation =====*/
 
+// Message functions, not their text: called in render, so each request gets its own locale's labels.
 const NAV_ITEMS = [
-  { label: "خانه", to: "/" },
-  { label: "یادداشت‌ها", to: "/notes" },
+  { label: m.nav_home, to: "/" },
+  { label: m.nav_notes, to: "/notes" },
 ] as const;
 
 // The current page gets the primary underline; hover and focus tint the text.
@@ -35,7 +38,7 @@ function AccountMenu({ viewer }: { viewer: Viewer }) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="حساب کاربری" />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={m.nav_account()} />}>
         <UserIcon />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
@@ -50,7 +53,7 @@ function AccountMenu({ viewer }: { viewer: Viewer }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={signOut.isPending} onClick={() => signOut.mutate()}>
           <LogOutIcon />
-          خروج
+          {m.nav_sign_out()}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -59,8 +62,10 @@ function AccountMenu({ viewer }: { viewer: Viewer }) {
 
 /*===== Site Header =====*/
 
-/** Brand, main navigation, theme toggle and the account menu (or a sign-in button for visitors). */
+/** Brand, main navigation, language switcher, theme toggle and the account menu (or a sign-in button for visitors). */
 export function SiteHeader({ viewer }: { viewer: Viewer | null }) {
+  const localeLinks = useLocaleLinks();
+
   return (
     <header className="border-b bg-card">
       <div className="mx-auto flex h-16 max-w-site items-center gap-4 px-4 sm:px-6">
@@ -68,27 +73,28 @@ export function SiteHeader({ viewer }: { viewer: Viewer | null }) {
           to="/"
           className="rounded-sm text-h4 text-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring focus-visible:outline-solid"
         >
-          {SITE_NAME}
+          {m.site_name()}
         </Link>
 
-        <nav aria-label="منوی اصلی" className="flex items-center">
+        <nav aria-label={m.nav_main()} className="flex items-center">
           {NAV_ITEMS.map((item) => (
             // The active link gets `aria-current="page"`, which the classes style. `exact` keeps "/" from matching
             // every page.
             <Link key={item.to} to={item.to} activeOptions={{ exact: true }} className={navItemClasses}>
-              {item.label}
+              {item.label()}
             </Link>
           ))}
         </nav>
 
         <div className="ms-auto flex shrink-0 items-center gap-1">
+          <LocaleSwitcher links={localeLinks} />
           <ThemeToggle />
           {viewer ? (
             <AccountMenu viewer={viewer} />
           ) : (
             // A link styled as a button: `<Button render={<Link />}>` would announce it as a button (`role="button"`).
             <Link to="/auth" className={buttonVariants({ size: "sm" })}>
-              ورود
+              {m.nav_sign_in()}
             </Link>
           )}
         </div>

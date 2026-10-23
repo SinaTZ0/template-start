@@ -13,6 +13,9 @@
 # Tools deploy/deploy.sh downloads for itself (gum).
 /deploy/.bin/
 
+# Paraglide's compiled messages (pnpm i18n:compile, docs/frontend/i18n.md)
+/src/paraglide/
+
 # TanStack Start and Nitro build output
 /.output/
 /.tanstack/

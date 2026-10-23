@@ -8,6 +8,7 @@ import type { Note } from "#/orpc/note/contract";
 import { toPublicNote } from "#/orpc/note/mapper";
 import { deleteNoteRow, findNotesByOwner, findOwnedNote, insertNote } from "#/orpc/note/repository";
 import { newNoteSchema } from "#/orpc/note/validation";
+import { m } from "#/paraglide/messages";
 
 /*===== List =====*/
 /** Returns the owner's notes, newest first. */
@@ -41,7 +42,8 @@ export async function addNote({
   /*------ Image ------*/
   if (imageMediaId) {
     const attached = await attachMedia({ db, mediaId: imageMediaId, kind: "image", userId: ownerId });
-    if (attached.kind === "invalid") return { kind: "invalid", fields: { imageMediaId: "این عکس قابل استفاده نیست." } };
+    if (attached.kind === "invalid")
+      return { kind: "invalid", fields: { imageMediaId: m.note_error_image_unusable() } };
   }
 
   /*------ Row ------*/

@@ -2,6 +2,8 @@ import { QueryClient } from "@tanstack/react-query";
 import { type AnyRouter, createRouter, type ParsedLocation } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 
+import { deLocalizeUrl, localizeUrl } from "#/paraglide/runtime";
+
 import { routeTree } from "./routeTree.gen";
 
 /*===== Router Context =====*/
@@ -72,6 +74,13 @@ export function getRouter() {
   const router = createRouter({
     routeTree,
     context: { queryClient } satisfies RouterContext,
+    // Routes are declared without a locale (`/notes`). Incoming URLs lose their prefix (`/en/notes` → `/notes`), and
+    // every link, redirect and preload gets the current locale's back, so the visitor stays in their language
+    // (docs/frontend/i18n.md).
+    rewrite: {
+      input: ({ url }) => deLocalizeUrl(url),
+      output: ({ url }) => localizeUrl(url),
+    },
     // Hovering or focusing a link runs the target's loaders, which fill the Query cache the page then reads.
     defaultPreload: "intent",
     // The router always calls the loader on preload; Query's `staleTime` decides whether anything is fetched.

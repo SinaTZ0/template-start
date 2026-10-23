@@ -1,6 +1,9 @@
 import type { AnyRouteMatch } from "@tanstack/react-router";
 
-import { pageTitle, SITE_DESCRIPTION, SITE_IMAGE, SITE_LOCALE, SITE_NAME } from "#/lib/site";
+import { OG_LOCALE } from "#/lib/locale";
+import { pageTitle, SITE_IMAGE } from "#/lib/site";
+import { m } from "#/paraglide/messages";
+import { baseLocale, getLocale, localizeHref, locales } from "#/paraglide/runtime";
 
 /*===== Types =====*/
 // What `pageMeta` needs from a route's `head` arguments. Every route's `head` context fits.
@@ -32,18 +35,21 @@ export function absoluteUrl({ matches, path }: { matches: HeadArgsLike["matches"
  * The head tags for a page: title, description, canonical URL, Open Graph and Twitter link previews, and `robots`.
  * Return it from a route's `head` option, adding page-specific tags to its lists (`docs/frontend/seo.md`).
  *
- * @param title The page's own title, shown as «title | site». Leave it out on the home page.
- * @param description What the page offers, in one or two Persian sentences. Defaults to `SITE_DESCRIPTION`.
- * @param image The link-preview image, root-relative or absolute. Defaults to `SITE_IMAGE`.
+ * Public pages are tagged for the current locale: the canonical URL is the page in it, and `hreflang` alternates point
+ * at the page in every locale (docs/frontend/i18n.md → SEO).
+ *
+ * @param title The page's own title, a message. Leave it out on the home page.
+ * @param description What the page offers, in one or two sentences, a message. Defaults to `m.site_description()`.
+ * @param image The link-preview image, root-relative or absolute, with its `alt` a message. Defaults to `SITE_IMAGE`.
  * @param index `false` for pages search engines shouldn't list: sign-in, anything behind a sign-in, and private
  * results. They get `noindex` and no canonical URL, and stay out of the sitemap.
- * @param path The canonical path. Defaults to the current path without its query string, so filtered or paged views
- * point at the page itself. Pass one when the query is part of the content.
+ * @param path The canonical path, without a locale prefix. Defaults to the current path without its query string, so
+ * filtered or paged views point at the page itself. Pass one when the query is part of the content.
  */
 export function pageMeta({
   args: { match, matches },
   title,
-  description = SITE_DESCRIPTION,
+  description = m.site_description(),
   image = SITE_IMAGE,
   index = true,
   path = match.pathname,
@@ -71,14 +77,17 @@ export function pageMeta({
   }
 
   /*------ Public Pages ------*/
-  const url = absoluteUrl({ matches, path });
+  const locale = getLocale();
+  const otherLocales = locales.filter((other) => other !== locale);
+  const url = absoluteUrl({ matches, path: localizeHref(path, { locale }) });
   const meta: MetaTag[] = [
     { title: fullTitle },
     { name: "description", content: description },
     { property: "og:type", content: "website" },
-    { property: "og:site_name", content: SITE_NAME },
-    { property: "og:locale", content: SITE_LOCALE },
-    { property: "og:title", content: title ?? SITE_NAME },
+    { property: "og:site_name", content: m.site_name() },
+    { property: "og:locale", content: OG_LOCALE[locale] },
+    ...otherLocales.map((other) => ({ property: "og:locale:alternate", content: OG_LOCALE[other] })),
+    { property: "og:title", content: title ?? m.site_name() },
     { property: "og:description", content: description },
     { property: "og:url", content: url },
     // Twitter reads the title, description and image from the Open Graph tags; it only needs the card size.
@@ -92,7 +101,25 @@ export function pageMeta({
     );
   }
 
-  return { meta, links: [{ rel: "canonical", href: url }] };
+  /*------ Language Alternates ------*/
+  // Every locale's version of the page, this one included, and `x-default` for visitors whose language isn't listed.
+  const alternates: LinkTag[] =
+    locales.length > 1
+      ? [
+          ...locales.map((other) => ({
+            rel: "alternate",
+            hrefLang: other,
+            href: absoluteUrl({ matches, path: localizeHref(path, { locale: other }) }),
+          })),
+          {
+            rel: "alternate",
+            hrefLang: "x-default",
+            href: absoluteUrl({ matches, path: localizeHref(path, { locale: baseLocale }) }),
+          },
+        ]
+      : [];
+
+  return { meta, links: [{ rel: "canonical", href: url }, ...alternates] };
 }
 
 /*===== Structured Data =====*/

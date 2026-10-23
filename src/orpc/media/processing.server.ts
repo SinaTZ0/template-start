@@ -1,8 +1,8 @@
 import sharp from "sharp";
 
-import { formatNumberFa } from "#/lib/digits";
 import { MEDIA_MAX_BYTES, MEDIA_VARIANTS } from "#/orpc/media/constants";
 import type { MediaKind, MediaVariantSpec } from "#/orpc/media/constants";
+import { m } from "#/paraglide/messages";
 
 /*===== Limits =====*/
 const MAX_PIXELS = 40_000_000;
@@ -16,12 +16,13 @@ const WEBP_THUMB_QUALITY = 72;
 const WEBP_EFFORT = 4;
 
 /*===== Messages =====*/
-// User-facing: they surface as the `file` field error.
+// User-facing: they surface as the `file` field error. Message functions, called per upload, so each is in that
+// request's locale.
 const MESSAGES = {
-  tooBig: `حجم عکس باید کمتر از ${formatNumberFa(MEDIA_MAX_BYTES / 1024 / 1024)} مگابایت باشد.`,
-  tooManyPixels: "ابعاد عکس خیلی بزرگ است. عکسی با ابعاد کوچک‌تر انتخاب کنید.",
-  unsupported: "فرمت عکس پشتیبانی نمی‌شود. لطفاً عکس را با فرمت JPG یا PNG بارگذاری کنید.",
-  unreadable: "این فایل عکس سالمی نیست. عکس دیگری را امتحان کنید.",
+  tooBig: () => m.media_error_too_big({ max: MEDIA_MAX_BYTES / 1024 / 1024 }),
+  tooManyPixels: m.media_error_too_many_pixels,
+  unsupported: m.media_error_unsupported,
+  unreadable: m.media_error_unreadable,
 };
 
 /*===== Types =====*/
@@ -51,7 +52,7 @@ export type ProcessImageResult = { kind: "success"; image: ProcessedImage } | { 
  */
 export async function processImage({ file, kind }: { file: File; kind: MediaKind }): Promise<ProcessImageResult> {
   /*------ Size, Before Decoding ------*/
-  if (file.size > MEDIA_MAX_BYTES) return { kind: "invalid", message: MESSAGES.tooBig };
+  if (file.size > MEDIA_MAX_BYTES) return { kind: "invalid", message: MESSAGES.tooBig() };
 
   const input = Buffer.from(await file.arrayBuffer());
 
@@ -62,10 +63,10 @@ export async function processImage({ file, kind }: { file: File; kind: MediaKind
     const metadata = await sharp(input, options).metadata();
 
     if (!metadata.format || !ACCEPTED_FORMATS.includes(metadata.format)) {
-      return { kind: "invalid", message: MESSAGES.unsupported };
+      return { kind: "invalid", message: MESSAGES.unsupported() };
     }
-    if (!metadata.width || !metadata.height) return { kind: "invalid", message: MESSAGES.unreadable };
-    if (metadata.width * metadata.height > MAX_PIXELS) return { kind: "invalid", message: MESSAGES.tooManyPixels };
+    if (!metadata.width || !metadata.height) return { kind: "invalid", message: MESSAGES.unreadable() };
+    if (metadata.width * metadata.height > MAX_PIXELS) return { kind: "invalid", message: MESSAGES.tooManyPixels() };
 
     // EXIF orientations 5 to 8 turn the image by a quarter, which swaps its sides.
     const turned = (metadata.orientation ?? 1) >= 5;
@@ -107,12 +108,12 @@ export async function processImage({ file, kind }: { file: File; kind: MediaKind
   } catch (error) {
     // A file sharp can't decode (truncated, not an image at all, over the pixel limit) is the uploader's problem.
     const reason = error instanceof Error ? error.message : "";
-    if (/pixel limit/i.test(reason)) return { kind: "invalid", message: MESSAGES.tooManyPixels };
+    if (/pixel limit/i.test(reason)) return { kind: "invalid", message: MESSAGES.tooManyPixels() };
     // A format libvips has no loader for. HEIC from a phone is an ISO media file (`ftyp` box) that it may not even name.
     const isIsoMedia = input.subarray(4, 8).toString("latin1") === "ftyp";
     if (isIsoMedia || /unsupported image format/i.test(reason)) {
-      return { kind: "invalid", message: MESSAGES.unsupported };
+      return { kind: "invalid", message: MESSAGES.unsupported() };
     }
-    return { kind: "invalid", message: MESSAGES.unreadable };
+    return { kind: "invalid", message: MESSAGES.unreadable() };
   }
 }

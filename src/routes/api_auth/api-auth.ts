@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { auth } from "#/lib/auth.server";
-import { limitRequest, RATE_LIMITED_MESSAGE, type RateLimitPolicy } from "#/lib/rate-limit.server";
+import { limitRequest, rateLimitedMessage, type RateLimitPolicy } from "#/lib/rate-limit.server";
 
 /*===== Rate Limits =====*/
 // The app's limiter replaces Better-Auth's (`rateLimit` is off in `auth.server.ts`), so the API and auth share one
@@ -23,7 +23,8 @@ const AUTH_RATE_LIMIT: RateLimitPolicy = { name: "auth", limit: 120, windowMs: 6
 
 /**
  * Answers over-limit requests with a 429 in Better-Auth's error shape, so the auth client reports it like any other
- * failure (`describeAuthError` shows the Persian line for status 429). Returns nothing when the request may go on.
+ * failure (`describeAuthError` shows its own line for status 429, in the page's locale). Returns nothing when the
+ * request may go on.
  */
 function rejectOverLimit(request: Request): Response | undefined {
   const path = new URL(request.url).pathname.replace(/^\/api\/auth/, "");
@@ -32,7 +33,7 @@ function rejectOverLimit(request: Request): Response | undefined {
   if (result.allowed) return;
 
   return Response.json(
-    { code: "TOO_MANY_REQUESTS", message: RATE_LIMITED_MESSAGE },
+    { code: "TOO_MANY_REQUESTS", message: rateLimitedMessage() },
     { status: 429, headers: { "Retry-After": String(result.retryAfterSeconds) } },
   );
 }

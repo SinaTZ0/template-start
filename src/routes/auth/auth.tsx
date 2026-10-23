@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/primitive
 import { redirectToParam } from "#/lib/search-params";
 import { pageMeta } from "#/lib/seo";
 import { viewerQueryOptions } from "#/lib/viewer";
+import { m } from "#/paraglide/messages";
 import { SignInForm } from "#/routes/auth/components/sign-in-form";
 import { SignUpForm } from "#/routes/auth/components/sign-up-form";
 
@@ -27,7 +28,7 @@ export const Route = createFileRoute("/_site-layout/auth")({
   },
   // Sign-in has nothing to find in search results. After `beforeLoad`, whose result `args` carries
   // (docs/frontend/seo.md).
-  head: (args) => pageMeta({ args, title: "ورود", index: false }),
+  head: (args) => pageMeta({ args, title: m.auth_title(), index: false }),
   component: AuthPage,
 });
 
@@ -49,14 +50,14 @@ function AuthPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            <h1 className="text-h2">ورود یا ثبت‌نام</h1>
+            <h1 className="text-h2">{m.auth_heading()}</h1>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="sign-in">
             <TabsList className="mb-6 w-full">
-              <TabsTrigger value="sign-in">ورود</TabsTrigger>
-              <TabsTrigger value="sign-up">ثبت‌نام</TabsTrigger>
+              <TabsTrigger value="sign-in">{m.auth_tab_sign_in()}</TabsTrigger>
+              <TabsTrigger value="sign-up">{m.auth_tab_sign_up()}</TabsTrigger>
             </TabsList>
             <TabsContent value="sign-in">
               <SignInForm onSuccess={() => void goOn()} />
