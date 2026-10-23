@@ -31,6 +31,8 @@ The docs have two entry points. Start backend work at `docs/backend-flow.md` and
 ## Route Slices (TanStack Start)
 
 - **Keep Route Slices Flat:** Route folders under `app/routes/` must be flat. URL hierarchy does not imply folder nesting (e.g. use `dashboard_user/`, never `dashboard/user/`). The route tree, including layouts, is declared in `app/routes.ts` with virtual file routes (`rootRoute`, `layout`, `index`, `route`); `app/routeTree.gen.ts` is generated from it, so never edit it.
+- **Declare Every Route in `app/routes.ts`:** Only files listed there become routes. Name a slice after its URL segments joined with `_`, without `$` (`/notes/$noteId` → `notes_noteId/notes-note-id.tsx`); pathless layouts are `<name>_layout/`. Server routes (`/rpc/$`, `/healthz`) are slices with `server.handlers` and no `component`.
+- **No React Server Components:** No `"use server"` / `"use client"` directives or Start RSC APIs; server work goes through oRPC procedures or `createServerFn`.
 - **Colocate Route Internals:** A route file (`export const Route = createFileRoute(...)`), its options (`beforeLoad`, `loader`, `loaderDeps`, `validateSearch`, `head`, `component`, `pendingComponent`, `errorComponent`, `notFoundComponent`, `server.handlers`), and route-only internals (components, hooks, queries, search schema, form schemas) must live inside that route's slice.
 - **Promote Only When Shared:** Keep code with its immediate route consumer. Only move it to a shared or broader domain location when multiple routes consume it or it clearly belongs to a broader domain abstraction.
 
@@ -82,33 +84,7 @@ Prefer a single object parameter when a function has multiple meaningful inputs.
 
 ### Section Dividers
 
-Use major dividers between top-level sections to improve code navigation and readability:
-
-```ts
-/*===== Section Name =====*/
-```
-
-Inside JSX:
-
-```tsx
-{
-  /*===== Section Name =====*/
-}
-```
-
-Use minor dividers for distinct phases inside longer functions or JSX:
-
-```ts
-/*------ Step Name ------*/
-```
-
-```tsx
-{
-  /*------ SubSection Name ------*/
-}
-```
-
-Use dividers generously.
+Use dividers generously: major `/*===== Section Name =====*/` between top-level sections, minor `/*------ Step Name ------*/` for distinct phases inside longer functions or JSX. Inside JSX, wrap them in braces (`{/*===== Section Name =====*/}`).
 
 ### Comments
 
