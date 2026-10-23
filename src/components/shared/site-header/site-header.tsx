@@ -16,7 +16,7 @@ import { LocaleSwitcher } from "#/components/shared/locale-switcher/locale-switc
 import { ThemeToggle } from "#/components/shared/theme-toggle/theme-toggle";
 import { useLocaleLinks } from "#/hooks/use-locale-links";
 import { useSignOut } from "#/hooks/use-sign-out";
-import type { Viewer } from "#/lib/viewer";
+import type { Viewer } from "#/orpc/session/contract";
 import { m } from "#/paraglide/messages";
 
 /*===== Navigation =====*/

@@ -32,7 +32,7 @@ The docs have two entry points. Start backend work at `docs/backend-flow.md` and
 
 - **Keep Route Slices Flat:** Route folders under `src/routes/` must be flat. URL hierarchy does not imply folder nesting (e.g. use `dashboard_user/`, never `dashboard/user/`). The route tree, including layouts, is declared in `src/routes.ts` with virtual file routes (`rootRoute`, `layout`, `index`, `route`); `src/routeTree.gen.ts` is generated from it, so never edit it.
 - **Declare Every Route in `src/routes.ts`:** Only files listed there become routes. Name a slice after its URL segments joined with `_`, without `$` (`/notes/$noteId` → `notes_noteId/notes-note-id.tsx`); pathless layouts are `<name>_layout/`. Server routes (`/rpc/$`, `/healthz`) are slices with `server.handlers` and no `component`.
-- **No React Server Components:** No `"use server"` / `"use client"` directives or Start RSC APIs; server work goes through oRPC procedures or `createServerFn`.
+- **No React Server Components:** No `"use server"` / `"use client"` directives or Start RSC APIs; server work goes through oRPC procedures.
 - **Colocate Route Internals:** A route file (`export const Route = createFileRoute(...)`), its options (`beforeLoad`, `loader`, `loaderDeps`, `validateSearch`, `head`, `component`, `pendingComponent`, `errorComponent`, `notFoundComponent`, `server.handlers`), and route-only internals (components, hooks, queries, search schema, form schemas) must live inside that route's slice.
 - **Promote Only When Shared:** Keep code with its immediate route consumer. Only move it to a shared or broader domain location when multiple routes consume it or it clearly belongs to a broader domain abstraction.
 
@@ -52,13 +52,14 @@ src/routes/
 
 The rules are in `docs/frontend/data-loading.md`.
 
-- Route `beforeLoad` and `loader` are isomorphic: they run on the server for the first request and in the browser afterwards. Server-only modules (`*.server.ts`, the database, `env`) are only used inside a `createServerFn` handler or behind an oRPC procedure, never directly in route code; feature data comes from procedures, small framework reads from `createServerFn`.
+- Route `beforeLoad` and `loader` are isomorphic: they run on the server for the first request and in the browser afterwards. Server-only modules (`*.server.ts`, the database, `env`) are only used behind an oRPC procedure, never directly in route code. All server data comes from procedures, the viewer (`session.viewer`) and site origin (`site.origin`) included.
 - Read page data in loaders with `context.queryClient.ensureQueryData(options)` and in components with `useSuspenseQuery` on the same options. `useQuery` doesn't run during SSR, so it renders an empty page on the server.
 - Create the `QueryClient` inside `getRouter()` (`src/router.tsx`), never at module scope: a module-level client on the server shares one user's data with the next.
 - Every mutation invalidates the query keys it changes (`orpc.<feature>.<procedure>.key()`). Changes made elsewhere are covered by `staleTime` (5 minutes by default; shorter on queries that should show others' changes sooner).
 - Guards are a layout's `beforeLoad` with `throw redirect(...)`; they only shape navigation. Security stays in the oRPC middleware.
 - A browser-only module uses `createClientOnlyFn`, not a `.client.ts` name: Start's import protection rejects `.client` files in code the server renders.
-- Use current Start API names: `.validator()` on server functions and middleware (`.inputValidator()` was the RC name), `getRequest` / `getRequestHeaders` from `@tanstack/react-start/server`, server routes as `server: { handlers }` on `createFileRoute`. Add a cookie with `setCookie` or `appendResponseHeader`; `setResponseHeader("set-cookie", ...)` replaces all of them.
+- No server functions: don't use `createServerFn` or a `src/start.ts`, even where the Start skills suggest them. One way into the server keeps one set of rules for validation, rate limits, errors and CSRF; a small read is a procedure too.
+- Use current Start API names: `.validator()` on middleware (`.inputValidator()` was the RC name), `getRequest` / `getRequestHeaders` from `@tanstack/react-start/server`, server routes as `server: { handlers }` on `createFileRoute`. Add a cookie with `setCookie` or `appendResponseHeader`; `setResponseHeader("set-cookie", ...)` replaces all of them.
 - TanStack Start's own guidance is in the `react-start`, `start-core`, `router-core` and `virtual-file-routes` skills (`.agents/skills/`).
 
 ## Languages

@@ -5,9 +5,9 @@ How the server logs, where errors and slow requests are reported, and how to fin
 ## Overview
 
 ```text
-request ──▶ src/server.ts (trace starts, reqId) ──▶ server function / procedure ▸ service ▸ repository ▸ db
-                                                                                              │
-              one log line per request ◀── trace (time per kind + slowest spans) ◀────────────┘
+request ──▶ src/server.ts (trace starts, reqId) ──▶ procedure ▸ service ▸ repository ▸ db
+                                                                                       │
+              one log line per request ◀── trace (time per kind + slowest spans) ◀─────┘
               slow request ──▶ error viewer warning, with the timeline of its slowest spans
 
 log.error({ err }) ──▶ log line + error viewer event      browser error ──▶ error viewer event
@@ -49,15 +49,14 @@ log.error({ err, mediaId }, "could not clean up the variants");
 
 `src/lib/error-reporting.server.ts` sets up the server SDK; `src/client.tsx` sets up the browser's.
 
-| Source                                                    | How it reaches the error viewer                                |
-| --------------------------------------------------------- | -------------------------------------------------------------- |
-| Unexpected procedure failures (global oRPC middleware)    | `log.error({ err, errorId })`, tagged with the `errorId`       |
-| Server function failures (`src/start.ts`)                 | `log.error({ err })`; ones that already have an `errorId` skip |
-| Failures of the request handler itself (`src/server.ts`)  | `log.error({ err })`                                           |
-| Better-Auth errors, failed health checks, cleanup errors… | Any other `log.error({ err })`                                 |
-| Crashes (uncaught exceptions, unhandled rejections)       | The SDK's own handlers                                         |
-| Browser errors                                            | The SDK's handlers, plus `onCaughtError` for boundary errors   |
-| Slow requests                                             | A warning from the request instrumentation (below)             |
+| Source                                                    | How it reaches the error viewer                              |
+| --------------------------------------------------------- | ------------------------------------------------------------ |
+| Unexpected procedure failures (global oRPC middleware)    | `log.error({ err, errorId })`, tagged with the `errorId`     |
+| Failures of the request handler itself (`src/server.ts`)  | `log.error({ err })`                                         |
+| Better-Auth errors, failed health checks, cleanup errors… | Any other `log.error({ err })`                               |
+| Crashes (uncaught exceptions, unhandled rejections)       | The SDK's own handlers                                       |
+| Browser errors                                            | The SDK's handlers, plus `onCaughtError` for boundary errors |
+| Slow requests                                             | A warning from the request instrumentation (below)           |
 
 **Repeats are throttled.** Every server report reaches the error viewer from one address, and the viewer's answer to
 a burst past its limit makes the SDK stop sending everything for a while. So during an incident the app sends only the
@@ -120,7 +119,6 @@ show what failed.
 
 | Kind         | Recorded by                                          | Name                                |
 | ------------ | ---------------------------------------------------- | ----------------------------------- |
-| `server-fn`  | global function middleware (`src/start.ts`)          | server function: `getViewer`        |
 | `procedure`  | `traceProcedureMiddleware`, first on the implementer | procedure path: `note.list`         |
 | `service`    | `traceLayers` Vite plugin (below)                    | `<feature>.<fn>`: `note.listNotes`  |
 | `repository` | `traceLayers` Vite plugin                            | `<feature>.<fn>`: `note.insertNote` |
@@ -128,13 +126,13 @@ show what failed.
 | `storage`    | S3 client middleware in `src/lib/storage.server.ts`  | command: `PutObject`                |
 | `task`       | `span(...)` calls in app code                        | whatever the call names             |
 
-Kinds nest: a server function's time includes the procedures it called, and those include their queries. Add the kinds up and
-you count the same time more than once.
+Kinds nest: a procedure's time includes its service and repository calls, and those include their queries. Add the
+kinds up and you count the same time more than once.
 
 Procedures are timed the same way over HTTP (`/rpc/*`) and in-process, when a loader calls them during SSR.
-Loaders, `beforeLoad` and rendering aren't spans of their own: they run in the browser too, and the server-side work they
-start is already a `server-fn` or `procedure` span. Time spent rendering shows as the gap between those spans and the
-end of the request.
+Loaders, `beforeLoad` and rendering aren't spans of their own: they run in the browser too, and the server-side work
+they start is already a `procedure` span. Time spent rendering shows as the gap between those spans and the end of the
+request.
 
 **Services and repositories** are timed by the `traceLayers` Vite plugin (`vite-plugins/trace-layers.ts`): every
 `export async function` in `src/orpc/<feature>/service.ts` or `repository.ts` becomes a span named
@@ -159,10 +157,10 @@ Outside a request (startup, `pnpm db:seed`, tests) `span` just runs the function
 Every request writes one line:
 
 ```text
-INFO: GET /notes 200 45ms (server-fn 2×6ms, procedure 1×28ms, db 3×9ms) {"module":"http","reqId":"638455eb2c7f1a90"}
+INFO: GET /notes 200 45ms (procedure 2×34ms, db 3×9ms) {"module":"http","reqId":"638455eb2c7f1a90"}
 ```
 
-`server-fn 2×6ms` means two server functions ran, taking 6 ms in total. A 5xx is an error line. A request slower than
+`procedure 2×34ms` means two procedures ran, taking 34 ms in total. A 5xx is an error line. A request slower than
 `LOG_SLOW_REQUEST_MS` is a warning line, and is also **reported to the error viewer** as
 `Slow request: GET /notes/$id (1420ms)`, of kind `slow`. Search `route:/notes/$id` to see the slow hits on one route.
 Only one report per method and route is sent a minute, so a slow database doesn't flood the viewer and crowd out the
@@ -174,7 +172,7 @@ kind and draws the request's spans as a waterfall, one row each:
 
 ```text
 Span                                          Start  Duration  0        1s        2s        3s
-server-fn getViewer                             1ms     121ms  ▇
+procedure session.viewer                        1ms     121ms  ▇
   db select … from session where …              6ms     116ms  ▇
 procedure note.list                           123ms    3116ms   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
   db ×5 select … from user where …            124ms      87ms   ▇

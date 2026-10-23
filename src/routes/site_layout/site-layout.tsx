@@ -5,13 +5,13 @@ import { useEffect } from "react";
 import { SiteFooter } from "#/components/shared/site-footer/site-footer";
 import { SiteHeader } from "#/components/shared/site-header/site-header";
 import { setReportedUser } from "#/lib/error-reporting.browser";
-import { viewerQueryOptions } from "#/lib/viewer";
+import { orpc } from "#/orpc/client";
 import { m } from "#/paraglide/messages";
 
 /*===== Route =====*/
 export const Route = createFileRoute("/_site-layout")({
   // The header needs the viewer on every page, so it is loaded before any page renders.
-  beforeLoad: ({ context }) => context.queryClient.ensureQueryData(viewerQueryOptions),
+  beforeLoad: ({ context }) => context.queryClient.ensureQueryData(orpc.session.viewer.queryOptions()),
   component: SiteLayout,
 });
 
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_site-layout")({
 
 /** The chrome shared by every page: skip link, header, `main` landmark and footer. */
 function SiteLayout() {
-  const { data: viewer } = useSuspenseQuery(viewerQueryOptions);
+  const { data: viewer } = useSuspenseQuery(orpc.session.viewer.queryOptions());
   const userId = viewer?.id ?? null;
 
   /*------ Error Reports ------*/

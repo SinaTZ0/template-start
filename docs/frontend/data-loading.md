@@ -5,31 +5,29 @@ fills it before a page renders, and components read from it.
 
 ## The Pieces
 
-| Piece                  | Where                                       | Job                                                                   |
-| ---------------------- | ------------------------------------------- | --------------------------------------------------------------------- |
-| `QueryClient`          | `getRouter()` in `src/router.tsx`           | The cache. One per server request, one in the browser.                |
-| Router context         | `context.queryClient` in every route        | Gives `beforeLoad` and `loader` the cache.                            |
-| `orpc` utilities       | `src/orpc/client.ts`                        | `queryOptions` / `mutationOptions` / keys for every procedure.        |
-| Isomorphic oRPC client | `src/orpc/client.ts`                        | In-process on the server, `RPCLink` → `/rpc` in the browser.          |
-| SSR Query integration  | `setupRouterSsrQueryIntegration`            | Sends the server's cache with the page, so hydration fetches nothing. |
-| Viewer query           | `viewerQueryOptions` in `src/lib/viewer.ts` | The signed-in person, for the header and the guards.                  |
+| Piece                  | Where                                | Job                                                                   |
+| ---------------------- | ------------------------------------ | --------------------------------------------------------------------- |
+| `QueryClient`          | `getRouter()` in `src/router.tsx`    | The cache. One per server request, one in the browser.                |
+| Router context         | `context.queryClient` in every route | Gives `beforeLoad` and `loader` the cache.                            |
+| `orpc` utilities       | `src/orpc/client.ts`                 | `queryOptions` / `mutationOptions` / keys for every procedure.        |
+| Isomorphic oRPC client | `src/orpc/client.ts`                 | In-process on the server, `RPCLink` → `/rpc` in the browser.          |
+| SSR Query integration  | `setupRouterSsrQueryIntegration`     | Sends the server's cache with the page, so hydration fetches nothing. |
+| Viewer query           | `orpc.session.viewer.queryOptions()` | The signed-in person, for the header and the guards.                  |
 
 ## Where Code Runs
 
 Route `beforeLoad` and `loader` functions are **isomorphic**: they run on the server for the first request, and in
 the browser for navigations and preloads. So a route file never imports server-only modules (`*.server.ts`, the
-database, `env`). Server-only work sits behind one of two doors:
+database, `env`). Server-only work sits behind one door, **oRPC procedures**: feature data, and small reads such as
+the viewer (`session.viewer`) and the site origin (`site.origin`). Loaders call them through
+`orpc.<feature>.<procedure>.queryOptions()`, which runs the procedure in-process during SSR and over `/rpc` in the
+browser, with the same code. Add one with [backend-flow.md](../backend-flow.md).
 
-- **oRPC procedures**, for everything that is the app's API: reads and writes of feature data. This is the default.
-  Loaders call them through `orpc.<feature>.<procedure>.queryOptions()`, which runs the procedure in-process during
-  SSR and over `/rpc` in the browser, with the same code.
-- **Server functions** (`createServerFn`), only for small framework-level reads that aren't part of the API: the
-  viewer (`src/lib/viewer.ts`) and the site origin (`src/routes/__root.tsx`). Don't add feature data here; add a procedure
-  ([backend-flow.md](../backend-flow.md)).
+The app has no server functions (`createServerFn`). A second door would need its own validation, rate limits, error
+handling and CSRF check, kept in step with the API's; a procedure gets them all from `base`.
 
-Start's import protection fails the build when browser-reachable code imports a `*.server.ts` file outside a server
-function's handler. A module that must only run in the browser uses `createClientOnlyFn` (see
-`src/lib/error-reporting.browser.ts`), not a `.client.ts` name.
+Start's import protection fails the build when browser-reachable code imports a `*.server.ts` file. A module that must
+only run in the browser uses `createClientOnlyFn` (see `src/lib/error-reporting.browser.ts`), not a `.client.ts` name.
 
 ## Reading Data
 
@@ -91,10 +89,8 @@ Don't write query keys for procedures: `orpc.<feature>.<procedure>.queryOptions(
 its keys, and since TanStack Query matches a key against the start of longer keys, the levels for invalidation come for
 free ([After a Mutation](#after-a-mutation)).
 
-A query that isn't a procedure (a `createServerFn` read) defines its `queryOptions` once, in the module that owns the
-data, and every caller imports it: `viewerQueryOptions` in `src/lib/viewer.ts`, with the key `["viewer"]`. Never write
-the key array inline at a call site. Start the key with a string naming the data; oRPC keys start with an array, so
-the two never collide.
+Every query is a procedure, so every key comes from `orpc`. A call that needs the key itself uses
+`orpc.<feature>.<procedure>.queryKey()` (the exact key, e.g. to `setQueryData`) or `.key()` (a prefix, to invalidate).
 
 ## Preloading
 
@@ -162,7 +158,7 @@ A layout's `beforeLoad` loads the viewer and redirects when the page isn't for t
 
 ```tsx
 beforeLoad: async ({ context, location }) => {
-  const viewer = await context.queryClient.ensureQueryData(viewerQueryOptions);
+  const viewer = await context.queryClient.ensureQueryData(orpc.session.viewer.queryOptions());
   if (!viewer) throw redirect({ to: "/auth", search: { redirectTo: location.href } });
   return { viewer };
 },

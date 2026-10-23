@@ -27,7 +27,7 @@ const routeMatcher = getRouter();
 
 /**
  * The route pattern a path matched (`/notes/$id`), so the request log and slow-request reports group a route's
- * requests together, in every locale (`/en/notes/…` too). Paths no route matches (server functions, assets, 404s)
+ * requests together, in every locale (`/en/notes/…` too). Paths no route matches (assets, 404s)
  * are returned as they are.
  */
 function routePattern(path: string): string {
@@ -51,7 +51,7 @@ function withHeader({ response, name, value }: { response: Response; name: strin
 const handleRequest = createStartHandler(defaultStreamHandler);
 
 /**
- * Start's handler, wrapped so every request (pages, server functions, `/rpc/*`, `/api/auth/*`, 404s) runs inside its
+ * Start's handler, wrapped so every request (pages, `/rpc/*`, `/api/auth/*`, 404s) runs inside its
  * own trace. Everything it does, down to its queries, records into that trace, and log lines carry its `reqId`
  * (docs/backend/logging.md). The time ends when the response starts: streamed content that resolves later isn't counted.
  *

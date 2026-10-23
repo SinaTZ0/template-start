@@ -3,8 +3,8 @@ import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 /*===== Types =====*/
-/** What a span measured. Kinds nest: a server function's time includes the procedures and queries it ran. */
-export type SpanKind = "server-fn" | "procedure" | "service" | "repository" | "db" | "storage" | "task";
+/** What a span measured. Kinds nest: a procedure's time includes the services and queries it ran. */
+export type SpanKind = "procedure" | "service" | "repository" | "db" | "storage" | "task";
 
 type Span = {
   id: number;
@@ -122,7 +122,7 @@ export function recordSpan({
 /**
  * Times `fn` as one span of the current request: `await span({ kind: "task", name: "media.processImage" }, () => ...)`.
  * Spans started inside `fn` become its children. Use it around anything that may be slow and isn't already traced
- * (server functions, procedures, services, repositories, queries and S3 calls are).
+ * (procedures, services, repositories, queries and S3 calls are).
  *
  * @param isFailure For work that reports failure in its result instead of throwing.
  */

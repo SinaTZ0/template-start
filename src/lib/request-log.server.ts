@@ -10,7 +10,7 @@ const log = createLogger("http");
 
 /*===== Request Log =====*/
 /**
- * Logs one line per request, with its time per kind of work (server functions, procedures, queries, …). A slow request
+ * Logs one line per request, with its time per kind of work (procedures, queries, …). A slow request
  * is also reported to the error tracker with the timeline of its slowest spans, which shows where the time went.
  *
  * @param route The path pattern for grouping requests in production logs (`/rpc/$`), or the path when there is none.

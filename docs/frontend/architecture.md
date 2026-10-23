@@ -13,7 +13,6 @@ src/
   routes.ts                 # virtual route config (set in tsr.config.json): maps URLs to route files
   routeTree.gen.ts          # generated from routes.ts by the Start plugin; never edit
   router.tsx                # getRouter(): the router, its QueryClient and preload defaults
-  start.ts                  # global server-function middleware
   server.ts                 # server entry: request trace, X-Request-Id, request log, background jobs
   client.tsx                # browser entry: error reporting, hydration
   styles.css                # global styles and theme tokens
@@ -67,11 +66,11 @@ The full rules are in [data-loading.md](./data-loading.md). In short:
   same cache.
 - **Loaders are isomorphic.** They run on the server for the first request and in the browser afterwards, so route
   files never import server-only modules. Feature data comes from oRPC procedures through
-  `orpc.<feature>.<procedure>.queryOptions()`; small framework reads use `createServerFn`. Never call the API with a
-  hand-written `fetch`.
+  `orpc.<feature>.<procedure>.queryOptions()`, the viewer and site origin included. There are no server functions
+  (`createServerFn`). Never call the API with a hand-written `fetch`.
 - **Mutations invalidate what they change**: `useMutation(orpc.note.create.mutationOptions(...))`, then
   `queryClient.invalidateQueries({ queryKey: orpc.note.list.key() })`. Don't patch local copies.
-- **Guards** are a layout's `beforeLoad`: it loads the viewer (`viewerQueryOptions`, `src/lib/viewer.ts`) and throws
+- **Guards** are a layout's `beforeLoad`: it loads the viewer (`orpc.session.viewer.queryOptions()`) and throws
   `redirect(...)`. What it returns becomes route context for the routes below. Procedures check auth again on their
   own.
 - **Server-only code** uses the `.server.ts` suffix; Start's import protection fails the build when browser-reachable

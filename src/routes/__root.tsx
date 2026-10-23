@@ -2,27 +2,23 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 import { createRootRouteWithContext, HeadContent, Scripts } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
-import { createServerFn } from "@tanstack/react-start";
 import { Provider as JotaiProvider } from "jotai";
 
 import { DirectionProvider } from "#/components/primitive/direction/direction";
 import { Toaster } from "#/components/primitive/toast/toast";
 import { TooltipProvider } from "#/components/primitive/tooltip/tooltip";
-import { SITE_ORIGIN } from "#/lib/site.server";
 import { THEME_INIT_SCRIPT } from "#/lib/theme";
+import { orpc } from "#/orpc/client";
 import { m } from "#/paraglide/messages";
 import { getLocale, getTextDirection } from "#/paraglide/runtime";
 import type { RouterContext } from "#/router";
 import appCss from "#/styles.css?url";
 
-/*===== Site Origin =====*/
-/** The public origin, for the absolute URLs in every page's head tags (`absoluteUrl` in `src/lib/seo.ts`). */
-const getSiteOrigin = createServerFn({ method: "GET" }).handler(() => ({ origin: SITE_ORIGIN }));
-
 /*===== Route =====*/
 export const Route = createRootRouteWithContext<RouterContext>()({
-  loader: () => getSiteOrigin(),
-  // The origin never changes while the app runs, so client navigations don't fetch it again.
+  // The public origin, for the absolute URLs in every page's head tags (`absoluteUrl` in `src/lib/seo.ts`). It never
+  // changes while the app runs, so client navigations don't fetch it again.
+  loader: ({ context }) => context.queryClient.ensureQueryData(orpc.site.origin.queryOptions({ staleTime: Infinity })),
   staleTime: Infinity,
   head: () => ({
     meta: [{ charSet: "utf-8" }, { name: "viewport", content: "width=device-width, initial-scale=1" }],

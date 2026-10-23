@@ -15,7 +15,7 @@ import { getLocale } from "#/paraglide/runtime";
 /**
  * One client for loaders and components, wherever they run (oRPC's TanStack Start adapter):
  *
- * - Server (SSR, server functions): calls procedures in-process, with the current request's headers as context, so
+ * - Server (SSR): calls procedures in-process, with the current request's headers as context, so
  *   the session cookie reaches `requireUserMiddleware`. It bypasses HTTP: handler plugins and status codes don't
  *   apply, and errors arrive as `ORPCError`. The context is a function, so each call reads its own request's headers.
  * - Browser: `RPCLink` over HTTP to `/rpc` (`src/routes/rpc/rpc.ts`). `/rpc` has no locale in its path, so each call

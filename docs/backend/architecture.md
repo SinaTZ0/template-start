@@ -160,8 +160,12 @@ return { id: result.id };
 - **Ownership is checked in the data layer.** A user's records are read with the owner in the query
   (`findOwnedNote({ id, ownerId })`), so another user's record looks exactly like a missing one (`NOT_FOUND`), never
   `FORBIDDEN`.
-- Pages are guarded separately in a layout's `beforeLoad`, from the viewer query (`src/lib/viewer.ts`,
-  [data-loading.md](../frontend/data-loading.md) → Guards). The UI guard is never the only check.
+- Pages are guarded separately in a layout's `beforeLoad`, from the public `session.viewer` procedure (the signed-in
+  person or `null`; it revokes a blocked account's sessions, [data-loading.md](../frontend/data-loading.md) → Guards).
+  The UI guard is never the only check.
+- **CSRF.** `/rpc` only accepts POST, and Better-Auth sets its session cookie `SameSite=Lax`, so a request from another
+  site arrives without the session. Keep both: don't allow GET on the RPC handler, and don't loosen the cookie's
+  `sameSite`. The app has no server functions (`createServerFn`), which would be a second way in to protect.
 
 ### Rate limiting
 

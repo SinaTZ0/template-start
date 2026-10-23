@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "#/components/primitive
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/primitive/tabs/tabs";
 import { redirectToParam } from "#/lib/search-params";
 import { pageMeta } from "#/lib/seo";
-import { viewerQueryOptions } from "#/lib/viewer";
+import { orpc } from "#/orpc/client";
 import { m } from "#/paraglide/messages";
 import { SignInForm } from "#/routes/auth/components/sign-in-form";
 import { SignUpForm } from "#/routes/auth/components/sign-up-form";
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_site-layout/auth")({
   validateSearch: searchSchema,
   beforeLoad: async ({ context, search }) => {
     // Signed-in people have nothing to do here.
-    const viewer = await context.queryClient.ensureQueryData(viewerQueryOptions);
+    const viewer = await context.queryClient.ensureQueryData(orpc.session.viewer.queryOptions());
     if (viewer) throw redirect({ href: search.redirectTo ?? DEFAULT_REDIRECT });
   },
   // Sign-in has nothing to find in search results. After `beforeLoad`, whose result `args` carries
@@ -41,7 +41,7 @@ function AuthPage() {
   // The cached viewer still says "signed out": refetch it first, so the header updates and the next page's guard sees
   // the session.
   const goOn = async () => {
-    await queryClient.invalidateQueries({ queryKey: viewerQueryOptions.queryKey });
+    await queryClient.invalidateQueries({ queryKey: orpc.session.viewer.key() });
     await navigate({ href: redirectTo, replace: true });
   };
 

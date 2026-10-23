@@ -87,6 +87,6 @@ data (`args.loaderData`) for its title, description and image, so that loader re
 ## The Public Origin
 
 Absolute URLs come from `BETTER_AUTH_URL` (`src/lib/site.server.ts`), which is `https://${DOMAIN}` in production. The
-request's host isn't used, because a proxy or a crafted `Host` header can change it. The root loader (a server function, loaded
+request's host isn't used, because a proxy or a crafted `Host` header can change it. The root loader (the `site.origin` procedure, loaded
 once) hands the origin to the browser for `pageMeta`. A staging copy on another domain therefore points its canonical URLs at itself. Keep staging
 out of search results by putting it behind a password, or with a `Disallow: /` robots file there.
