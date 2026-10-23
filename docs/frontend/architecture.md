@@ -1,7 +1,8 @@
 # Frontend Architecture (TanStack Start)
 
 The frontend is organized by route. Each route slice owns everything that only it uses, and code moves to a shared
-location only when a second consumer needs it. The UI is in Persian and right-to-left.
+location only when a second consumer needs it. The UI is Persian first (right-to-left), with English as a second
+language ([i18n.md](./i18n.md)).
 
 These are the rules. The steps for building a page are in [frontend-flow.md](../frontend-flow.md).
 
@@ -34,6 +35,9 @@ src/
   atoms/                    # Jotai atoms shared by multiple routes
   lib/                      # shared helpers (browser-safe, or *.server.ts)
   orpc/client.ts            # isomorphic API client and query utilities (see ./data-loading.md)
+  paraglide/                # generated message functions and runtime; never edit (see ./i18n.md)
+messages/                   # fa.json, en.json: the text, one file per locale
+project.inlang/             # Paraglide settings and compiler config
 ```
 
 Not every slice needs every file. Start with the route module alone and split it out as it grows.
@@ -119,15 +123,19 @@ The full rules are in [data-loading.md](./data-loading.md). In short:
 - Handle every state a user can see: loading, empty, error, and success.
 - Creating, changing and linting primitives: see [components.md](./components.md).
 
-## Persian, RTL, and Accessibility
+## Language, Direction, and Accessibility
 
-- The document is `lang="fa"` and `dir="rtl"`. All user-facing text is Persian; code identifiers and developer
-  diagnostics stay in English.
+The full rules are in [i18n.md](./i18n.md). In short:
+
+- The document's `lang` and `dir` follow the locale: Persian (`/…`) is `rtl`, English (`/en/…`) is `ltr`. Every text a
+  person reads is a message (`m.<key>()`), in every locale file; code identifiers and developer diagnostics stay in
+  English.
+- Never call a message at module scope; store the message function and call it in render.
 - Use logical directions, never physical ones: Tailwind `ms-`/`me-`, `ps-`/`pe-`, `start-`/`end-`, `text-start`
-  instead of `ml-`, `pl-`, `left-`, `text-left`. Mirror directional icons.
-- Format numbers with `formatNumberFa` and dates with `Intl` and the `fa-IR` locale. Inputs that accept numbers must
-  accept Persian and Arabic digits: normalize them with `toLatinDigits` before parsing. Both helpers are in
-  `src/lib/digits.ts`.
+  instead of `ml-`, `pl-`, `left-`, `text-left`. Directional icons flip with the direction.
+- Format numbers in messages (`number` declarations), and elsewhere with `formatNumber` and `formatDate`
+  (`src/lib/locale.ts`). Inputs that accept numbers must accept Persian and Arabic digits: normalize them with
+  `toLatinDigits` (`src/lib/digits.ts`) before parsing.
 - Use semantic elements and native controls first. Every input has a label, every action is keyboard-reachable, and
   errors are announced to assistive technology.
 

@@ -19,8 +19,9 @@ The `note` feature (`src/orpc/note/`) is the worked example. Copy its shape.
    data. Register it in the root `src/orpc/contract.ts` ([architecture.md](./backend/architecture.md) → Contract first,
    Errors are uniform and safe).
 2. **Validation**: write the domain schemas in `validation.ts`. They check meaning (trimming, normalization, allowed
-   values), not structure, which the contract already checks. Their messages are Persian, because they reach the user
-   as field errors. Free-text fields use `persianText()` ([architecture.md](./backend/architecture.md) → Validation
+   values), not structure, which the contract already checks. Their messages reach the user as field errors, so each
+   check gets a message function, `{ error: () => m.<feature>_error_<what>() }`, with the key in every locale file
+   ([i18n.md](./frontend/i18n.md) → Messages from the API). Free-text fields use `persianText()` ([architecture.md](./backend/architecture.md) → Validation
    happens twice, Free text is normalized).
 
 ## Implement

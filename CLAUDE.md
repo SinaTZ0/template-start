@@ -2,12 +2,12 @@
 
 These instructions apply to the entire repository unless overridden by a more specific `AGENTS.md` in a subdirectory.
 
-This is a TanStack Start application (TanStack Router + TanStack Query, built by Vite and served by Nitro), started from the project template. The application's user-facing content is in Persian and right-to-left. Its look and feel is defined in `docs/frontend/app-identity.md`.
+This is a TanStack Start application (TanStack Router + TanStack Query, built by Vite and served by Nitro), started from the project template. The application is Persian first (right-to-left), with English (left-to-right) as a second language; every text a person reads is a Paraglide message (`docs/frontend/i18n.md`). Its look and feel is defined in `docs/frontend/app-identity.md`.
 
 The docs have two entry points. Start backend work at `docs/backend-flow.md` and frontend work at `docs/frontend-flow.md`. Each one is a list of steps that links to the rule docs in `docs/backend/` and `docs/frontend/` at the step where they apply. Work that spans both (a new feature, a new field shown on a page) follows the backend flow first, then the frontend flow. When a new project starts from the template, `docs/customize-template.md` turns its homepage design into the app's design system.
 
 - Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, per-address rate limits on the API and auth endpoints (`docs/backend/architecture.md` → Rate limiting), Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing, plus error and slow-request reports to the error viewer, a small Go service in `tools/error-viewer/` (`docs/backend/logging.md`).
-- Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`), TanStack Query as the one data cache, filled by route loaders and preloaded on hover (`docs/frontend/data-loading.md`), typed search params (`docs/frontend/search-params.md`), and page meta through `pageMeta` (`docs/frontend/seo.md`).
+- Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`), TanStack Query as the one data cache, filled by route loaders and preloaded on hover (`docs/frontend/data-loading.md`), typed search params (`docs/frontend/search-params.md`), page meta through `pageMeta` (`docs/frontend/seo.md`), and Persian and English messages through Paraglide JS, with the language in the URL (`/notes`, `/en/notes`; `docs/frontend/i18n.md`).
 - Production: Docker Compose with Caddy in front, migrations applied before each deploy, and a `/healthz` check (`docs/deployment.md`).
 - The `note` feature (`src/orpc/note/`, `src/routes/notes/`) is the template's worked example. Copy its shape for new features; delete it once the project has its own.
 
@@ -60,6 +60,16 @@ The rules are in `docs/frontend/data-loading.md`.
 - A browser-only module uses `createClientOnlyFn`, not a `.client.ts` name: Start's import protection rejects `.client` files in code the server renders.
 - Use current Start API names: `.validator()` on server functions and middleware (`.inputValidator()` was the RC name), `getRequest` / `getRequestHeaders` from `@tanstack/react-start/server`, server routes as `server: { handlers }` on `createFileRoute`. Add a cookie with `setCookie` or `appendResponseHeader`; `setResponseHeader("set-cookie", ...)` replaces all of them.
 - TanStack Start's own guidance is in the `react-start`, `start-core`, `router-core` and `virtual-file-routes` skills (`.agents/skills/`).
+
+## Languages
+
+The rules are in `docs/frontend/i18n.md`.
+
+- Every text a person reads (labels, `aria-label`s, titles, descriptions, form and API error messages) is a message: add the key to `messages/fa.json` and `messages/en.json` and call `m.<key>()` from `#/paraglide/messages`. Never hardcode user-facing text. Logs, identifiers and developer diagnostics stay in English.
+- Never call a message at module scope: a module is evaluated once per server process, so the text would be frozen in one locale. Store the message function (`label: m.nav_home`), give zod checks `{ error: () => m.x() }`, and export functions instead of string constants.
+- Pass numbers to messages and format them there (`local maxText = max: number`); outside messages use `formatNumber` / `formatDate` (`src/lib/locale.ts`), never an `Intl` formatter with a fixed locale.
+- Routes, `<Link to>` and redirects use the plain path (`/notes`); the router adds the locale prefix. Use logical classes only (`ms-`, `ps-`, `start-`, `text-start`), so layouts work in both directions.
+- `src/paraglide/` is generated (`pnpm i18n:compile`, or the Vite plugin); never edit it.
 
 ## Code Conventions
 

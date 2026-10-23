@@ -1,7 +1,8 @@
 # SEO and Link Previews
 
 Every page sets its tags through `pageMeta` (`src/lib/seo.ts`), so search results and link previews (Telegram,
-WhatsApp, X) come out the same everywhere. The site's identity lives in `src/lib/site.ts`; rename it per project.
+WhatsApp, X) come out the same everywhere. The site's name and description are the `site_name` and `site_description`
+messages, and the rest of its identity lives in `src/lib/site.ts`; rename both per project.
 
 ## Page Meta
 
@@ -9,27 +10,35 @@ Return `pageMeta` from the route's `head` option. It returns `{ meta, links }` (
 
 ```ts
 // A public page
-head: (args) => pageMeta({ args, title: "درباره ما", description: "چه کسی هستیم و چه می‌کنیم." }),
+head: (args) => pageMeta({ args, title: m.about_title(), description: m.about_description() }),
 
 // A page behind a sign-in, or sign-in itself
-head: (args) => pageMeta({ args, title: "یادداشت‌ها", index: false }),
+head: (args) => pageMeta({ args, title: m.notes_title(), index: false }),
 ```
 
-| Option        | Default                    | Notes                                                                                 |
-| ------------- | -------------------------- | ------------------------------------------------------------------------------------- |
-| `title`       | none (the site name alone) | The page's own name; shown as «title \| site». Leave it out only on the home page.    |
-| `description` | `SITE_DESCRIPTION`         | One or two Persian sentences on what the page offers. Write one for each public page. |
-| `image`       | `SITE_IMAGE`               | `{ url, alt }`, root-relative or absolute, 1200×630, with a Persian `alt`.            |
-| `index`       | `true`                     | `false` adds `noindex` and leaves out the canonical URL and preview tags.             |
-| `path`        | current path, no query     | The canonical path. Pass one when the query string is part of the content.            |
+| Option        | Default                    | Notes                                                                                               |
+| ------------- | -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `title`       | none (the site name alone) | The page's own name; shown as «title \| site». Leave it out only on the home page.                  |
+| `description` | `m.site_description()`     | One or two sentences on what the page offers, a message. Write one for each public page.            |
+| `image`       | `SITE_IMAGE`               | `{ url, alt }`, root-relative or absolute, 1200×630, with its `alt` a message.                      |
+| `index`       | `true`                     | `false` adds `noindex` and leaves out the canonical URL and preview tags.                           |
+| `path`        | current path, no query     | The canonical path, without a locale prefix. Pass one when the query string is part of the content. |
 
 Put `head` after `beforeLoad` and `loader` in the route options. TypeScript infers the options in order, and `head`'s
 `args` carry the route's context and loader data; written before them, the types can loop back on themselves and
 fail (`beforeLoad` typed as returning `never`).
 
-A public page gets a title, description, canonical URL, Open Graph tags (`og:locale` is `fa_IR`) and a Twitter card. The
-`<html>` element already has `lang="fa"` and `dir="rtl"` (`__root.tsx`). The site has one language, so it needs no
-`hreflang` alternates.
+Title, description and `alt` are messages, called in `head`, so each locale's page gets its own.
+
+A public page gets a title, description, canonical URL, Open Graph tags and a Twitter card, plus the language tags
+([i18n.md](./i18n.md) → SEO):
+
+- The canonical URL and `og:url` are the page in the current locale (`/en/notes` for English).
+- `og:locale` is the current locale (`fa_IR`, `en_US`, from `OG_LOCALE` in `src/lib/locale.ts`), with
+  `og:locale:alternate` for the others.
+- `<link rel="alternate" hreflang>` for every locale, and `x-default` for the base locale.
+
+The `<html>` element's `lang` and `dir` follow the locale (`__root.tsx`).
 
 The router merges the `head` of every matched route, and for the same title or `name`/`property` tag the deepest route
 wins. The root sets no title, so a page with no `head` has none. Give every page one.
@@ -54,8 +63,8 @@ head: (args) => ({
     jsonLd({
       "@context": "https://schema.org",
       "@type": "WebSite",
-      name: SITE_NAME,
-      url: absoluteUrl({ matches: args.matches, path: "/" }),
+      name: m.site_name(),
+      url: absoluteUrl({ matches: args.matches, path: localizeHref("/") }),
     }),
   ],
 }),
@@ -67,7 +76,8 @@ data (`args.loaderData`) for its title, description and image, so that loader re
 
 ## Sitemap and robots.txt
 
-- `/sitemap.xml` (`src/routes/sitemap/`) lists the pages to index. Add each new public page to `STATIC_ENTRIES`.
+- `/sitemap.xml` (`src/routes/sitemap/`) lists the pages to index, once per locale, each with `xhtml:link` alternates
+  for the others. Add each new public page to `STATIC_ENTRIES`, with its plain path.
   Content pages add one entry per published item, read through the oRPC `client` (`src/orpc/client.ts`) from a
   procedure that returns only published items, with `lastModified` set to each item's update time. One sitemap holds
   up to 50,000 URLs.

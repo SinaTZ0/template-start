@@ -28,6 +28,8 @@ Import directly from the owning file. `buttonVariants` and other CVA helpers com
 
 1. Copy the `ui/` file into `primitive/<name>/<name>.tsx`. Leave the `ui/` file as it is.
 2. Move its classes into `<name>.styles.ts` as `defineStyles` groups (see below), restyling as the design needs.
+   Replace shadcn's English built-in text (`sr-only` labels, `aria-label`s like «Close») with `common_*` messages
+   ([i18n.md](./i18n.md)), and its physical classes with logical ones.
 3. Keep shadcn's exports, props, parts and `data-slot` / `data-*` attributes, so shadcn's docs and future updates still
    map onto it.
 4. If it composes other shadcn components, import their primitives, creating them first if they don't exist.

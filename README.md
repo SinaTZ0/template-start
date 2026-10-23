@@ -1,13 +1,15 @@
 # Project Template
 
-A starting point for full-stack [TanStack Start](https://tanstack.com/start) apps, in Persian and right-to-left.
+A starting point for full-stack [TanStack Start](https://tanstack.com/start) apps, Persian first (right-to-left) with
+English as a second language.
 
 - **Backend:** contract-first [oRPC](https://orpc.dev) v2, Drizzle + Postgres, Better-Auth (email + password, Altcha
   captcha on sign-up), image uploads processed with sharp into S3-compatible storage, pino logging, and error tracking
   with a small self-hosted error viewer (`tools/error-viewer`, Go + SQLite).
 - **Frontend:** flat route slices, shadcn components rebuilt as `primitive/`s on Base UI, Tailwind v4 tokens with
   light/dark themes, TanStack Query as the one data cache (filled by route loaders, preloaded on hover), typed search
-  params, Jotai and Storybook.
+  params, Jotai and Storybook, and Persian and English messages with [Paraglide JS](https://paraglidejs.com)
+  (`/notes`, `/en/notes`).
 - **Example feature:** notes (`src/orpc/note/`, `src/routes/notes/`) shows the whole path: a guarded page, a loader that fills the Query cache,
   a form with server field errors, an image upload and a delete.
 
@@ -34,7 +36,8 @@ linted and formatted before each commit, and commit messages must follow
 | Script                            | What it does                                     |
 | --------------------------------- | ------------------------------------------------ |
 | `pnpm dev` / `build` / `start`    | Dev server, production build, production server  |
-| `pnpm lint` / `typecheck`         | oxlint; tsc                                      |
+| `pnpm lint` / `typecheck`         | oxlint; message compile + tsc                    |
+| `pnpm i18n:compile`               | Compiles `messages/` into `src/paraglide/`       |
 | `pnpm format`                     | Prettier (sorts Tailwind classes)                |
 | `pnpm test`                       | Vitest (integration tests need the database)     |
 | `pnpm test:e2e`                   | Playwright against the production build          |
@@ -57,6 +60,8 @@ src/
   orpc/                            the API, one folder per feature (docs/backend/architecture.md)
   lib/                             auth, viewer query, storage, logger, helpers
   db/                              Drizzle schema, client, seed
+  paraglide/                       generated message functions (gitignored, docs/frontend/i18n.md)
+messages/, project.inlang/         the text per locale; Paraglide settings and config
 drizzle/                           SQL migrations (generated, committed)
 deploy/                            Caddyfile and the production jobs (migrate, init-storage)
 docs/                              start at backend-flow.md or frontend-flow.md
@@ -66,8 +71,9 @@ docs/                              start at backend-flow.md or frontend-flow.md
 
 1. Copy the template without its git history (copy the folder without `.git`, then `git init`).
 2. Rename: `name` in `package.json`, `compose.dev.yaml` and `compose.prod.yaml` (and `image` there), the bucket name in
-   `.env.example` and `.env.production.example`, and the site identity in `src/lib/site.ts` (`SITE_NAME`,
-   `SITE_DESCRIPTION`, and a `SITE_IMAGE` for link previews).
+   `.env.example` and `.env.production.example`, the `site_name` and `site_description` messages in `messages/*.json`,
+   and a `SITE_IMAGE` for link previews in `src/lib/site.ts`. Keep English, or change the languages
+   (`docs/frontend/i18n.md` → Adding or Removing a Language).
 3. Design the look. Everything that ships (colours, type styles, radius and shadows in `src/styles.css`, the primitives'
    styles) is a neutral placeholder. Design the homepage, then give it to an agent with
    `docs/customize-template.md`, which turns it into app-identity, tokens, primitives, header, footer and the home

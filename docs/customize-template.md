@@ -49,7 +49,8 @@ Before editing anything, make an inventory from the source:
 Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 
 - **Mood**: from what the page emphasises and how it feels, each word tied to something visible in the design.
-- **Tone**: from the homepage's copy. Keep the Persian rules already there.
+- **Tone**: from the homepage's copy. Keep the Persian rules already there, and say how English (or the project's
+  other languages) carries the same tone.
 - **Brand**: the logo, how imagery is treated, and **References** pointing at `docs/frontend/reference/`.
 
 ## 3. Tokens in `src/styles.css`
@@ -87,6 +88,9 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 
 - Rebuild the homepage in `src/routes/home/` from primitives, tokens and slice components. Don't paste the reference
   markup: it would bring raw colours, arbitrary values and physical directions back in, which `pnpm lint` rejects.
+- Its copy goes into `messages/fa.json` as written, and into the other locale files translated
+  ([i18n.md](./frontend/i18n.md)). Static content data that only the homepage shows can stay in the slice until a
+  procedure serves it, but its text still comes from messages.
 - Until the features behind its content exist (news, events…), keep that content as static data in the slice, in its
   own file with a comment saying which future procedure replaces it.
 - Images go in `public/` for now; uploads come later through [media.md](./backend/media.md).
@@ -95,10 +99,13 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 
 - Restyle the sign-in page (`src/routes/auth/`) and the notes pages so they belong to the new design.
 - Replace `public/favicon.ico`, and set `SITE_IMAGE` in `src/lib/site.ts` to a 1200×630 preview image in the new style.
+- Set `site_name` and `site_description` in every locale file to the project's name and description.
+- Ask which languages the project needs. The template ships Persian and English; follow
+  [i18n.md](./frontend/i18n.md) → Adding or Removing a Language for anything else.
 
 ## 8. Check
 
 - Compare the home route with the reference side by side, at desktop and phone widths.
-- Check both themes, tab through every clickable thing, and turn on reduced motion.
+- Check both themes and both directions (`/` and `/en`), tab through every clickable thing, and turn on reduced motion.
 - Run `pnpm lint`, `pnpm typecheck` and `pnpm build`.
 - Report what you designed that the homepage didn't show (see Input), and any constraint the homepage broke.

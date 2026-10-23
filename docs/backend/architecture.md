@@ -71,6 +71,9 @@ import their contract's types (`Note`, `Media`), because the contract is the pub
   transformation into storable values. Do not duplicate these rules in the contract.
 - Rules that need I/O (uniqueness, existence, ownership) are checked in the service after parsing.
 - Browser form schemas are separate from service schemas, even when they currently match.
+- A check's message is user-facing, so it is a message function called when the check fails:
+  `.min(1, { error: () => m.note_error_title_required() })`. Never a string literal, and never `m.*()` evaluated when
+  the module loads, which would freeze one locale for every request ([i18n.md](../frontend/i18n.md)).
 
 #### Free text is normalized
 
@@ -114,7 +117,8 @@ return { id: result.id };
   `COMMON_ERROR_STATUS_MAP` plus `ERROR_STATUS_MAP` in `errors.ts` for this app's own codes (`INVALID_INPUT` → 422).
 - A global error middleware normalizes every failure. Server errors (5xx) never expose internal messages; they carry an
   ID that correlates with the full error in the server logs.
-- Field messages are user-facing; diagnostics are for developers.
+- Field messages are user-facing, in the request's locale (`getLocale()`, set per request by `paraglideMiddleware`);
+  diagnostics, including contract errors' `message`, are for developers and stay in English.
 - Schema validation failures do not arrive in the shared shape. oRPC throws `BAD_REQUEST` (cause: `ValidationError`)
   for invalid input and `INTERNAL_SERVER_ERROR` (cause: `ValidationError`) for invalid output. The global error
   middleware converts input failures into the shared shape with per-field messages, and treats output failures as
@@ -167,7 +171,7 @@ return { id: result.id };
   stricter one as its first middleware: `.use(rateLimitMiddleware(UPLOAD_RATE_LIMIT))`, with the policy defined next to
   the procedure. Policy names must be unique, since they keep the counters apart.
 - `TOO_MANY_REQUESTS` is a common error, so contracts already declare it. Its data adds `retryAfterSeconds`, and its
-  Persian message reaches the form through `describeApiFailure`.
+  message (`rateLimitedMessage()`) reaches the form through `describeApiFailure`.
 - Auth limits are set by path in `src/routes/api_auth/`: endpoints that check a password or send mail get the strict
   policy. Add new Better-Auth endpoints of that kind to `CREDENTIAL_PATHS`.
 - Procedure calls a loader makes during SSR run in-process, with the page request's headers, so they count against
