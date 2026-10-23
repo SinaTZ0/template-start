@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { Database } from "#/db/client.server";
 import { issuesToErrorData } from "#/lib/schema-issues";
-import { attachMedia, deleteMedia } from "#/orpc/media/service";
+import { attachMedia, discardMedia, releaseMedia } from "#/orpc/media/service";
 import { findMediaById } from "#/orpc/media/repository";
 import type { Note } from "#/orpc/note/contract";
 import { toPublicNote } from "#/orpc/note/mapper";
@@ -21,8 +21,8 @@ export async function listNotes({ db, ownerId }: { db: Database; ownerId: string
 type AddNoteResult = { kind: "success"; note: Note } | { kind: "invalid"; fields: Record<string, string> };
 
 /**
- * Validates and stores a new note for its owner. An image must be an `image` upload by the same user; it is marked
- * attached so the orphan cleanup leaves it alone.
+ * Validates and stores a new note for its owner. An image must be an `image` upload by the same user that no other
+ * entity uses; it is marked attached so the orphan cleanup leaves it alone.
  *
  * @returns `invalid` with per-field messages when the input breaks a domain rule.
  */
@@ -39,28 +39,32 @@ export async function addNote({
   if (!parsed.success) return { kind: "invalid", fields: issuesToErrorData(parsed.error.issues).fields };
   const { title, body, imageMediaId } = parsed.data;
 
-  /*------ Image ------*/
-  if (imageMediaId) {
-    const attached = await attachMedia({ db, mediaId: imageMediaId, kind: "image", userId: ownerId });
-    if (attached.kind === "invalid")
-      return { kind: "invalid", fields: { imageMediaId: m.note_error_image_unusable() } };
-  }
+  // One transaction: if the insert fails, the image's claim is rolled back too, and the cleanup still finds it.
+  return db.transaction(async (tx): Promise<AddNoteResult> => {
+    /*------ Image ------*/
+    if (imageMediaId) {
+      const attached = await attachMedia({ db: tx, mediaId: imageMediaId, kind: "image", userId: ownerId });
+      if (attached.kind === "invalid") {
+        return { kind: "invalid", fields: { imageMediaId: m.note_error_image_unusable() } };
+      }
+    }
 
-  /*------ Row ------*/
-  const record = await insertNote({ db, values: { ownerId, title, body, imageMediaId } });
-  const image = imageMediaId ? ((await findMediaById({ db, id: imageMediaId })) ?? null) : null;
-  return { kind: "success", note: toPublicNote({ note: record, image }) };
+    /*------ Row ------*/
+    const record = await insertNote({ db: tx, values: { ownerId, title, body, imageMediaId } });
+    const image = imageMediaId ? ((await findMediaById({ db: tx, id: imageMediaId })) ?? null) : null;
+    return { kind: "success", note: toPublicNote({ note: record, image }) };
+  });
 }
 
 /*===== Remove =====*/
 type RemoveNoteResult = { kind: "ok" } | { kind: "not-found" };
 
 /**
- * Deletes one of the owner's notes, then its image (bucket files and row). The note goes first, so a failing bucket
- * leaves an orphan image rather than a note pointing at missing files.
+ * Deletes one of the owner's notes, then its image. The note's row and the image's release are one transaction, so the
+ * image is never left attached to nothing. Its files are deleted after that commits; if the bucket fails, the image is
+ * unattached and the cleanup deletes it later (docs/backend/media.md).
  *
  * @returns `not-found` for an unknown ID or another user's note.
- * @throws When the bucket or the database fails while deleting the image.
  */
 export async function removeNote({
   db,
@@ -74,10 +78,15 @@ export async function removeNote({
   // A malformed UUID would make Postgres throw; treat it like any unknown ID.
   if (!z.guid().safeParse(id).success) return { kind: "not-found" };
 
-  const record = await findOwnedNote({ db, id, ownerId });
+  const record = await db.transaction(async (tx) => {
+    const owned = await findOwnedNote({ db: tx, id, ownerId });
+    if (!owned) return undefined;
+    await deleteNoteRow({ db: tx, id: owned.id });
+    if (owned.imageMediaId) await releaseMedia({ db: tx, mediaId: owned.imageMediaId });
+    return owned;
+  });
   if (!record) return { kind: "not-found" };
 
-  await deleteNoteRow({ db, id: record.id });
-  if (record.imageMediaId) await deleteMedia({ db, mediaId: record.imageMediaId });
+  if (record.imageMediaId) await discardMedia({ db, mediaId: record.imageMediaId });
   return { kind: "ok" };
 }

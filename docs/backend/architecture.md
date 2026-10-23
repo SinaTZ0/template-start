@@ -148,6 +148,9 @@ return { id: result.id };
   parameter, never from `context` or a session lookup. A test can then call them with the real database and made-up
   users, as `note/integration.test.ts` does.
 - The procedure is where context is unpacked and passed down. `db` arrives in `context` from `provideDbMiddleware`.
+- Writes that must land together run in one `db.transaction(async (tx) => …)` in the service, which passes `tx` down
+  as `db`: the `Database` type covers the client and a transaction alike (`addNote` and `removeNote`). Work outside
+  the database, such as deleting files from the bucket, happens after the commit.
 - Stateless infrastructure modules (`storage.server.ts`, the logger, `span`) are imported directly. Pass one in only
   when a test needs to replace it.
 

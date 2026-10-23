@@ -13,11 +13,12 @@ import type { Media } from "#/orpc/media/contract";
 import { isMediaKind, toPublicMedia } from "#/orpc/media/mapper";
 import { processImage } from "#/orpc/media/processing.server";
 import {
+  claimMedia,
   deleteMediaRow,
   findMediaById,
   findOrphanedMediaIds,
   insertMedia,
-  markMediaAttached,
+  markMediaDetached,
 } from "#/orpc/media/repository";
 
 const log = createLogger("media");
@@ -122,13 +123,14 @@ export function isMediaId(value: string): boolean {
 type AttachMediaResult = { kind: "ok" } | { kind: "invalid" };
 
 /**
- * Marks a media row as used by an entity, so the cleanup job leaves it alone. Call it when the entity's form is saved.
+ * Claims an upload for the entity being saved, so the cleanup job leaves it alone. Call it with the transaction that
+ * writes the entity: if that write fails, the claim is rolled back with it and the cleanup still finds the upload.
  *
- * Calling it again for a media that is already attached is fine, which keeps re-saving a form idempotent. It cannot
- * tell which entity uses the media: an entity that must not share one checks that itself.
+ * A media belongs to one entity, so one that is already attached is refused: two entities sharing an image would lose
+ * it together when either is deleted. An entity whose image didn't change doesn't attach it again.
  *
- * @returns `invalid` when the ID is unknown or malformed, the media is another kind, someone else uploaded it, or it is
- * still unattached past `MEDIA_ATTACH_WINDOW_MS` (the cleanup is about to delete it).
+ * @returns `invalid` when the ID is unknown or malformed, the media is another kind, someone else uploaded it, it is
+ * already attached, or it is still unattached past `MEDIA_ATTACH_WINDOW_MS` (the cleanup is about to delete it).
  */
 export async function attachMedia({
   db,
@@ -150,11 +152,34 @@ export async function attachMedia({
     return { kind: "invalid" };
   }
 
-  const expired = !record.attachedAt && now.getTime() - record.createdAt.getTime() > MEDIA_ATTACH_WINDOW_MS;
-  if (expired) return { kind: "invalid" };
+  if (record.attachedAt) return { kind: "invalid" };
+  if (now.getTime() - record.createdAt.getTime() > MEDIA_ATTACH_WINDOW_MS) return { kind: "invalid" };
 
-  await markMediaAttached({ db, id: mediaId });
-  return { kind: "ok" };
+  // Checked again by the update itself: another save may have claimed it since the read.
+  const claimed = await claimMedia({ db, id: mediaId });
+  return claimed ? { kind: "ok" } : { kind: "invalid" };
+}
+
+/*===== Release =====*/
+/**
+ * Lets go of a media its entity no longer uses: the entity was deleted, or its image replaced. Call it with the
+ * transaction that changes the entity, then `discardMedia` once that transaction has committed.
+ */
+export async function releaseMedia({ db, mediaId }: { db: Database; mediaId: string }): Promise<void> {
+  if (!isMediaId(mediaId)) return;
+  await markMediaDetached({ db, id: mediaId });
+}
+
+/**
+ * Deletes a released media right away rather than waiting for the cleanup. A failure is logged, not thrown: the entity
+ * is already saved without it, and the media is unattached, so the cleanup deletes it on a later run.
+ */
+export async function discardMedia({ db, mediaId }: { db: Database; mediaId: string }): Promise<void> {
+  try {
+    await deleteMedia({ db, mediaId });
+  } catch (error) {
+    log.error({ err: error, mediaId }, "could not delete a released media; the cleanup will retry");
+  }
 }
 
 /*===== Delete =====*/

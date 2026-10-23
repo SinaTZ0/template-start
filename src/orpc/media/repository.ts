@@ -45,12 +45,24 @@ export async function insertMedia({ db, values }: { db: Database; values: MediaV
   return row;
 }
 
-/** Marks a media row as used, once. Already-attached rows keep their original time. */
-export async function markMediaAttached({ db, id }: { db: Database; id: string }): Promise<void> {
-  await db
+/**
+ * Marks a media row as used, if nothing uses it yet. One statement, so two saves racing for the same upload can't both
+ * win.
+ *
+ * @returns Whether this call claimed it: `false` when it was already attached (or doesn't exist).
+ */
+export async function claimMedia({ db, id }: { db: Database; id: string }): Promise<boolean> {
+  const rows = await db
     .update(media)
     .set({ attachedAt: new Date() })
-    .where(and(eq(media.id, id), isNull(media.attachedAt)));
+    .where(and(eq(media.id, id), isNull(media.attachedAt)))
+    .returning({ id: media.id });
+  return rows.length > 0;
+}
+
+/** Marks a media row as unused again, which puts it in the cleanup's reach. */
+export async function markMediaDetached({ db, id }: { db: Database; id: string }): Promise<void> {
+  await db.update(media).set({ attachedAt: null }).where(eq(media.id, id));
 }
 
 /** Deletes a media row. Entities pointing at it are cleared by the foreign key (`on delete set null`). */

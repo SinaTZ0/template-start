@@ -67,11 +67,16 @@ One `media` table records every upload (`src/db/schema.ts`). Entities point to i
    and only the kinds their role may upload.
 2. The server writes every variant, then inserts the row, and returns its ID, URLs and placeholder. If a write fails
    halfway, the variants already written are deleted, so a row only exists when all its variants do.
-3. Saving the form sends the media ID. The entity's service calls `attachMedia`, which checks the kind and the
-   uploader and sets `attachedAt`. An upload can only be attached within 24 hours (`MEDIA_ATTACH_WINDOW_MS`); after
-   that the form shows the image as unusable and the user picks it again.
-4. When an entity is deleted or its image replaced, the service calls `deleteMedia` (bucket first, then the row). The
-   cleanup below never sees a replaced image, because it is still marked attached, so the service must delete it.
+3. Saving the form sends the media ID. The entity's service calls `attachMedia` in the transaction that writes the
+   entity. It checks the kind and the uploader and claims the upload by setting `attachedAt`; if the entity's write
+   fails, the claim rolls back with it. A media belongs to one entity: one that is already attached is refused, so
+   two entities never share an image (deleting one would take the other's). An entity whose image didn't change
+   doesn't attach it again. An upload can only be attached within 24 hours (`MEDIA_ATTACH_WINDOW_MS`); after that the
+   form shows the image as unusable and the user picks it again.
+4. When an entity is deleted or its image replaced, the service calls `releaseMedia` in the same transaction, which
+   clears `attachedAt`, then `discardMedia` once it has committed, which deletes the files and the row (bucket first).
+   If the bucket fails, `discardMedia` logs it and the media stays unattached, so the cleanup below deletes it later.
+   `note` shows both steps (`src/orpc/note/service.ts`).
 5. **Cleanup:** uploads whose form was never saved are orphans. `startMediaCleanup` (`src/orpc/media/cleanup.server.ts`),
    started from the server entry (`src/server.ts`), runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
    unattached 25 hours after upload (`ORPHANED_MEDIA_AGE_MS`), up to 200 per run, through `deleteMedia`. The extra hour

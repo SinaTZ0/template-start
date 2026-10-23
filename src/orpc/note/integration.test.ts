@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "#/db/client.server";
@@ -15,18 +15,16 @@ const runId = randomUUID().slice(0, 8);
 const owner = `test-note-owner-${runId}`;
 const stranger = `test-note-stranger-${runId}`;
 const strangersImage = randomUUID();
+const ownersImage = randomUUID();
 
 beforeAll(async () => {
   await db.insert(user).values([owner, stranger].map((id) => ({ id, name: "Test user", email: `${id}@example.test` })));
   // A row is enough: attaching never touches the bucket.
-  await db.insert(media).values({
-    id: strangersImage,
-    kind: "image",
-    uploadedBy: stranger,
-    width: 10,
-    height: 10,
-    placeholder: "data:,",
-  });
+  const image = { kind: "image", width: 10, height: 10, placeholder: "data:," };
+  await db.insert(media).values([
+    { ...image, id: strangersImage, uploadedBy: stranger },
+    { ...image, id: ownersImage, uploadedBy: owner },
+  ]);
 });
 
 afterAll(async () => {
@@ -60,5 +58,18 @@ describe("notes", () => {
     expect(await removeNote({ db, ownerId: stranger, id: created.note.id })).toEqual({ kind: "not-found" });
     expect(await removeNote({ db, ownerId: owner, id: created.note.id })).toEqual({ kind: "ok" });
     expect(await removeNote({ db, ownerId: owner, id: "not-a-uuid" })).toEqual({ kind: "not-found" });
+  });
+
+  it("keeps an image to one note, and lets the cleanup reach it once that note is deleted", async () => {
+    const first = await addNote({ db, ownerId: owner, input: { title: "اول", imageMediaId: ownersImage } });
+    if (first.kind !== "success") throw new Error("setup failed");
+
+    const second = await addNote({ db, ownerId: owner, input: { title: "دوم", imageMediaId: ownersImage } });
+    expect(second).toMatchObject({ kind: "invalid", fields: { imageMediaId: expect.any(String) } });
+
+    // The bucket delete may fail where no store runs; either way the image must not stay attached to nothing.
+    expect(await removeNote({ db, ownerId: owner, id: first.note.id })).toEqual({ kind: "ok" });
+    const [left] = await db.select().from(media).where(eq(media.id, ownersImage));
+    expect(left?.attachedAt ?? null).toBeNull();
   });
 });

@@ -67,4 +67,9 @@ describe("orphaned media", () => {
     expect(await attachMedia({ db, mediaId: ids.expired, kind: "image", userId, now })).toEqual({ kind: "invalid" });
     expect(await attachMedia({ db, mediaId: ids.fresh, kind: "image", userId, now })).toEqual({ kind: "ok" });
   });
+
+  it("refuses to attach an upload a second time, so two entities never share it", async () => {
+    const userId = owner;
+    expect(await attachMedia({ db, mediaId: ids.fresh, kind: "image", userId, now })).toEqual({ kind: "invalid" });
+  });
 });
