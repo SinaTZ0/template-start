@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { NAME_MAX_LENGTH } from "#/lib/auth-constants";
 import { persianText } from "#/lib/persian-text";
 import { m } from "#/paraglide/messages";
 
@@ -14,8 +15,7 @@ export type SignInValues = z.infer<typeof signInSchema>;
 
 /*===== Sign Up =====*/
 // The password limits are Better-Auth's defaults. Only the name is free text: the email and password are sent
-// exactly as typed. The server normalizes the name again (`databaseHooks` in `src/lib/auth.server.ts`).
-const NAME_MAX_LENGTH = 60;
+// exactly as typed. The server normalizes the name again and checks its length (`src/lib/auth.server.ts`).
 export const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
 

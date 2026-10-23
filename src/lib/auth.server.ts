@@ -7,7 +7,14 @@ import { db } from "#/db/client.server";
 import * as schema from "#/db/schema";
 import { env } from "#/env.server";
 import { verifyAltchaPayload } from "#/lib/altcha.server";
-import { ACCOUNT_BLOCKED_CODE, ALTCHA_HEADER, CAPTCHA_FAILED_CODE } from "#/lib/auth-constants";
+import {
+  ACCOUNT_BLOCKED_CODE,
+  ALTCHA_HEADER,
+  CAPTCHA_FAILED_CODE,
+  NAME_MAX_LENGTH,
+  NAME_REQUIRED_CODE,
+  NAME_TOO_LONG_CODE,
+} from "#/lib/auth-constants";
 import { createLogger } from "#/lib/logger.server";
 import { normalizePersianText } from "#/lib/persian-text";
 import { CLIENT_ADDRESS_HEADER } from "#/lib/rate-limit.server";
@@ -76,6 +83,22 @@ export const auth = betterAuth({
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      /*------ Display Name ------*/
+      // Better-Auth only checks that the name is a string, so without this the request body limit would be its only
+      // bound. Measured as it is stored, after normalization. First, so a rejected name doesn't use up a captcha.
+      if (ctx.path === "/sign-up/email" || ctx.path === "/update-user") {
+        const name: unknown = ctx.body?.name;
+        if (typeof name === "string") {
+          const length = normalizePersianText(name).length;
+          if (length === 0) {
+            throw new APIError("BAD_REQUEST", { code: NAME_REQUIRED_CODE, message: "Name is required." });
+          }
+          if (length > NAME_MAX_LENGTH) {
+            throw new APIError("BAD_REQUEST", { code: NAME_TOO_LONG_CODE, message: "Name is too long." });
+          }
+        }
+      }
+
       /*------ Sign-up Captcha ------*/
       // Better-Auth has no built-in Altcha provider, so the check runs here. The payload travels in a header because
       // the sign-up body only accepts user fields.
