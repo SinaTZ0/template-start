@@ -23,6 +23,10 @@ head: (args) => pageMeta({ args, title: "یادداشت‌ها", index: false })
 | `index`       | `true`                     | `false` adds `noindex` and leaves out the canonical URL and preview tags.             |
 | `path`        | current path, no query     | The canonical path. Pass one when the query string is part of the content.            |
 
+Put `head` after `beforeLoad` and `loader` in the route options. TypeScript infers the options in order, and `head`'s
+`args` carry the route's context and loader data; written before them, the types can loop back on themselves and
+fail (`beforeLoad` typed as returning `never`).
+
 A public page gets a title, description, canonical URL, Open Graph tags (`og:locale` is `fa_IR`) and a Twitter card. The
 `<html>` element already has `lang="fa"` and `dir="rtl"` (`__root.tsx`). The site has one language, so it needs no
 `hreflang` alternates.

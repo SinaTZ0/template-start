@@ -20,13 +20,14 @@ const searchSchema = z.object({
 /*===== Route =====*/
 export const Route = createFileRoute("/_site-layout/auth")({
   validateSearch: searchSchema,
-  // Sign-in has nothing to find in search results.
-  head: (args) => pageMeta({ args, title: "ورود", index: false }),
   beforeLoad: async ({ context, search }) => {
     // Signed-in people have nothing to do here.
     const viewer = await context.queryClient.ensureQueryData(viewerQueryOptions);
     if (viewer) throw redirect({ href: search.redirectTo ?? DEFAULT_REDIRECT });
   },
+  // Sign-in has nothing to find in search results. After `beforeLoad`, whose result `args` carries
+  // (docs/frontend/seo.md).
+  head: (args) => pageMeta({ args, title: "ورود", index: false }),
   component: AuthPage,
 });
 
