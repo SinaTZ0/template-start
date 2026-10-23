@@ -147,28 +147,28 @@
 
 /* Placeholder palette: neutral grays and one primary. Replace these per project (docs/frontend/app-identity.md). */
 :root {
-  --radius: 0.75rem;
+  --radius: 0.625rem;
 
-  --background: #fafafa;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --popover: #ffffff;
-  --popover-foreground: #18181b;
-  --primary: #2563eb;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0.008 326);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0.008 326);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0.008 326);
+  --primary: oklch(0.52 0.105 223.128);
   --primary-hover: #1d4ed8;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
-  --muted-foreground: #5f5f69;
-  --accent: #eef2ff;
-  --accent-foreground: #18181b;
-  --destructive: #b91c1c;
+  --primary-foreground: oklch(0.984 0.019 200.873);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.96 0.003 325.6);
+  --muted-foreground: oklch(0.542 0.034 322.5);
+  --accent: oklch(0.96 0.003 325.6);
+  --accent-foreground: oklch(0.212 0.019 322.12);
+  --destructive: oklch(0.577 0.245 27.325);
   --destructive-surface: #fde8e8;
-  --border: #e4e4e7;
-  --input: #8a8a94;
-  --ring: #2563eb;
+  --border: oklch(0.922 0.005 325.62);
+  --input: oklch(0.922 0.005 325.62);
+  --ring: oklch(0.711 0.019 323.02);
 
   --brand-text: #1d4ed8;
   --highlight: #f59e0b;
@@ -185,45 +185,45 @@
   --elevation-sm: 0 1px 2px #0000000a, 0 2px 8px -2px #0000000d;
   --elevation-md: 0 1px 2px #0000000a, 0 12px 28px -12px #00000029;
 
-  --chart-1: #2563eb;
-  --chart-2: #f59e0b;
-  --chart-3: #15803d;
-  --chart-4: #8a8a94;
-  --chart-5: #b91c1c;
+  --chart-1: oklch(0.811 0.111 293.571);
+  --chart-2: oklch(0.606 0.25 292.717);
+  --chart-3: oklch(0.541 0.281 293.009);
+  --chart-4: oklch(0.491 0.27 292.581);
+  --chart-5: oklch(0.432 0.232 292.759);
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #18181b;
-  --sidebar-primary: #2563eb;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef2ff;
-  --sidebar-accent-foreground: #18181b;
-  --sidebar-border: #e4e4e7;
-  --sidebar-ring: #2563eb;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0.008 326);
+  --sidebar-primary: oklch(0.609 0.126 221.723);
+  --sidebar-primary-foreground: oklch(0.984 0.019 200.873);
+  --sidebar-accent: oklch(0.96 0.003 325.6);
+  --sidebar-accent-foreground: oklch(0.212 0.019 322.12);
+  --sidebar-border: oklch(0.922 0.005 325.62);
+  --sidebar-ring: oklch(0.711 0.019 323.02);
 }
 
 /*===== Dark Theme =====*/
 
 .dark {
-  --background: #111113;
-  --foreground: #f4f4f5;
-  --card: #1c1c1f;
-  --card-foreground: #f4f4f5;
-  --popover: #1c1c1f;
-  --popover-foreground: #f4f4f5;
-  --primary: #60a5fa;
+  --background: oklch(0.145 0.008 326);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.212 0.019 322.12);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.212 0.019 322.12);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.45 0.085 224.283);
   --primary-hover: #93c5fd;
-  --primary-foreground: #0b1220;
-  --secondary: #18181b;
-  --secondary-foreground: #f4f4f5;
-  --muted: #18181b;
-  --muted-foreground: #a1a1aa;
-  --accent: #1e2538;
-  --accent-foreground: #f4f4f5;
-  --destructive: #fca5a5;
+  --primary-foreground: oklch(0.984 0.019 200.873);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.263 0.024 320.12);
+  --muted-foreground: oklch(0.711 0.019 323.02);
+  --accent: oklch(0.263 0.024 320.12);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
   --destructive-surface: #3b1717;
-  --border: #2e2e33;
-  --input: #71717a;
-  --ring: #93c5fd;
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.542 0.034 322.5);
 
   --brand-text: #93c5fd;
   --highlight: #fbbf24;
@@ -240,27 +240,27 @@
   --elevation-sm: 0 1px 2px #00000059, 0 2px 8px -2px #00000040;
   --elevation-md: 0 1px 2px #00000059, 0 14px 30px -12px #00000080;
 
-  --chart-1: #60a5fa;
-  --chart-2: #fbbf24;
-  --chart-3: #86efac;
-  --chart-4: #71717a;
-  --chart-5: #fca5a5;
+  --chart-1: oklch(0.811 0.111 293.571);
+  --chart-2: oklch(0.606 0.25 292.717);
+  --chart-3: oklch(0.541 0.281 293.009);
+  --chart-4: oklch(0.491 0.27 292.581);
+  --chart-5: oklch(0.432 0.232 292.759);
 
-  --sidebar: #1c1c1f;
-  --sidebar-foreground: #f4f4f5;
-  --sidebar-primary: #60a5fa;
-  --sidebar-primary-foreground: #0b1220;
-  --sidebar-accent: #1e2538;
-  --sidebar-accent-foreground: #f4f4f5;
-  --sidebar-border: #2e2e33;
-  --sidebar-ring: #93c5fd;
+  --sidebar: oklch(0.212 0.019 322.12);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.715 0.143 215.221);
+  --sidebar-primary-foreground: oklch(0.302 0.056 229.695);
+  --sidebar-accent: oklch(0.263 0.024 320.12);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.542 0.034 322.5);
 }
 
 /*===== Base =====*/
 
 @layer base {
   * {
-    @apply border-border outline-ring;
+    @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
@@ -293,6 +293,10 @@
   /* The one focus style: a solid 2px ring, 2px off the edge. Primitives set the same thing explicitly. */
   :where(a, button, input, select, textarea, [tabindex]):focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 }
 
