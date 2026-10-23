@@ -87,6 +87,14 @@ function tracePool(pool: Pool): Pool {
   return withTracedQuery(pool, { connect });
 }
 
+/*===== Pool =====*/
+const pool = new Pool({ connectionString: env.DATABASE_URL });
+
+// Postgres closing an idle connection (a restart, a dropped network, an idle timeout) is emitted here. Without a
+// listener Node treats it as an uncaught error and the process exits. The pool has already dropped that connection
+// and opens a new one for the next query, so logging it is all there is to do.
+pool.on("error", (error) => log.error({ err: error }, "idle database connection failed"));
+
 /*===== Client =====*/
 /**
  * Shared Drizzle client backed by a node-postgres connection pool. Every query is timed into the current request's
@@ -95,9 +103,13 @@ function tracePool(pool: Pool): Pool {
  * Server-only: create one per process and pass it to repositories through their
  * dependency object rather than importing it there directly.
  */
-export const db = drizzle({
-  client: tracePool(new Pool({ connectionString: env.DATABASE_URL })),
-  schema,
-});
+export const db = drizzle({ client: tracePool(pool), schema });
 
-export type Database = typeof db;
+/** A transaction opened with `db.transaction(...)`. */
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * What services and repositories take as `db`: the client, or a transaction on it. A service that must write several
+ * rows together passes its transaction down, and the repositories run inside it.
+ */
+export type Database = typeof db | Transaction;
