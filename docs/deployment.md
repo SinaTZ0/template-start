@@ -374,8 +374,9 @@ docker compose -f compose.prod.yaml exec -T db pg_restore -U app -d app --clean 
 - Turn on email verification and password reset once the project can send email (`src/lib/auth.server.ts`).
 - Add a Content-Security-Policy in the app (the inline theme script in `__root.tsx` needs a nonce or hash). Its
   `connect-src` must allow `https://<ERRORS_DOMAIN>`, or browser errors can't be reported. Caddy sets the other
-  security headers.
+  security headers. The directives it needs are in [hardening.md](./hardening.md).
 - Set the site's name, description and link-preview image in `src/lib/site.ts`, and check `/sitemap.xml` lists every
   public page ([seo.md](./frontend/seo.md)).
-- Schedule the orphan-media cleanup if uploads matter (`deleteMedia` in `src/orpc/media/service.ts`).
 - Schedule the nightly backup and a copy off the server (Backups above).
+- Go through [hardening.md](./hardening.md) (shared rate limits behind IPv6 or a CDN, the CSP, sibling
+  subdomains) and fix each item or note why it doesn't apply.

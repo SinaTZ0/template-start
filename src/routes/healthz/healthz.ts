@@ -14,7 +14,7 @@ const DB_TIMEOUT_MS = 2_000;
  * `GET /healthz`: 200 when the app can query Postgres, 503 otherwise. Docker's healthcheck and uptime monitors poll it.
  *
  * Storage isn't checked: an S3 outage only breaks uploads, and restarting the app wouldn't fix it. The request log
- * skips healthy probes (`src/server.ts`), so only failures and slow checks are written.
+ * skips healthy probes (`src/lib/request-log.server.ts`), so only failures and slow checks are written.
  */
 async function handleGet() {
   const headers = { "Cache-Control": "no-store" };
