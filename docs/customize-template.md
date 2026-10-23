@@ -6,7 +6,7 @@ this, new pages follow [frontend-flow.md](./frontend-flow.md).
 
 **The homepage is the source of truth for the look.** Wherever the template's current tokens, type styles, variants or
 layouts disagree with it, the template changes. The template's code structure stays: route slices, primitives built
-on `ui/`, `defineStyles`, tokens in `app/app.css` ([architecture.md](./frontend/architecture.md),
+on `ui/`, `defineStyles`, tokens in `src/styles.css` ([architecture.md](./frontend/architecture.md),
 [components.md](./frontend/components.md)). The one exception is the constraints in
 [app-identity.md](./frontend/app-identity.md#constraints) (contrast, keyboard focus, text size, RTL). If the homepage
 breaks one, tell the person and propose the smallest change that fixes it, rather than silently restyling.
@@ -52,7 +52,7 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 - **Tone**: from the homepage's copy. Keep the Persian rules already there.
 - **Brand**: the logo, how imagery is treated, and **References** pointing at `docs/frontend/reference/`.
 
-## 3. Tokens in `app/app.css`
+## 3. Tokens in `src/styles.css`
 
 - **Colours**: map each colour role to a token. Keep every token name the primitives use (shadcn's names plus
   `highlight`, `brand-text` and the status pairs), so components keep working. Mind the trap: `highlight` is the
@@ -64,13 +64,13 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 - **Type styles**: replace the `--text-*` styles with the homepage's set. Rename, add or remove styles to match it, and
   update every usage (search for `text-<name>`). Keep Persian line heights generous and text at 12px or larger.
 - **Font**: if the homepage uses another font, self-host it with an `@fontsource` package or files in `public/`
-  instead of an external font service, and update `--font-sans` in `app.css`.
+  instead of an external font service, and update `--font-sans` in `styles.css`.
 - **Shape and layout**: radii, shadows (`--elevation-*`) and the content width (`--container-site`, used as `max-w-site`).
 - Check contrast for every text and control pair in both themes.
 
 ## 4. Primitives
 
-- Restyle each primitive in `app/components/primitive/` to match its counterpart on the homepage: base styles first,
+- Restyle each primitive in `src/components/primitive/` to match its counterpart on the homepage: base styles first,
   then a variant for each distinct look that recurs. Remove template variants that nothing uses anymore.
 - When the homepage uses a component that has no primitive yet (tabs, accordion, navigation menu…), create one from
   `ui/` ([components.md](./frontend/components.md#creating-a-primitive)).
@@ -78,14 +78,14 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 
 ## 5. Header, Footer and Shared Pieces
 
-- Rebuild `site-header` and `site-footer` in `app/components/shared/` from the homepage, keeping their current behavior
+- Rebuild `site-header` and `site-footer` in `src/components/shared/` from the homepage, keeping their current behavior
   (navigation, theme toggle, sign-in and sign-out).
 - Promote a homepage piece to `shared/` only if other pages will clearly use it (a section heading, a link row).
   Sections that only the homepage has stay in the home slice.
 
 ## 6. The Home Route
 
-- Rebuild the homepage in `app/routes/home/` from primitives, tokens and slice components. Don't paste the reference
+- Rebuild the homepage in `src/routes/home/` from primitives, tokens and slice components. Don't paste the reference
   markup: it would bring raw colours, arbitrary values and physical directions back in, which `pnpm lint` rejects.
 - Until the features behind its content exist (news, events…), keep that content as static data in the slice, in its
   own file with a comment saying which future procedure replaces it.
@@ -93,8 +93,8 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 
 ## 7. The Rest of the Template
 
-- Restyle the sign-in page (`app/routes/auth/`) and the notes pages so they belong to the new design.
-- Replace `public/favicon.ico`, and set `SITE_IMAGE` in `app/lib/site.ts` to a 1200×630 preview image in the new style.
+- Restyle the sign-in page (`src/routes/auth/`) and the notes pages so they belong to the new design.
+- Replace `public/favicon.ico`, and set `SITE_IMAGE` in `src/lib/site.ts` to a 1200×630 preview image in the new style.
 
 ## 8. Check
 

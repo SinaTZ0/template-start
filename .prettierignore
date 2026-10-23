@@ -5,8 +5,8 @@ playwright-report/
 test-results/
 storybook-static/
 pnpm-lock.yaml
-app/components/ui/
-app/routeTree.gen.ts
+src/components/ui/
+src/routeTree.gen.ts
 drizzle/
 # Vendored, and Go templates (Prettier would reflow their {{ }} actions).
 tools/error-viewer/static/htmx.min.js

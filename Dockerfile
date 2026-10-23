@@ -41,9 +41,9 @@ ENV NODE_OPTIONS=--enable-source-maps
 COPY --from=prod-deps /app/node_modules ./node_modules
 # Nitro's Node server and the static assets it serves (`vite.config.ts`).
 COPY --from=build /app/.output ./.output
-# The server source, read by the error reporter: with source maps, stack frames name `/app/app/<file>.ts`, and the
+# The server source, read by the error reporter: with source maps, stack frames name `/app/src/<file>.ts`, and the
 # Sentry SDK reads each frame's lines from that path to attach them to the report. Without it, reports carry no source.
-COPY --from=build /app/app ./app
+COPY --from=build /app/src ./src
 COPY package.json ./
 COPY drizzle ./drizzle
 COPY deploy/migrate.mjs deploy/init-storage.mjs ./deploy/

@@ -12,8 +12,8 @@
   },
   "settings": {
     "shadcn": {
-      "ui": "~/components/primitive",
-      "note": "Move the look into the primitive (a variant or its base style), the layout onto the parent, or a new token into app/app.css (docs/frontend/components.md#lint-rules). Don't hide it in a wrapper element."
+      "ui": "#/components/primitive",
+      "note": "Move the look into the primitive (a variant or its base style), the layout onto the parent, or a new token into src/styles.css (docs/frontend/components.md#lint-rules). Don't hide it in a wrapper element."
     }
   },
   "rules": {
@@ -31,7 +31,7 @@
   },
   "overrides": [
     {
-      "files": ["app/components/primitive/**"],
+      "files": ["src/components/primitive/**"],
       "rules": {
         "shadcn/no-restyle": "off"
       }
@@ -43,11 +43,11 @@
     ".output/",
     ".tanstack/",
     ".nitro/",
-    "app/routeTree.gen.ts",
+    "src/routeTree.gen.ts",
     "playwright-report/",
     "test-results/",
     "storybook-static/",
-    "app/components/ui/",
+    "src/components/ui/",
     "tools/error-viewer/static/htmx.min.js"
   ]
 }

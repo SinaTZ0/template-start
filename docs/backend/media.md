@@ -10,7 +10,7 @@ serve:   browser ──GET <MEDIA_PUBLIC_URL>/…──▶ (production: Caddy) �
 ```
 
 - **Any S3-compatible store.** Development uses SeaweedFS from `compose.dev.yaml`. The code only speaks the S3 API
-  (`@aws-sdk/client-s3`, `app/lib/storage.server.ts`), so the store can change without code changes.
+  (`@aws-sdk/client-s3`, `src/lib/storage.server.ts`), so the store can change without code changes.
 - **The app writes.** Uploads go through the server, which checks, converts and resizes the image, then puts every
   variant into the bucket. Users never write to the bucket directly.
 - **Browsers read** straight from the bucket in development, and through a read-only proxy path (`/media`) in
@@ -19,7 +19,7 @@ serve:   browser ──GET <MEDIA_PUBLIC_URL>/…──▶ (production: Caddy) �
 
 ## Image Kinds and Variants
 
-Each kind has a fixed set of variants, generated once at upload (`app/orpc/media/constants.ts`).
+Each kind has a fixed set of variants, generated once at upload (`src/orpc/media/constants.ts`).
 
 - **cover** crops to exactly the given size, keeping the most interesting part of the image (sharp's `attention`).
 - **inside** fits the image inside the box and keeps its aspect ratio. It never upscales.
@@ -60,7 +60,7 @@ All processing uses [sharp](https://sharp.pixelplumbing.com/) (`processing.serve
 
 ## Database and Upload Flow
 
-One `media` table records every upload (`app/db/schema.ts`). Entities point to it with a nullable foreign key
+One `media` table records every upload (`src/db/schema.ts`). Entities point to it with a nullable foreign key
 (`on delete set null`), e.g. `note.imageMediaId`.
 
 1. The form uploads the file as soon as it's picked, through `media.upload` (`kind` + `File`). Only signed-in users,
@@ -72,15 +72,15 @@ One `media` table records every upload (`app/db/schema.ts`). Entities point to i
    that the form shows the image as unusable and the user picks it again.
 4. When an entity is deleted or its image replaced, the service calls `deleteMedia` (bucket first, then the row). The
    cleanup below never sees a replaced image, because it is still marked attached, so the service must delete it.
-5. **Cleanup:** uploads whose form was never saved are orphans. `startMediaCleanup` (`app/orpc/media/cleanup.server.ts`),
-   started from the server entry (`app/server.ts`), runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
+5. **Cleanup:** uploads whose form was never saved are orphans. `startMediaCleanup` (`src/orpc/media/cleanup.server.ts`),
+   started from the server entry (`src/server.ts`), runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
    unattached 25 hours after upload (`ORPHANED_MEDIA_AGE_MS`), up to 200 per run, through `deleteMedia`. The extra hour
    past the attach window means a save and the cleanup can never race. The `attached_at, created_at` index serves the
    scan.
 
 ## Rendering
 
-`MediaImage` (`app/components/shared/media-image/`) takes the media and a variant name and renders an `<img>` with its
+`MediaImage` (`src/components/shared/media-image/`) takes the media and a variant name and renders an `<img>` with its
 intrinsic `width` and `height` (no layout shift), `loading="lazy"` unless `priority`, and the blurred placeholder as
 its background. `alt` text is required.
 

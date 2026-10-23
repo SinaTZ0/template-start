@@ -1,13 +1,13 @@
 import type { Plugin } from "vite";
 
 /*===== Trace Layers =====*/
-// `app/orpc/<feature>/service.ts` or `repository.ts`, with either path separator.
-const LAYER_FILE = /[\\/]app[\\/]orpc[\\/]([^\\/]+)[\\/](service|repository)\.ts$/;
+// `src/orpc/<feature>/service.ts` or `repository.ts`, with either path separator.
+const LAYER_FILE = /[\\/]src[\\/]orpc[\\/]([^\\/]+)[\\/](service|repository)\.ts$/;
 const ASYNC_EXPORT = /^export async function (\w+)/gm;
 
 /**
  * Times every exported async function of a feature's service and repository as a `service` or `repository` span
- * (`app/lib/trace.server.ts`), named `<feature>.<function>`, e.g. `note.listNotes`. Feature code stays plain.
+ * (`src/lib/trace.server.ts`), named `<feature>.<function>`, e.g. `note.listNotes`. Feature code stays plain.
  *
  * Exported function declarations are mutable bindings, so the code appended to the module reassigns each one to its
  * traced wrapper: importers and calls inside the module both go through it. Only `async` functions are wrapped. A
@@ -34,7 +34,7 @@ export function traceLayers(): Plugin {
         (name) => `${name} = __traced({ kind: "${kind}", name: "${feature}.${name}", fn: ${name} });`,
       );
       return {
-        code: [code, `import { traced as __traced } from "~/lib/trace.server";`, ...wraps].join("\n"),
+        code: [code, `import { traced as __traced } from "#/lib/trace.server";`, ...wraps].join("\n"),
         // The original code is untouched, so the incoming source map still holds.
         map: null,
       };

@@ -3,7 +3,7 @@
 Client navigations to another page fade between the old and new page, and the new content slides in from the side
 that matches the direction: forward or back through history. The router starts the
 [View Transition](https://developer.mozilla.org/docs/Web/API/View_Transition_API) itself, through
-`defaultViewTransition` in `app/router.tsx`. Browsers without the View Transition API navigate as usual, without the
+`defaultViewTransition` in `src/router.tsx`. Browsers without the View Transition API navigate as usual, without the
 fade.
 
 ## How It Works
@@ -47,7 +47,7 @@ on the pathname therefore never activates on navigation, so the router's own opt
 ### The Slide
 
 Only the new page slides. The browser snapshots the old page before the router commits and the new one after, and the
-router's `onBeforeRouteMount` event fires in between. `markEnteringPage` in `app/router.tsx` sets
+router's `onBeforeRouteMount` event fires in between. `markEnteringPage` in `src/router.tsx` sets
 `data-page-entering` on `<html>` there, which gives `#main` the `view-transition-name` `page`, so `#main` has its own
 snapshot in the new state only:
 
@@ -63,7 +63,7 @@ different scroll positions, both pages would glide up or down across the screen.
 
 ## Styling
 
-- The durations live in `app.css`: `root` for the fade, `::view-transition-new(page)` for the slide. They are kept
+- The durations live in `styles.css`: `root` for the fade, `::view-transition-new(page)` for the slide. They are kept
   short because the page ignores clicks while the animation runs.
 - `prefers-reduced-motion: reduce` turns the animation off, so navigation is instant.
 - The header and footer are part of the `root` snapshot. They look the same on both pages, so the cross-fade keeps

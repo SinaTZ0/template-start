@@ -5,7 +5,7 @@ How the server logs, where errors and slow requests are reported, and how to fin
 ## Overview
 
 ```text
-request ──▶ app/server.ts (trace starts, reqId) ──▶ server function / procedure ▸ service ▸ repository ▸ db
+request ──▶ src/server.ts (trace starts, reqId) ──▶ server function / procedure ▸ service ▸ repository ▸ db
                                                                                               │
               one log line per request ◀── trace (time per kind + slowest spans) ◀────────────┘
               slow request ──▶ error viewer warning, with the timeline of its slowest spans
@@ -13,13 +13,13 @@ request ──▶ app/server.ts (trace starts, reqId) ──▶ server function 
 log.error({ err }) ──▶ log line + error viewer event      browser error ──▶ error viewer event
 ```
 
-- **Logs are plain pino.** Server code logs through `app/lib/logger.server.ts`, never `console`. Production writes one
+- **Logs are plain pino.** Server code logs through `src/lib/logger.server.ts`, never `console`. Production writes one
   JSON object per line to stdout for Docker to collect. Development prints one line per log through `pino-pretty`.
 - **Errors go to the error viewer.** `tools/error-viewer` is a small Go service of this repo that speaks Sentry's
   protocol, so the app uses the official Sentry SDKs (`@sentry/node`, `@sentry/browser`) pointed at it. It stores each
   event with its stack and context in SQLite and lists them for searching. It doesn't group, alert or email. Development
   runs it with `pnpm errors` (`go run`), production from `compose.prod.yaml`.
-- **One trace per request.** `app/lib/trace.server.ts` keeps the request's timings in `AsyncLocalStorage`, so a query
+- **One trace per request.** `src/lib/trace.server.ts` keeps the request's timings in `AsyncLocalStorage`, so a query
   deep inside a service lands in the right request without anything being passed down. Slow requests are reported to
   the error viewer with the trace's timeline.
 
@@ -43,17 +43,17 @@ log.error({ err, mediaId }, "could not clean up the variants");
   Don't log and rethrow the same error in services: it would become two reports.
 - Every line written while a request is handled carries its `reqId`. Search for it to see everything one request did.
   It is 16 hex characters, and every response returns it as an `X-Request-Id` header (set by the server entry,
-  `app/server.ts`), so it can be read from the browser's devtools and quoted in a bug report.
+  `src/server.ts`), so it can be read from the browser's devtools and quoted in a bug report.
 
 ## Error Reporting
 
-`app/lib/error-reporting.server.ts` sets up the server SDK; `app/client.tsx` sets up the browser's.
+`src/lib/error-reporting.server.ts` sets up the server SDK; `src/client.tsx` sets up the browser's.
 
 | Source                                                    | How it reaches the error viewer                                |
 | --------------------------------------------------------- | -------------------------------------------------------------- |
 | Unexpected procedure failures (global oRPC middleware)    | `log.error({ err, errorId })`, tagged with the `errorId`       |
-| Server function failures (`app/start.ts`)                 | `log.error({ err })`; ones that already have an `errorId` skip |
-| Failures of the request handler itself (`app/server.ts`)  | `log.error({ err })`                                           |
+| Server function failures (`src/start.ts`)                 | `log.error({ err })`; ones that already have an `errorId` skip |
+| Failures of the request handler itself (`src/server.ts`)  | `log.error({ err })`                                           |
 | Better-Auth errors, failed health checks, cleanup errors… | Any other `log.error({ err })`                                 |
 | Crashes (uncaught exceptions, unhandled rejections)       | The SDK's own handlers                                         |
 | Browser errors                                            | The SDK's handlers, plus `onCaughtError` for boundary errors   |
@@ -61,7 +61,7 @@ log.error({ err, mediaId }, "could not clean up the variants");
 
 **Repeats are throttled.** Every server report reaches the error viewer from one address, and the viewer's answer to
 a burst past its limit makes the SDK stop sending everything for a while. So during an incident the app sends only the
-first few of each kind of report (`app/lib/report-throttle.server.ts`):
+first few of each kind of report (`src/lib/report-throttle.server.ts`):
 
 - **Errors:** at most 5 a minute with the same type, message (digits and UUIDs ignored) and first stack frame in the
   app's own code. Errors that differ in any of these never hold each other back. The next one sent carries how many were
@@ -75,14 +75,14 @@ A user who sees a 500 gets its `errorId`. Paste it into the error viewer's searc
 click its `reqId` to see everything else that request reported.
 
 **Client ID.** Each browser gets a random ID in a `cid` cookie the first time the page runs
-(`app/lib/client-id.ts`). Browser reports carry it as a `clientId` tag, and so do the server's reports for that
+(`src/lib/client-id.ts`). Browser reports carry it as a `clientId` tag, and so do the server's reports for that
 browser's requests, so one visitor's errors on both sides can be read together. It is random, not a fingerprint of the
 device, and identifies nobody: clearing cookies gives a new one. A browser's very first page load has no ID yet,
 because the cookie is set once that page runs.
 
-**User ID.** Once a request's session is read (`getRequestSession` in `app/lib/auth.server.ts`, which every session
+**User ID.** Once a request's session is read (`getRequestSession` in `src/lib/auth.server.ts`, which every session
 lookup goes through), its log lines and reports carry the signed-in user's database ID as `userId`. The browser sets
-the same tag after hydration, from the viewer query (`app/routes/site_layout/`), and clears it on sign-out. Only the ID is sent, never the
+the same tag after hydration, from the viewer query (`src/routes/site_layout/`), and clears it on sign-out. Only the ID is sent, never the
 email or name. It does tie events to a person: the viewer is self-hosted, behind its password, and keeps events for
 30 days (`RETENTION_DAYS`), which is the accepted trade-off for finding one user's errors with `userId:`.
 
@@ -90,7 +90,7 @@ email or name. It does tie events to a person: the viewer is self-hosted, behind
 email and name are all off (`dataCollection` in both setups); the user's ID is the one thing set on purpose. A failed
 query's parameters are replaced with `(hidden)` unless `LOG_QUERY_PARAMS` is on.
 
-**Secrets are redacted** before a line is written or a report is sent (`app/lib/redact.server.ts`, adapted from
+**Secrets are redacted** before a line is written or a report is sent (`src/lib/redact.server.ts`, adapted from
 `@nestjs/observe`). The logger redacts a line's fields once, for both its output and the report; the error serializer
 and the server SDK's `beforeSend` redact the error's message and stack.
 
@@ -107,7 +107,7 @@ credentials. Ordinary text, Persian included, is never changed.
 
 **Stacks point at source files.** The server bundle ships with source maps and runs with `--enable-source-maps`
 (`Dockerfile`), so stacks are mapped before they are logged or sent. The dev server maps them itself. The image also
-ships the server source (`app/`), because the SDK reads each frame's lines from the file it names: without it, reports
+ships the server source (`src/`), because the SDK reads each frame's lines from the file it names: without it, reports
 would arrive with no source lines. Browser stacks
 from a production build are minified, because client source maps aren't published; the message, URL and browser still
 show what failed.
@@ -120,12 +120,12 @@ show what failed.
 
 | Kind         | Recorded by                                          | Name                                |
 | ------------ | ---------------------------------------------------- | ----------------------------------- |
-| `server-fn`  | global function middleware (`app/start.ts`)          | server function: `getViewer`        |
+| `server-fn`  | global function middleware (`src/start.ts`)          | server function: `getViewer`        |
 | `procedure`  | `traceProcedureMiddleware`, first on the implementer | procedure path: `note.list`         |
 | `service`    | `traceLayers` Vite plugin (below)                    | `<feature>.<fn>`: `note.listNotes`  |
 | `repository` | `traceLayers` Vite plugin                            | `<feature>.<fn>`: `note.insertNote` |
-| `db`         | the traced pool in `app/db/client.server.ts`         | the SQL, without parameters         |
-| `storage`    | S3 client middleware in `app/lib/storage.server.ts`  | command: `PutObject`                |
+| `db`         | the traced pool in `src/db/client.server.ts`         | the SQL, without parameters         |
+| `storage`    | S3 client middleware in `src/lib/storage.server.ts`  | command: `PutObject`                |
 | `task`       | `span(...)` calls in app code                        | whatever the call names             |
 
 Kinds nest: a server function's time includes the procedures it called, and those include their queries. Add the kinds up and
@@ -137,7 +137,7 @@ start is already a `server-fn` or `procedure` span. Time spent rendering shows a
 end of the request.
 
 **Services and repositories** are timed by the `traceLayers` Vite plugin (`vite-plugins/trace-layers.ts`): every
-`export async function` in `app/orpc/<feature>/service.ts` or `repository.ts` becomes a span named
+`export async function` in `src/orpc/<feature>/service.ts` or `repository.ts` becomes a span named
 `<feature>.<function>`, with no change to the feature's code. Only `async` functions count. A plain function that returns
 a Drizzle query (like `findNotesByOwner`) is left alone, because a query builder runs again each time it is awaited;
 its query still shows up as a `db` span. Unit tests (`vitest.config.ts`) don't load the plugin.
@@ -147,7 +147,7 @@ its query still shows up as a `db` span. Unit tests (`vitest.config.ts`) don't l
 Wrap anything that may be slow and isn't covered above, such as CPU-heavy processing or a call to an external API:
 
 ```ts
-import { span } from "~/lib/trace.server";
+import { span } from "#/lib/trace.server";
 
 const processed = await span({ kind: "task", name: "media.processImage" }, () => processImage({ file, kind }));
 ```
@@ -188,7 +188,7 @@ it ends ran after it, two that start together ran in parallel, and a gap is time
 indented under the one it ran inside, so parallel work keeps its own children. Identical siblings are merged into one
 row (`db ×5`) with their total time. Spans under 2% of the request are left out, and the line under the table counts
 them. Queries show their shape only: quotes and column lists are dropped, and parameters are never included. The app
-sends the rows as data (`traceTimeline` in `app/lib/trace.server.ts`); the viewer draws them.
+sends the rows as data (`traceTimeline` in `src/lib/trace.server.ts`); the viewer draws them.
 
 Read it from the top down: follow the longest bar at each level. Here the page waits on `note.list`, which spends
 87 ms on queries and 3024 ms in `note.listNotes`, whose own query is too fast to be listed. So the time went into the
@@ -209,7 +209,7 @@ isn't reported to the error viewer: the slow request it belongs to is.
   counted.
 - A trace keeps at most 300 spans. Spans past that still count in the totals but not in the timeline, and the timeline
   shows at most 40 rows.
-- Only queries through `db` (`app/db/client.server.ts`) are traced. A separate `pg` pool or client isn't.
+- Only queries through `db` (`src/db/client.server.ts`) are traced. A separate `pg` pool or client isn't.
 - The error viewer shows errors, not performance: there are no percentile charts, only reports for requests past the
   threshold. The log lines carry every request's timing.
 

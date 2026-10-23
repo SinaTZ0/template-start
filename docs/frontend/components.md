@@ -2,7 +2,7 @@
 
 ## Where Components Live
 
-- `app/components/primitive/` holds this app's versions of shadcn components. Every shadcn component the app uses
+- `src/components/primitive/` holds this app's versions of shadcn components. Every shadcn component the app uses
   lives here, restyled or not. Each one owns its folder:
 
   ```text
@@ -12,11 +12,11 @@
     button.stories.tsx  # maintained UI documentation
   ```
 
-- `app/components/ui/` holds the untouched shadcn source, with every component installed. Never edit it and never
+- `src/components/ui/` holds the untouched shadcn source, with every component installed. Never edit it and never
   import from it. It exists so that shadcn updates show up as a git diff (see
   [Reviewing a shadcn Update](#reviewing-a-shadcn-update)), and as the source to copy when creating a primitive. Docs
   for each component are at `https://ui.shadcn.com/docs/components/<name>`.
-- `app/components/shared/` holds app-made components used by more than one route: things with no shadcn original, such
+- `src/components/shared/` holds app-made components used by more than one route: things with no shadcn original, such
   as `form-alert`, `site-link`, `media-image` and `theme-toggle`. Same one-folder-per-component layout, with a
   `<name>.styles.ts` only when the component has its own style map, and a story for anything visible.
 - Route-specific pieces stay in their route slice and move to `shared/` when a second route needs them; see
@@ -42,10 +42,10 @@ its consumers and the primitives that compose it, since some rely on its slots a
 ## Reviewing a shadcn Update
 
 Update the shadcn source with the CLI (`pnpm dlx shadcn@latest add --all --overwrite`), then review the diff. The CLI
-can also rewrite `app/app.css` and `app/lib/utils.ts` (`cn`): keep the app's tokens, and treat a changed helper like any
+can also rewrite `src/styles.css` and `src/lib/utils.ts` (`cn`): keep the app's tokens, and treat a changed helper like any
 other change worth porting.
 
-For each changed component in `git diff app/components/ui/` that has a primitive, decide whether the change is worth
+For each changed component in `git diff src/components/ui/` that has a primitive, decide whether the change is worth
 porting (a new `data-*` attribute, an accessibility fix, a new helper or dependency) and port it into the primitive by
 hand. Commit the `ui/` update even when nothing is ported, so the next diff starts from it.
 
@@ -91,8 +91,8 @@ type-checking. A group with a distinct sub-concern can take a capitalized suffix
 
 - `no-restyle`: outside `primitive/`, a primitive's `className` may only hold layout (margin, width, flex and grid
   placement). A different look belongs in the primitive, as a variant or a changed base style.
-- `no-raw-colors`: use theme colors from `app/app.css`, not the Tailwind palette (`bg-pink-500`).
-- `no-arbitrary-values`: stay on the scale (`w-88`, not `w-[22rem]`), or add the value to `app.css` as a token.
+- `no-raw-colors`: use theme colors from `src/styles.css`, not the Tailwind palette (`bg-pink-500`).
+- `no-arbitrary-values`: stay on the scale (`w-88`, not `w-[22rem]`), or add the value to `styles.css` as a token.
 - `no-inline-styles`: put dynamic values in a CSS custom property and read them from a class, as `media-image` does:
   `style={{ "--placeholder": url }}` with `bg-(image:--placeholder)`.
 

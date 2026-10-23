@@ -1,12 +1,12 @@
 import type { Decorator, Preview } from "@storybook/react-vite";
 
-import { DirectionProvider } from "~/components/primitive/direction/direction";
-import { TooltipProvider } from "~/components/primitive/tooltip/tooltip";
+import { DirectionProvider } from "#/components/primitive/direction/direction";
+import { TooltipProvider } from "#/components/primitive/tooltip/tooltip";
 
-import "../app/app.css";
+import "../src/styles.css";
 
 /*===== Document =====*/
-// Mirror root.tsx so stories render RTL, in Persian, with the app font.
+// Mirror __root.tsx so stories render RTL, in Persian, with the app font.
 document.documentElement.lang = "fa";
 document.documentElement.dir = "rtl";
 
@@ -37,7 +37,7 @@ const withTheme: Decorator = (Story, context) => {
   );
 };
 
-// Base UI reads direction from context, not the `dir` attribute (see root.tsx).
+// Base UI reads direction from context, not the `dir` attribute (see __root.tsx).
 const withProviders: Decorator = (Story) => (
   <DirectionProvider direction="rtl">
     <TooltipProvider>

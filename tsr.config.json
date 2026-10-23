@@ -1,0 +1,4 @@
+{
+  "target": "react",
+  "virtualRouteConfig": "./src/routes.ts"
+}

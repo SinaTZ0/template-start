@@ -14,7 +14,7 @@ Each route that uses URL state validates it with `validateSearch`. The schema li
 and links:
 
 ```ts
-// app/routes/orders/search-params.ts
+// src/routes/orders/search-params.ts
 import { z } from "zod";
 
 export const ORDER_SORTS = ["date", "amount"] as const;
@@ -29,7 +29,7 @@ export const ordersSearchSchema = z.object({
 ```
 
 ```tsx
-// app/routes/orders/orders.tsx
+// src/routes/orders/orders.tsx
 export const Route = createFileRoute("/_site-layout/orders")({
   validateSearch: ordersSearchSchema,
   // Keeps default values out of the URL: `/orders`, not `/orders?q=&sort=date&page=1`.
@@ -46,10 +46,10 @@ export const Route = createFileRoute("/_site-layout/orders")({
   the same defaults removes them again. Without it, opening `/orders` redirects to the long form.
 - **Optional instead of a default** when "absent" means something different from any value. `redirectTo` on the
   sign-in page is `undefined` when missing, and the page applies its fallback where it uses it
-  (`redirectToParam` in `app/lib/search-params.ts`).
+  (`redirectToParam` in `src/lib/search-params.ts`).
 - **Parse, don't trust.** Values from the URL are user input. Same-site redirect targets go through
   `redirectToParam`; ids are validated like any other input, and the procedure checks access again.
-- **Shared parsers** that more than one route needs live in `app/lib/search-params.ts`.
+- **Shared parsers** that more than one route needs live in `src/lib/search-params.ts`.
 
 ## Reading in Loaders
 
@@ -118,9 +118,9 @@ schema's keys. The server parses the resulting URL with the same `validateSearch
 
 ## Where Code Lives
 
-- `search-params.ts` lives in its route's slice. Move a parser to `app/lib/search-params.ts` only when a second route
+- `search-params.ts` lives in its route's slice. Move a parser to `src/lib/search-params.ts` only when a second route
   reads the same params. Never import from another route's slice.
-- Shared components in `app/components/` don't read the URL. They take values and callbacks through props, so they
+- Shared components in `src/components/` don't read the URL. They take values and callbacks through props, so they
   stay reusable and easy to preview in Storybook.
 
 ## Don'ts

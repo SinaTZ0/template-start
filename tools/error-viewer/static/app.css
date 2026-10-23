@@ -1,4 +1,4 @@
-/* The error viewer's only stylesheet. Colors follow the app's palette (app/app.css); light and dark follow the system. */
+/* The error viewer's only stylesheet. Colors follow the app's palette (src/styles.css); light and dark follow the system. */
 
 /*===== Tokens =====*/
 :root {

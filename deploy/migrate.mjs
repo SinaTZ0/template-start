@@ -1,7 +1,7 @@
 /*===== Database Migrations =====*/
 // Applies the pending SQL migrations in `drizzle/` and exits non-zero on failure, so a failed migration stops the
 // deployment before the new app starts. Runs in the production image (`compose.prod.yaml`, `migrate` service), which
-// has no dev dependencies, TypeScript loader or `~/` alias: plain JavaScript on runtime packages only.
+// has no dev dependencies, TypeScript loader or `#/` alias: plain JavaScript on runtime packages only.
 import { fileURLToPath } from "node:url";
 
 import { drizzle } from "drizzle-orm/node-postgres";

@@ -1,7 +1,7 @@
 # SEO and Link Previews
 
-Every page sets its tags through `pageMeta` (`app/lib/seo.ts`), so search results and link previews (Telegram,
-WhatsApp, X) come out the same everywhere. The site's identity lives in `app/lib/site.ts`; rename it per project.
+Every page sets its tags through `pageMeta` (`src/lib/seo.ts`), so search results and link previews (Telegram,
+WhatsApp, X) come out the same everywhere. The site's identity lives in `src/lib/site.ts`; rename it per project.
 
 ## Page Meta
 
@@ -24,7 +24,7 @@ head: (args) => pageMeta({ args, title: "یادداشت‌ها", index: false })
 | `path`        | current path, no query     | The canonical path. Pass one when the query string is part of the content.            |
 
 A public page gets a title, description, canonical URL, Open Graph tags (`og:locale` is `fa_IR`) and a Twitter card. The
-`<html>` element already has `lang="fa"` and `dir="rtl"` (`root.tsx`). The site has one language, so it needs no
+`<html>` element already has `lang="fa"` and `dir="rtl"` (`__root.tsx`). The site has one language, so it needs no
 `hreflang` alternates.
 
 The router merges the `head` of every matched route, and for the same title or `name`/`property` tag the deepest route
@@ -63,16 +63,16 @@ data (`args.loaderData`) for its title, description and image, so that loader re
 
 ## Sitemap and robots.txt
 
-- `/sitemap.xml` (`app/routes/sitemap/`) lists the pages to index. Add each new public page to `STATIC_ENTRIES`.
-  Content pages add one entry per published item, read through the oRPC `client` (`app/orpc/client.ts`) from a
+- `/sitemap.xml` (`src/routes/sitemap/`) lists the pages to index. Add each new public page to `STATIC_ENTRIES`.
+  Content pages add one entry per published item, read through the oRPC `client` (`src/orpc/client.ts`) from a
   procedure that returns only published items, with `lastModified` set to each item's update time. One sitemap holds
   up to 50,000 URLs.
-- `/robots.txt` (`app/routes/robots/`) lets crawlers in everywhere except `/api/` and `/rpc/`, and points them at the
+- `/robots.txt` (`src/routes/robots/`) lets crawlers in everywhere except `/api/` and `/rpc/`, and points them at the
   sitemap.
 
 ## The Public Origin
 
-Absolute URLs come from `BETTER_AUTH_URL` (`app/lib/site.server.ts`), which is `https://${DOMAIN}` in production. The
+Absolute URLs come from `BETTER_AUTH_URL` (`src/lib/site.server.ts`), which is `https://${DOMAIN}` in production. The
 request's host isn't used, because a proxy or a crafted `Host` header can change it. The root loader (a server function, loaded
 once) hands the origin to the browser for `pageMeta`. A staging copy on another domain therefore points its canonical URLs at itself. Keep staging
 out of search results by putting it behind a password, or with a `Disallow: /` robots file there.

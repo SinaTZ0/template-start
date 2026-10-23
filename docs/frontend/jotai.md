@@ -1,7 +1,7 @@
 # Jotai (Shared Client State)
 
 Jotai holds **client UI state that distant components share**. An atom is only a definition. Its value lives in a
-store, and the root document (`app/root.tsx`) gives every render tree its own store through `<Provider>`. Most state does not belong in
+store, and the root document (`src/routes/__root.tsx`) gives every render tree its own store through `<Provider>`. Most state does not belong in
 Jotai. Check the next section before creating an atom.
 
 ## What Goes Where
@@ -28,7 +28,7 @@ Never copy query data into atoms. Two copies drift apart, and refetches stop rea
 - **Type the initial value** when it doesn't show the full type: `atom<string | null>(null)`.
 
 ```ts
-// app/routes/checkout/atoms.ts
+// src/routes/checkout/atoms.ts
 import { atom } from "jotai";
 
 type CartItem = { id: string; price: number; quantity: number };
@@ -54,8 +54,8 @@ export const removeCartItemAtom = atom(null, (get, set, itemId: string) => {
 
 Atoms follow the same colocation rule as every other piece of code:
 
-- An atom used by one route lives in that route's `atoms.ts` (`app/routes/<slice>/atoms.ts`).
-- Move it to `app/atoms/<domain>.ts` only when a second route needs it. Never import atoms from another route's slice.
+- An atom used by one route lives in that route's `atoms.ts` (`src/routes/<slice>/atoms.ts`).
+- Move it to `src/atoms/<domain>.ts` only when a second route needs it. Never import atoms from another route's slice.
 - Import atoms directly from the file that defines them. Don't add barrel files.
 
 ## Reading and Writing
@@ -71,7 +71,7 @@ const total = useAtomValue(cartTotalAtom);
 const removeItem = useSetAtom(removeCartItemAtom);
 ```
 
-Use atoms in route modules and in the route's own components. Shared components in `app/components/` get their data
+Use atoms in route modules and in the route's own components. Shared components in `src/components/` get their data
 and callbacks through props, so they stay reusable and easy to preview in Storybook.
 
 ## SSR and the Provider

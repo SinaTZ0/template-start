@@ -8,7 +8,7 @@ These are the rules. The steps for adding a feature are in [backend-flow.md](../
 ## Structure
 
 ```text
-app/orpc/
+src/orpc/
   contract.ts               # composes feature contracts into the API contract
   router.ts                 # composes feature procedures into the API router
   implementer.server.ts     # `implementer` (assembles the router) and `base` (global middleware, builds procedures)
@@ -32,8 +32,8 @@ app/orpc/
     integration.test.ts     # optional, for consequential behavior
 ```
 
-Shared infrastructure (database client and schema, storage, crypto, generic helpers) lives outside `app/orpc/`, e.g. in
-`app/db/` and `app/lib/`. A single resource route (`app/routes/rpc/`) mounts the RPC handler at `/rpc/*`. Keep feature
+Shared infrastructure (database client and schema, storage, crypto, generic helpers) lives outside `src/orpc/`, e.g. in
+`src/db/` and `src/lib/`. A single resource route (`src/routes/rpc/`) mounts the RPC handler at `/rpc/*`. Keep feature
 folders flat and add files only when they earn their place. Promote code out of a feature only when a second consumer
 needs it. A feature may call another feature's service (`note` calls `attachMedia` from `media`), never its procedure.
 
@@ -75,14 +75,14 @@ import their contract's types (`Note`, `Media`), because the contract is the pub
 #### Free text is normalized
 
 Every free-text field (a title, a body, a display name, a search query) is declared with `persianText()`
-(`app/lib/persian-text.ts`) in place of `z.string().trim()`, in its service schema and its form schema. It converts
+(`src/lib/persian-text.ts`) in place of `z.string().trim()`, in its service schema and its form schema. It converts
 Arabic yeh and kaf to Persian, Arabic-Indic digits to Persian, removes direction marks, the BOM and tatweel, turns NBSP
 into a space, drops stray ZWNJs, applies NFC and trims. Text that looks the same is then stored the same, so searches
 and comparisons match what the user sees. The checks chained after it (`.min()`, `.max()`) see the normalized value.
 
 - Never use it on emails, passwords, IDs, tokens, URLs or captcha payloads: those must stay byte-exact.
 - A search normalizes its input with `normalizePersianText`, so it matches the stored text.
-- The sign-up name goes through Better-Auth, not a service schema; `databaseHooks` in `app/lib/auth.server.ts`
+- The sign-up name goes through Better-Auth, not a service schema; `databaseHooks` in `src/lib/auth.server.ts`
   normalize it on create and update.
 
 ### Services return outcomes, procedures throw errors
@@ -149,26 +149,26 @@ return { id: result.id };
 
 ### Auth
 
-- Better-Auth (`app/lib/auth.server.ts`) owns sign-up, sign-in and sessions at `/api/auth/*`. The sign-up captcha
+- Better-Auth (`src/lib/auth.server.ts`) owns sign-up, sign-in and sessions at `/api/auth/*`. The sign-up captcha
   (Altcha) is a `before` hook there; the browser gets its challenge from `captcha.createChallenge`.
 - `requireUserMiddleware` puts the signed-in user in `context.user`; `requireRoleMiddleware(...roles)` also checks the
   role. Declare `authErrors` (and `roleErrors`) on their contracts. A procedure with neither is public.
 - **Ownership is checked in the data layer.** A user's records are read with the owner in the query
   (`findOwnedNote({ id, ownerId })`), so another user's record looks exactly like a missing one (`NOT_FOUND`), never
   `FORBIDDEN`.
-- Pages are guarded separately in a layout's `beforeLoad`, from the viewer query (`app/lib/viewer.ts`,
+- Pages are guarded separately in a layout's `beforeLoad`, from the viewer query (`src/lib/viewer.ts`,
   [data-loading.md](../frontend/data-loading.md) → Guards). The UI guard is never the only check.
 
 ### Rate limiting
 
-- One limiter (`app/lib/rate-limit.server.ts`) covers both the API and `/api/auth/*`, keyed by the client address
+- One limiter (`src/lib/rate-limit.server.ts`) covers both the API and `/api/auth/*`, keyed by the client address
   that Caddy sends in `X-Real-IP`. Better-Auth's own limiter is off.
 - Every procedure gets the general policy from `base` (300 a minute). A procedure that is expensive or abusable adds a
   stricter one as its first middleware: `.use(rateLimitMiddleware(UPLOAD_RATE_LIMIT))`, with the policy defined next to
   the procedure. Policy names must be unique, since they keep the counters apart.
 - `TOO_MANY_REQUESTS` is a common error, so contracts already declare it. Its data adds `retryAfterSeconds`, and its
   Persian message reaches the form through `describeApiFailure`.
-- Auth limits are set by path in `app/routes/api_auth/`: endpoints that check a password or send mail get the strict
+- Auth limits are set by path in `src/routes/api_auth/`: endpoints that check a password or send mail get the strict
   policy. Add new Better-Auth endpoints of that kind to `CREDENTIAL_PATHS`.
 - Procedure calls a loader makes during SSR run in-process, with the page request's headers, so they count against
   the same address as the page request.
@@ -181,7 +181,7 @@ return { id: result.id };
 
 ### Database
 
-- Drizzle tables live in `app/db/schema.ts`, Better-Auth's tables included. A change to Better-Auth's user fields
+- Drizzle tables live in `src/db/schema.ts`, Better-Auth's tables included. A change to Better-Auth's user fields
   (`additionalFields` in `auth.server.ts`) needs the matching column there.
 - While building, sync the local database with `pnpm db:push`. Before committing, run
   `pnpm db:generate --name <what-changed>`, review the SQL in `drizzle/`, and commit it with the schema change.

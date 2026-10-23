@@ -33,7 +33,7 @@
 	}
 
 	# The S3 store publishes no ports; this is its only public path, and only for image variants
-	# (`{kind}/{mediaId}/{variant}.webp`, see `mediaKey` in `app/lib/storage.server.ts`). The fixed shape is what blocks
+	# (`{kind}/{mediaId}/{variant}.webp`, see `mediaKey` in `src/lib/storage.server.ts`). The fixed shape is what blocks
 	# listing and every other S3 operation, so new media kinds need no change here.
 	@media path /media /media/*
 	handle @media {
@@ -60,7 +60,7 @@
 
 	handle {
 		reverse_proxy app:3000 {
-			# The app rate-limits by the visitor's address, which it reads from X-Real-IP (`app/lib/rate-limit.server.ts`).
+			# The app rate-limits by the visitor's address, which it reads from X-Real-IP (`src/lib/rate-limit.server.ts`).
 			# Setting it replaces any value the visitor sent.
 			header_up X-Real-IP {remote_host}
 			# During an update `app` resolves to the old and the new container (deploy/deploy.sh, rollout_app). A request

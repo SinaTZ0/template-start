@@ -197,7 +197,7 @@ type eventRow struct {
 	Path        string
 	Route       string
 	Module      string
-	ClientID    string // the browser's random ID (app/lib/client-id.ts), shared by its own and its requests' events
+	ClientID    string // the browser's random ID (src/lib/client-id.ts), shared by its own and its requests' events
 	UserID      string // the signed-in user's database ID, on the server's and the browser's events
 	Payload     []byte
 }

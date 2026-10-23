@@ -1,9 +1,9 @@
 # App Identity: Mood, Tone & Theme
 
 > **Template stub: delete this note once the project fills in Mood, Tone and Brand.** Until then, nothing here or in
-> the code is a design decision. The theme values (colours, type styles, radius, shadows) live in `app/app.css` and the
+> the code is a design decision. The theme values (colours, type styles, radius, shadows) live in `src/styles.css` and the
 > primitives' `*.styles.ts`; what ships there is a neutral placeholder. When the project's design calls for something
-> different, change `app.css` and the primitives, and keep Mood, Tone and Brand here in step with them.
+> different, change `styles.css` and the primitives, and keep Mood, Tone and Brand here in step with them.
 
 ## Mood
 
@@ -29,12 +29,12 @@ _The logo and how it's used, the photography or illustration style, and anything
 ## Theme
 
 - Use the theme's Tailwind classes (`bg-primary`, `text-muted-foreground`, `text-h2`…), never raw hex or the Tailwind
-  palette. A new colour or type style is declared in `app/app.css` first.
+  palette. A new colour or type style is declared in `src/styles.css` first.
 - Token names follow shadcn so the primitives keep working. **Naming trap**: the brand call-to-action fill is
   `highlight`; shadcn's `accent` is the quiet wash for hover and selected states.
 - **Dark mode** is the `.dark` class on `<html>` (the theme toggle). Recolour through the tokens, never by theme in
   component code.
-- Icons are Lucide. Their stroke width is set in `app.css`; change it with a `stroke-*` class, not the `strokeWidth`
+- Icons are Lucide. Their stroke width is set in `styles.css`; change it with a `stroke-*` class, not the `strokeWidth`
   prop.
 
 ## Constraints

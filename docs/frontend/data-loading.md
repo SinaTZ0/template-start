@@ -8,12 +8,12 @@ loaders: [tanstack-start-vs-react-router-data.md](../tanstack-start-vs-react-rou
 
 | Piece                  | Where                                       | Job                                                                   |
 | ---------------------- | ------------------------------------------- | --------------------------------------------------------------------- |
-| `QueryClient`          | `getRouter()` in `app/router.tsx`           | The cache. One per server request, one in the browser.                |
+| `QueryClient`          | `getRouter()` in `src/router.tsx`           | The cache. One per server request, one in the browser.                |
 | Router context         | `context.queryClient` in every route        | Gives `beforeLoad` and `loader` the cache.                            |
-| `orpc` utilities       | `app/orpc/client.ts`                        | `queryOptions` / `mutationOptions` / keys for every procedure.        |
-| Isomorphic oRPC client | `app/orpc/client.ts`                        | In-process on the server, `RPCLink` → `/rpc` in the browser.          |
+| `orpc` utilities       | `src/orpc/client.ts`                        | `queryOptions` / `mutationOptions` / keys for every procedure.        |
+| Isomorphic oRPC client | `src/orpc/client.ts`                        | In-process on the server, `RPCLink` → `/rpc` in the browser.          |
 | SSR Query integration  | `setupRouterSsrQueryIntegration`            | Sends the server's cache with the page, so hydration fetches nothing. |
-| Viewer query           | `viewerQueryOptions` in `app/lib/viewer.ts` | The signed-in person, for the header and the guards.                  |
+| Viewer query           | `viewerQueryOptions` in `src/lib/viewer.ts` | The signed-in person, for the header and the guards.                  |
 
 ## Where Code Runs
 
@@ -25,12 +25,12 @@ database, `env`). Server-only work sits behind one of two doors:
   Loaders call them through `orpc.<feature>.<procedure>.queryOptions()`, which runs the procedure in-process during
   SSR and over `/rpc` in the browser, with the same code.
 - **Server functions** (`createServerFn`), only for small framework-level reads that aren't part of the API: the
-  viewer (`app/lib/viewer.ts`) and the site origin (`app/root.tsx`). Don't add feature data here; add a procedure
+  viewer (`src/lib/viewer.ts`) and the site origin (`src/routes/__root.tsx`). Don't add feature data here; add a procedure
   ([backend-flow.md](../backend-flow.md)).
 
 Start's import protection fails the build when browser-reachable code imports a `*.server.ts` file outside a server
 function's handler. A module that must only run in the browser uses `createClientOnlyFn` (see
-`app/lib/error-reporting.browser.ts`), not a `.client.ts` name.
+`src/lib/error-reporting.browser.ts`), not a `.client.ts` name.
 
 ## Reading Data
 
@@ -87,7 +87,7 @@ Return only the params the loader uses from `loaderDeps`; anything else would re
 
 ## Preloading
 
-`defaultPreload: "intent"` (`app/router.tsx`): hovering or focusing a `<Link>` runs the target route's `beforeLoad`
+`defaultPreload: "intent"` (`src/router.tsx`): hovering or focusing a `<Link>` runs the target route's `beforeLoad`
 and `loader` ahead of the click. With `defaultPreloadStaleTime: 0` the router always calls the loader, and Query's
 `staleTime` decides whether anything is fetched:
 
@@ -104,7 +104,7 @@ A cache needs a rule for when it refetches. Split by who made the change:
 
 - **Changes the visitor makes**: the mutation invalidates the queries it changed (below). `staleTime` isn't involved.
 - **Changes made elsewhere** (another user, an admin, a background job): no mutation in this browser knows about them,
-  so `staleTime` covers them. The default is **5 minutes** (`app/router.tsx`). A query whose data others change and
+  so `staleTime` covers them. The default is **5 minutes** (`src/router.tsx`). A query whose data others change and
   that should show it sooner sets a shorter one in its options:
 
   ```ts
@@ -130,7 +130,7 @@ const refresh = () => void queryClient.invalidateQueries({ queryKey: orpc.note.l
 - Invalidation refetches the queries the page is showing right away, and marks the rest stale, so they refetch the
   next time they are used.
 - Slice components that own a mutation tell the page through a callback (`onCreated`, `onDeleted`), and the page
-  decides what to invalidate (`app/routes/notes/notes.tsx`).
+  decides what to invalidate (`src/routes/notes/notes.tsx`).
 - `router.invalidate()` reruns the matched routes' `beforeLoad` and `loader`. It is only needed when a guard's input
   changed, and the cache usually handles that already.
 
@@ -138,15 +138,15 @@ const refresh = () => void queryClient.invalidateQueries({ queryKey: orpc.note.l
 
 The session isn't an oRPC mutation, so the auth flows update the cache themselves:
 
-- **Sign-in** (`app/routes/auth/auth.tsx`): invalidate the viewer query, wait for the refetch, then navigate to
+- **Sign-in** (`src/routes/auth/auth.tsx`): invalidate the viewer query, wait for the refetch, then navigate to
   `redirectTo`. The header updates, and the next page's guard sees the session.
-- **Sign-out** (`app/hooks/use-sign-out.ts`): navigate home, set the viewer to `null`, then remove every other query,
+- **Sign-out** (`src/hooks/use-sign-out.ts`): navigate home, set the viewer to `null`, then remove every other query,
   so the next account on the device can't see this one's data. Removing a query while its page is mounted would
   refetch it without a session, which is why it happens after leaving.
 
 ## Guards
 
-A layout's `beforeLoad` loads the viewer and redirects when the page isn't for them (`app/routes/notes_layout/`):
+A layout's `beforeLoad` loads the viewer and redirects when the page isn't for them (`src/routes/notes_layout/`):
 
 ```tsx
 beforeLoad: async ({ context, location }) => {
@@ -164,7 +164,7 @@ browser. The data is protected where it is served: every procedure checks the se
 
 - A route can set `pendingComponent` for slow loaders; it shows after `pendingMs` (1 s by default), so fast
   navigations don't flash a spinner.
-- A loader error renders the nearest `errorComponent` (the root's by default, `app/root.tsx`). An oRPC error arrives
+- A loader error renders the nearest `errorComponent` (the root's by default, `src/routes/__root.tsx`). An oRPC error arrives
   as `ORPCError`; a page can catch the expected ones (`NOT_FOUND`) and throw `notFound()` instead.
 - Inside a page, mutation errors go through `describeApiFailure` to the form ([architecture.md](./architecture.md) →
   Forms).

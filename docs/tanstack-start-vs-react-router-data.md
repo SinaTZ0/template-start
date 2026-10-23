@@ -134,7 +134,7 @@ per-mutation invalidation of the HTTP cache.
   until its `staleTime` runs out.
 - **Route definitions change shape.** Code-based route configs are possible
   ([virtual file routes](https://tanstack.com/router/latest/docs/framework/react/routing/virtual-file-routes), through
-  `tanstackStart({ router: { virtualRouteConfig } })`), but each route file still uses `createFileRoute(...)`. Params
+  `virtualRouteConfig` in `tsr.config.json`), but each route file still uses `createFileRoute(...)`. Params
   are `$slug` (not `:slug`), optional segments `{-$slug}`, the catch-all `$`. One file can't serve two routes.
 - **Search params.** TanStack Router has typed search params (`validateSearch`). nuqs's TanStack adapter doesn't cover
   Start yet ([nuqs adapters](https://nuqs.dev/docs/adapters#tanstack-router)).

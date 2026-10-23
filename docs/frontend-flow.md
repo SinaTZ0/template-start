@@ -1,7 +1,7 @@
 # Frontend Flow
 
 Start here for any frontend work. The steps are the technical path for a new page; the design itself is yours to
-decide. The `notes` route (`app/routes/notes/`) is the worked example.
+decide. The `notes` route (`src/routes/notes/`) is the worked example.
 
 | Doc                                                            | Covers                                                    |
 | -------------------------------------------------------------- | --------------------------------------------------------- |
@@ -40,7 +40,7 @@ decide. The `notes` route (`app/routes/notes/`) is the worked example.
    errors through `describeApiFailure`, and invalidate the queries the mutation changed on success. `note-form.tsx` in the notes slice does
    all of this ([architecture.md](./frontend/architecture.md) → Forms). Image fields follow
    [media.md](./backend/media.md).
-5. **Promote**: move a slice component to `components/shared/` (or a hook to `app/hooks/`) once a second route needs it.
+5. **Promote**: move a slice component to `components/shared/` (or a hook to `src/hooks/`) once a second route needs it.
 6. **Check**: look at the page at phone and desktop widths, in light and dark, with the keyboard, and against
    `WCAG 2.2 AA`. Add a Playwright smoke test if the flow is consequential (forms, critical navigation). Run
    `pnpm lint` and `pnpm typecheck`. In the network tab, the first load makes no `/rpc` request and a mutation refetches

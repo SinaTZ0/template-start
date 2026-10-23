@@ -262,7 +262,7 @@ or invalid and exits 1 if anything is.
 
 ### Adding a Variable
 
-A variable the deployment sets goes in four places: `app/env.server.ts` (its schema), the service's `environment` in
+A variable the deployment sets goes in four places: `src/env.server.ts` (its schema), the service's `environment` in
 `compose.prod.yaml`, `.env.production.example` (with a comment saying what it is), and the settings registry at the top
 of `deploy/deploy.sh` (`SETTINGS`), with the kind that says how the script gets a value:
 
@@ -313,7 +313,7 @@ with no header, which is fine: `/healthz` isn't limited.
 
 ## Health Check
 
-`GET /healthz` (`app/routes/healthz/`) answers 200 when the app can query Postgres and 503 otherwise, with a 2-second
+`GET /healthz` (`src/routes/healthz/`) answers 200 when the app can query Postgres and 503 otherwise, with a 2-second
 limit. Docker polls it every 10 seconds; point an uptime monitor at it too. Storage isn't part of the check: an S3
 problem only breaks uploads, and a restart wouldn't fix it. Healthy probes are left out of the app's request log.
 
@@ -371,11 +371,11 @@ docker compose -f compose.prod.yaml exec -T db pg_restore -U app -d app --clean 
 
 ## Before Going Live
 
-- Turn on email verification and password reset once the project can send email (`app/lib/auth.server.ts`).
-- Add a Content-Security-Policy in the app (the inline theme script in `root.tsx` needs a nonce or hash). Its
+- Turn on email verification and password reset once the project can send email (`src/lib/auth.server.ts`).
+- Add a Content-Security-Policy in the app (the inline theme script in `__root.tsx` needs a nonce or hash). Its
   `connect-src` must allow `https://<ERRORS_DOMAIN>`, or browser errors can't be reported. Caddy sets the other
   security headers.
-- Set the site's name, description and link-preview image in `app/lib/site.ts`, and check `/sitemap.xml` lists every
+- Set the site's name, description and link-preview image in `src/lib/site.ts`, and check `/sitemap.xml` lists every
   public page ([seo.md](./frontend/seo.md)).
-- Schedule the orphan-media cleanup if uploads matter (`deleteMedia` in `app/orpc/media/service.ts`).
+- Schedule the orphan-media cleanup if uploads matter (`deleteMedia` in `src/orpc/media/service.ts`).
 - Schedule the nightly backup and a copy off the server (Backups above).

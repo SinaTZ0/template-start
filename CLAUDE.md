@@ -9,7 +9,7 @@ The docs have two entry points. Start backend work at `docs/backend-flow.md` and
 - Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, per-address rate limits on the API and auth endpoints (`docs/backend/architecture.md` → Rate limiting), Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing, plus error and slow-request reports to the error viewer, a small Go service in `tools/error-viewer/` (`docs/backend/logging.md`).
 - Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`), TanStack Query as the one data cache, filled by route loaders and preloaded on hover (`docs/frontend/data-loading.md`), typed search params (`docs/frontend/search-params.md`), and page meta through `pageMeta` (`docs/frontend/seo.md`).
 - Production: Docker Compose with Caddy in front, migrations applied before each deploy, and a `/healthz` check (`docs/deployment.md`).
-- The `note` feature (`app/orpc/note/`, `app/routes/notes/`) is the template's worked example. Copy its shape for new features; delete it once the project has its own.
+- The `note` feature (`src/orpc/note/`, `src/routes/notes/`) is the template's worked example. Copy its shape for new features; delete it once the project has its own.
 
 ## Working Directory
 
@@ -30,14 +30,14 @@ The docs have two entry points. Start backend work at `docs/backend-flow.md` and
 
 ## Route Slices (TanStack Start)
 
-- **Keep Route Slices Flat:** Route folders under `app/routes/` must be flat. URL hierarchy does not imply folder nesting (e.g. use `dashboard_user/`, never `dashboard/user/`). The route tree, including layouts, is declared in `app/routes.ts` with virtual file routes (`rootRoute`, `layout`, `index`, `route`); `app/routeTree.gen.ts` is generated from it, so never edit it.
-- **Declare Every Route in `app/routes.ts`:** Only files listed there become routes. Name a slice after its URL segments joined with `_`, without `$` (`/notes/$noteId` → `notes_noteId/notes-note-id.tsx`); pathless layouts are `<name>_layout/`. Server routes (`/rpc/$`, `/healthz`) are slices with `server.handlers` and no `component`.
+- **Keep Route Slices Flat:** Route folders under `src/routes/` must be flat. URL hierarchy does not imply folder nesting (e.g. use `dashboard_user/`, never `dashboard/user/`). The route tree, including layouts, is declared in `src/routes.ts` with virtual file routes (`rootRoute`, `layout`, `index`, `route`); `src/routeTree.gen.ts` is generated from it, so never edit it.
+- **Declare Every Route in `src/routes.ts`:** Only files listed there become routes. Name a slice after its URL segments joined with `_`, without `$` (`/notes/$noteId` → `notes_noteId/notes-note-id.tsx`); pathless layouts are `<name>_layout/`. Server routes (`/rpc/$`, `/healthz`) are slices with `server.handlers` and no `component`.
 - **No React Server Components:** No `"use server"` / `"use client"` directives or Start RSC APIs; server work goes through oRPC procedures or `createServerFn`.
 - **Colocate Route Internals:** A route file (`export const Route = createFileRoute(...)`), its options (`beforeLoad`, `loader`, `loaderDeps`, `validateSearch`, `head`, `component`, `pendingComponent`, `errorComponent`, `notFoundComponent`, `server.handlers`), and route-only internals (components, hooks, queries, search schema, form schemas) must live inside that route's slice.
 - **Promote Only When Shared:** Keep code with its immediate route consumer. Only move it to a shared or broader domain location when multiple routes consume it or it clearly belongs to a broader domain abstraction.
 
 ```text
-app/routes/
+src/routes/
   dashboard/
   dashboard_user/
   dashboard_user_setting/
@@ -54,12 +54,12 @@ The rules are in `docs/frontend/data-loading.md`; the reasons in `docs/tanstack-
 
 - Route `beforeLoad` and `loader` are isomorphic: they run on the server for the first request and in the browser afterwards. Server-only modules (`*.server.ts`, the database, `env`) are only used inside a `createServerFn` handler or behind an oRPC procedure, never directly in route code; feature data comes from procedures, small framework reads from `createServerFn`.
 - Read page data in loaders with `context.queryClient.ensureQueryData(options)` and in components with `useSuspenseQuery` on the same options. `useQuery` doesn't run during SSR, so it renders an empty page on the server.
-- Create the `QueryClient` inside `getRouter()` (`app/router.tsx`), never at module scope: a module-level client on the server shares one user's data with the next.
+- Create the `QueryClient` inside `getRouter()` (`src/router.tsx`), never at module scope: a module-level client on the server shares one user's data with the next.
 - Every mutation invalidates the query keys it changes (`orpc.<feature>.<procedure>.key()`). Changes made elsewhere are covered by `staleTime` (5 minutes by default; shorter on queries that should show others' changes sooner).
 - Guards are a layout's `beforeLoad` with `throw redirect(...)`; they only shape navigation. Security stays in the oRPC middleware.
 - A browser-only module uses `createClientOnlyFn`, not a `.client.ts` name: Start's import protection rejects `.client` files in code the server renders.
 - Use current Start API names: `.validator()` on server functions and middleware (`.inputValidator()` was the RC name), `getRequest` / `getRequestHeaders` from `@tanstack/react-start/server`, server routes as `server: { handlers }` on `createFileRoute`. Add a cookie with `setCookie` or `appendResponseHeader`; `setResponseHeader("set-cookie", ...)` replaces all of them.
-- TanStack Start's own guidance is in the `react-start`, `start-core` and `router-core` skills (`.agents/skills/`).
+- TanStack Start's own guidance is in the `react-start`, `start-core`, `router-core` and `virtual-file-routes` skills (`.agents/skills/`).
 
 ## Code Conventions
 
@@ -67,16 +67,16 @@ Preserve established local conventions unless a rule below explicitly says other
 
 ### Components
 
-- Primitives are this app's versions of shadcn components and live in `app/components/primitive/<name>/` as `<name>.tsx`, `<name>.styles.ts` and `<name>.stories.tsx`. `app/components/ui/` holds the untouched shadcn source as reference only: never edit or import from it. Read `docs/frontend/components.md` before creating or restyling a component.
+- Primitives are this app's versions of shadcn components and live in `src/components/primitive/<name>/` as `<name>.tsx`, `<name>.styles.ts` and `<name>.stories.tsx`. `src/components/ui/` holds the untouched shadcn source as reference only: never edit or import from it. Read `docs/frontend/components.md` before creating or restyling a component.
 - Write style maps with `defineStyles` and the shared group names; join them with `joinStyles` / `composeStyles`.
 - If a shadcn component has no primitive yet, create one from its `ui/` source, keeping shadcn's API and `data-slot`s.
-- App-made components with no shadcn original (e.g. `form-alert`, `site-link`) live in `app/components/shared/<name>/` once more than one route uses them.
-- When `shadcn/*` lint flags a class, fix the code it points at: a variant or base style in the primitive, layout on the parent, or a token in `app/app.css` (`docs/frontend/components.md#lint-rules`). Don't hide the styling in a wrapper element or a raw element in place of the primitive.
-- The current look (tokens in `app/app.css`, primitives, existing pages) serves the design, not the other way round. When a design needs something different, change the primitives and `app/app.css` instead of bending the design to fit them.
+- App-made components with no shadcn original (e.g. `form-alert`, `site-link`) live in `src/components/shared/<name>/` once more than one route uses them.
+- When `shadcn/*` lint flags a class, fix the code it points at: a variant or base style in the primitive, layout on the parent, or a token in `src/styles.css` (`docs/frontend/components.md#lint-rules`). Don't hide the styling in a wrapper element or a raw element in place of the primitive.
+- The current look (tokens in `src/styles.css`, primitives, existing pages) serves the design, not the other way round. When a design needs something different, change the primitives and `src/styles.css` instead of bending the design to fit them.
 
 ### Imports
 
-Import values and types directly from their owning modules. Do not create directory barrel files such as `index.ts`.
+Import values and types directly from their owning modules, through the `#/` alias for anything under `src/` (`#/lib/seo`). Do not create directory barrel files such as `index.ts`.
 
 ### Function Parameters
 

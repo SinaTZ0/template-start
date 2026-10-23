@@ -7,7 +7,7 @@ pre-commit:
       glob: "*.{js,mjs,cjs,jsx,ts,tsx}"
       # The untouched shadcn source and the vendored agent skills are reference only and aren't linted (`.oxlintrc.json`).
       exclude:
-        - "app/components/ui/**"
+        - "src/components/ui/**"
         - ".agents/**"
         - ".claude/**"
       run: pnpm exec oxlint {staged_files}

@@ -71,7 +71,7 @@ type sourceLine struct {
 	Current bool
 }
 
-// timelineContext is the app's `timeline` context (app/lib/trace.server.ts → Timeline), in whole milliseconds. Events
+// timelineContext is the app's `timeline` context (src/lib/trace.server.ts → Timeline), in whole milliseconds. Events
 // reported before the app sent rows carry `breakdown` and `spans` as preformatted text instead.
 type timelineContext struct {
 	Ms    float64
