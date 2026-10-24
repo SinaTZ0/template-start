@@ -46,7 +46,7 @@ export function ImagePicker({
             variant="secondary"
             size="icon-xs"
             aria-label={m.notes_image_remove()}
-            className="absolute end-1 top-1"
+            className="absolute inset-e-1 top-1"
             onClick={() => onChange(null)}
           >
             <XIcon />

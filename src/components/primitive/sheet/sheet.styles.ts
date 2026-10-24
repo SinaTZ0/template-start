@@ -25,14 +25,14 @@ const twContentStyles = defineStyles({
   stateTop:
     "data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:rounded-b-lg data-[side=top]:data-ending-style:-translate-y-10 data-[side=top]:data-starting-style:-translate-y-10",
   stateStart:
-    "data-[side=start]:inset-y-0 data-[side=start]:start-0 data-[side=start]:h-full data-[side=start]:w-[min(88vw,24rem)] data-[side=start]:border-e data-[side=start]:data-ending-style:translate-x-10 data-[side=start]:data-starting-style:translate-x-10 ltr:data-[side=start]:data-ending-style:-translate-x-10 ltr:data-[side=start]:data-starting-style:-translate-x-10",
+    "data-[side=start]:inset-y-0 data-[side=start]:inset-s-0 data-[side=start]:h-full data-[side=start]:w-[min(88vw,24rem)] data-[side=start]:border-e data-[side=start]:data-ending-style:translate-x-10 data-[side=start]:data-starting-style:translate-x-10 ltr:data-[side=start]:data-ending-style:-translate-x-10 ltr:data-[side=start]:data-starting-style:-translate-x-10",
   stateEnd:
-    "data-[side=end]:inset-y-0 data-[side=end]:end-0 data-[side=end]:h-full data-[side=end]:w-[min(88vw,24rem)] data-[side=end]:border-s data-[side=end]:data-ending-style:-translate-x-10 data-[side=end]:data-starting-style:-translate-x-10 ltr:data-[side=end]:data-ending-style:translate-x-10 ltr:data-[side=end]:data-starting-style:translate-x-10",
+    "data-[side=end]:inset-y-0 data-[side=end]:inset-e-0 data-[side=end]:h-full data-[side=end]:w-[min(88vw,24rem)] data-[side=end]:border-s data-[side=end]:data-ending-style:-translate-x-10 data-[side=end]:data-starting-style:-translate-x-10 ltr:data-[side=end]:data-ending-style:translate-x-10 ltr:data-[side=end]:data-starting-style:translate-x-10",
   motion: "motion-reduce:transition-none",
 });
 
 const twCloseStyles = defineStyles({
-  layout: "absolute end-3 top-3",
+  layout: "absolute inset-e-3 top-3",
 });
 
 /*===== Parts =====*/

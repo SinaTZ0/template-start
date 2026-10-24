@@ -71,7 +71,7 @@ const twLabelStyles = defineStyles({
   hoverCard: "has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-accent",
   // The card draws the ring for the control inside it.
   focusCard:
-    "has-[>[data-slot=field]]:has-[:focus-visible]:outline-2 has-[>[data-slot=field]]:has-[:focus-visible]:outline-offset-2 has-[>[data-slot=field]]:has-[:focus-visible]:outline-ring has-[>[data-slot=field]]:has-[:focus-visible]:outline-solid",
+    "has-[>[data-slot=field]]:has-focus-visible:outline-2 has-[>[data-slot=field]]:has-focus-visible:outline-offset-2 has-[>[data-slot=field]]:has-focus-visible:outline-ring has-[>[data-slot=field]]:has-focus-visible:outline-solid",
 });
 
 const twTitleStyles = defineStyles({

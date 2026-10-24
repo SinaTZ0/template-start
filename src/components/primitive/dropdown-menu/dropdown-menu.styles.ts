@@ -43,7 +43,7 @@ const twIndicatorItemStyles = defineStyles({
 });
 
 const twIndicatorStyles = defineStyles({
-  layout: "pointer-events-none absolute end-3 flex items-center justify-center",
+  layout: "pointer-events-none absolute inset-e-3 flex items-center justify-center",
 });
 
 const twLabelStyles = defineStyles({

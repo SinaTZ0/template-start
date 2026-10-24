@@ -52,7 +52,7 @@ const twDescriptionStyles = defineStyles({
 });
 
 const twActionStyles = defineStyles({
-  layout: "absolute end-4 top-4",
+  layout: "absolute inset-e-4 top-4",
 });
 
 /*===== Class Composition =====*/

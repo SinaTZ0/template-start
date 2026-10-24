@@ -101,7 +101,7 @@ const twItemTextStyles = defineStyles({
 });
 
 const twItemIndicatorStyles = defineStyles({
-  layout: "absolute end-2 flex items-center justify-center",
+  layout: "absolute inset-e-2 flex items-center justify-center",
   geometry: "size-4",
   interaction: "pointer-events-none",
 });

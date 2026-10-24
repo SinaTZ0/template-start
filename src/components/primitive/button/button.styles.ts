@@ -21,7 +21,7 @@ const twSharedStyles = defineStyles({
   icon: "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
   // The arrow nudge: a trailing forward arrow moves 4px ahead (left in RTL) on hover and keyboard focus.
   iconNudge:
-    "[&_[data-icon=inline-end]]:transition-[translate] [&_[data-icon=inline-end]]:duration-150 [&_[data-icon=inline-end]]:ease-out motion-safe:[&_[data-icon=inline-end]]:group-hover/button:-translate-x-1 motion-safe:[&_[data-icon=inline-end]]:group-focus-visible/button:-translate-x-1",
+    "**:data-[icon=inline-end]:transition-[translate] **:data-[icon=inline-end]:duration-150 **:data-[icon=inline-end]:ease-out motion-safe:**:data-[icon=inline-end]:group-hover/button:-translate-x-1 motion-safe:**:data-[icon=inline-end]:group-focus-visible/button:-translate-x-1",
   motion: "motion-reduce:transition-none",
 });
 

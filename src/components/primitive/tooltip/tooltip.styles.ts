@@ -23,9 +23,9 @@ const twContentStyles = defineStyles({
 // Base UI reports the physical side, so the arrow is placed with physical `left`/`right` on purpose.
 const twArrowStyles = defineStyles({
   layout:
-    "z-50 data-[side=bottom]:top-1 data-[side=inline-end]:-start-1 data-[side=inline-end]:top-1/2! data-[side=inline-start]:-end-1 data-[side=inline-start]:top-1/2! data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=top]:-bottom-2.5",
+    "z-50 data-[side=bottom]:top-1 data-[side=inline-end]:-inset-s-1 data-[side=inline-end]:top-1/2! data-[side=inline-start]:-inset-e-1 data-[side=inline-start]:top-1/2! data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=top]:-bottom-2.5",
   geometry:
-    "size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:-translate-y-1/2 data-[side=right]:-translate-y-1/2",
+    "size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-xs data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:-translate-y-1/2 data-[side=right]:-translate-y-1/2",
   appearance: "bg-foreground fill-foreground",
 });
 
