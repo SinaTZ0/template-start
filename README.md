@@ -70,7 +70,16 @@ docs/                              start at backend-flow.md or frontend-flow.md
 
 ## Starting a New Project
 
-1. Copy the template without its git history (copy the folder without `.git`, then `git init`).
+1. Copy the template without its git history:
+
+   ```bash
+   git clone --depth 1 https://github.com/SinaTZ0/template-start.git my-app
+   cd my-app
+   rm -rf .git && git init && git branch -M main
+   ```
+
+   `pnpm dlx degit SinaTZ0/template-start my-app` does the same without the git step (then run `git init` in it).
+
 2. Rename: `name` in `package.json`, `compose.dev.yaml` and `compose.prod.yaml` (and `image` there), the bucket name in
    `.env.example` and `.env.production.example`, the `site_name` and `site_description` messages in `messages/*.json`,
    and a `SITE_IMAGE` for link previews in `src/lib/site.ts`. Keep English, or change the languages
