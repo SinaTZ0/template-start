@@ -37,6 +37,7 @@ linted and formatted before each commit, and commit messages must follow
 | --------------------------------- | ------------------------------------------------ |
 | `pnpm dev` / `build` / `start`    | Dev server, production build, production server  |
 | `pnpm lint` / `typecheck`         | oxlint; message compile + tsc                    |
+| `pnpm lint:tw`                    | Lists non-canonical Tailwind classes (advisory)  |
 | `pnpm i18n:compile`               | Compiles `messages/` into `src/paraglide/`       |
 | `pnpm format`                     | Prettier (sorts Tailwind classes)                |
 | `pnpm test`                       | Vitest (integration tests need the database)     |
