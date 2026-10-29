@@ -5,6 +5,7 @@
   "common_loading": "Loading",
   "common_skip_to_content": "Skip to main content",
   "common_language": "Language",
+  "common_new_tab": "(opens in a new tab)",
   "common_error_network": "Couldn't reach the server. Check your internet connection and try again.",
   "common_error_signed_out": "You've been signed out. Refresh the page and sign in again.",
   "common_error_with_reference": "{message} Reference: {errorId}",
