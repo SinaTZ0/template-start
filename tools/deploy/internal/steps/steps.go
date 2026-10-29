@@ -16,7 +16,7 @@ import (
 // Dir is where the step files live, relative to the checkout.
 const Dir = "deploy/steps"
 
-// namePattern is a step's name: when it was written, then what it's about (`20261029-1930-ee-faculty`). The date
+// namePattern is a step's name: when it was written, then what it's about (`20261029-1930-sample-notes`). The date
 // keeps them in the order they were written; the ledger doesn't depend on it.
 var namePattern = regexp.MustCompile(`^\d{8}-\d{4}-[a-z0-9]+(-[a-z0-9]+)*$`)
 
