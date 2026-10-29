@@ -1,3 +1,4 @@
+import type { ButtonProps } from "#/components/primitive/button/button";
 import { buttonVariants } from "#/components/primitive/button/button.styles";
 import type { LocaleLink } from "#/hooks/use-locale-links";
 import { m } from "#/paraglide/messages";
@@ -8,7 +9,16 @@ import { m } from "#/paraglide/messages";
  * language's `lang`, `dir` and every message then come from the server, with nothing to re-render, and they work
  * without JavaScript. Each name is in its own language and marked as such. Renders nothing with one locale.
  */
-export function LocaleSwitcher({ links, className }: { links: LocaleLink[]; className?: string }) {
+export function LocaleSwitcher({
+  links,
+  variant = "ghost",
+  className,
+}: {
+  links: LocaleLink[];
+  /** The links' button look: `ghost` by default, another variant where the header's surface needs one. */
+  variant?: ButtonProps["variant"];
+  className?: string;
+}) {
   if (links.length === 0) return null;
 
   return (
@@ -20,7 +30,7 @@ export function LocaleSwitcher({ links, className }: { links: LocaleLink[]; clas
               href={link.href}
               hrefLang={link.locale}
               lang={link.locale}
-              className={buttonVariants({ variant: "ghost", size: "sm" })}
+              className={buttonVariants({ variant, size: "sm" })}
             >
               {link.name}
             </a>
