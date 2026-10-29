@@ -99,7 +99,8 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 ## 7. The Rest of the Template
 
 - Restyle the sign-in page (`src/routes/auth/`) and the notes pages so they belong to the new design.
-- Replace `public/favicon.ico`, and set `SITE_IMAGE` in `src/lib/site.ts` to a 1200×630 preview image in the new style.
+- Replace `public/favicon.ico`, and return a 1200×630 preview image in the new style from `siteImage()` in
+  `src/lib/site.ts`, with its `alt` a message.
 - Set `site_name` and `site_description` in every locale file to the project's name and description.
 - Ask which languages the project needs. The template ships Persian and English; follow
   [i18n.md](./frontend/i18n.md) → Adding or Removing a Language for anything else.

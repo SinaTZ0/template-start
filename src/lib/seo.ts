@@ -1,7 +1,7 @@
 import type { AnyRouteMatch } from "@tanstack/react-router";
 
 import { OG_LOCALE } from "#/lib/locale";
-import { pageTitle, SITE_IMAGE } from "#/lib/site";
+import { pageTitle, siteImage } from "#/lib/site";
 import { m } from "#/paraglide/messages";
 import { baseLocale, getLocale, localizeHref, locales } from "#/paraglide/runtime";
 
@@ -40,7 +40,7 @@ export function absoluteUrl({ matches, path }: { matches: HeadArgsLike["matches"
  *
  * @param title The page's own title, a message. Leave it out on the home page.
  * @param description What the page offers, in one or two sentences, a message. Defaults to `m.site_description()`.
- * @param image The link-preview image, root-relative or absolute, with its `alt` a message. Defaults to `SITE_IMAGE`.
+ * @param image The link-preview image, root-relative or absolute, with its `alt` a message. Defaults to `siteImage()`.
  * @param index `false` for pages search engines shouldn't list: sign-in, anything behind a sign-in, and private
  * results. They get `noindex` and no canonical URL, and stay out of the sitemap.
  * @param path The canonical path, without a locale prefix. Defaults to the current path without its query string, so
@@ -50,7 +50,7 @@ export function pageMeta({
   args: { match, matches },
   title,
   description = m.site_description(),
-  image = SITE_IMAGE,
+  image = siteImage(),
   index = true,
   path = match.pathname,
 }: {

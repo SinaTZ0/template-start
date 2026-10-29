@@ -20,7 +20,7 @@ head: (args) => pageMeta({ args, title: m.notes_title(), index: false }),
 | ------------- | -------------------------- | --------------------------------------------------------------------------------------------------- |
 | `title`       | none (the site name alone) | The page's own name; shown as «title \| site». Leave it out only on the home page.                  |
 | `description` | `m.site_description()`     | One or two sentences on what the page offers, a message. Write one for each public page.            |
-| `image`       | `SITE_IMAGE`               | `{ url, alt }`, root-relative or absolute, 1200×630, with its `alt` a message.                      |
+| `image`       | `siteImage()`              | `{ url, alt }`, root-relative or absolute, 1200×630, with its `alt` a message.                      |
 | `index`       | `true`                     | `false` adds `noindex` and leaves out the canonical URL and preview tags.                           |
 | `path`        | current path, no query     | The canonical path, without a locale prefix. Pass one when the query string is part of the content. |
 
