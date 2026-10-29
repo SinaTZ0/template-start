@@ -28,6 +28,7 @@
     "db:check": "drizzle-kit check",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed:notes": "tsx src/db/seed-notes.ts",
     "services": "docker compose -f compose.dev.yaml up -d && node --env-file=.env deploy/init-storage.mjs",
     "errors": "cd tools/error-viewer && PUBLIC_KEY=developmentkey ADMIN_PASSWORD=admin SESSION_SECRET=development-only-session-secret-at-least-32-characters ALLOWED_ORIGIN=http://localhost:5173,http://localhost:3000 BASE_URL=http://localhost:8000 DATA_DIR=./data go run .",
     "prepare": "lefthook install && pnpm i18n:compile",
