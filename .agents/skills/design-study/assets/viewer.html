@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TOPIC Study</title>
+<style>
+/* TODO: one line on what this study compares and where its data and images come from. */
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("assets/vazirmatn-arabic-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FEFC;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("assets/vazirmatn-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*===== Tokens (copy from src/styles.css) =====*/
+/* TODO: replace with the current light and dark values from src/styles.css; add only what the options need. The
+   viewer's own chrome uses these names too: `--band` is the pressed state (the app's primary), `--highlight-text` the
+   option numbers. */
+:root {
+  --font: "Vazirmatn", "Segoe UI", Tahoma, system-ui, sans-serif;
+  --background: oklch(1 0 0);
+  --background-alt: oklch(0.96 0.003 325.6);
+  --foreground: oklch(0.145 0.008 326);
+  --heading: oklch(0.145 0.008 326);
+  --card: oklch(1 0 0);
+  --muted-foreground: oklch(0.542 0.034 322.5);
+  --accent: oklch(0.96 0.003 325.6);
+  --border: oklch(0.922 0.005 325.62);
+  --border-strong: oklch(0.711 0.019 323.02);
+  --brand-text: #1d4ed8;
+  --highlight: #f59e0b;
+  --highlight-text: var(--brand-text);
+  --highlight-surface: color-mix(in srgb, var(--highlight) 22%, var(--card));
+  --band: oklch(0.52 0.105 223.128);
+  --on-band: oklch(0.984 0.019 200.873);
+  --ring: oklch(0.711 0.019 323.02);
+  --shadow-md: 0 1px 2px #0000000a, 0 12px 28px -12px #00000029;
+}
+:root.dark {
+  --background: oklch(0.145 0.008 326);
+  --background-alt: oklch(0.212 0.019 322.12);
+  --foreground: oklch(0.985 0 0);
+  --heading: oklch(0.985 0 0);
+  --card: oklch(0.212 0.019 322.12);
+  --muted-foreground: oklch(0.711 0.019 323.02);
+  --accent: oklch(0.263 0.024 320.12);
+  --border: oklch(1 0 0 / 10%);
+  --border-strong: oklch(1 0 0 / 20%);
+  --brand-text: #93c5fd;
+  --highlight: #fbbf24;
+  --band: oklch(0.45 0.085 224.283);
+  --ring: oklch(0.542 0.034 322.5);
+  --shadow-md: 0 1px 2px #00000059, 0 14px 30px -12px #00000080;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font); background: var(--background); color: var(--foreground); font-size: 15px; line-height: 1.7; }
+button { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/*===== Viewer Chrome =====*/
+.viewer { max-width: 1520px; margin: 0 auto; padding: 28px 16px 64px; display: grid; gap: 18px; }
+.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+.top h1 { margin: 0; font-size: 1.75rem; font-weight: 800; color: var(--heading); line-height: 1.3; }
+.top p { margin: 2px 0 0; color: var(--muted-foreground); font-size: 0.875rem; max-width: 80ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; }
+.seg { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.seg button { border: 0; background: transparent; padding: 4px 12px; min-height: 34px; border-radius: 7px; font-size: 0.8125rem; font-weight: 600; color: var(--muted-foreground); cursor: pointer; transition: background-color 200ms ease-out, color 200ms ease-out; }
+.seg button:hover { color: var(--foreground); }
+.seg button[aria-pressed="true"] { background: var(--band); color: var(--on-band); }
+
+.options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 900px) { .options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.opt { text-align: start; border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 10px 14px; cursor: pointer; display: grid; gap: 2px; min-width: 0; transition: border-color 200ms ease-out, box-shadow 200ms ease-out, background-color 200ms ease-out; }
+.opt:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+.opt[aria-pressed="true"] { border-color: var(--band); background: var(--accent); }
+.opt .num { font-size: 0.75rem; font-weight: 700; color: var(--highlight-text); }
+.opt .name { font-weight: 800; color: var(--heading); font-size: 1rem; line-height: 1.5; }
+.opt .tag { font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.5; }
+.opt .new { margin-inline-start: 6px; padding: 0 6px; border-radius: 999px; background: var(--highlight-surface); color: var(--highlight-text); font-size: 0.6875rem; }
+
+/* Versions of one option: pills under the options while that option is picked. */
+.variants { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: -8px; }
+.variants .lbl { font-size: 0.75rem; font-weight: 700; color: var(--muted-foreground); margin-inline-end: 4px; }
+.variants button { border: 1px solid var(--border); border-radius: 999px; background: var(--card); padding: 4px 14px; min-height: 34px; font-size: 0.8125rem; font-weight: 600; color: var(--muted-foreground); cursor: pointer; }
+.variants button b { color: var(--highlight-text); margin-inline-end: 6px; }
+.variants button[aria-pressed="true"] { border-color: var(--band); background: var(--band); color: var(--on-band); }
+.variants button[aria-pressed="true"] b { color: var(--highlight); }
+
+.notes { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr)); gap: 24px; padding: 16px 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--background-alt); }
+@media (max-width: 900px) { .notes { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+.notes h3 { margin: 0 0 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+.notes p, .notes ul { margin: 0; font-size: 0.875rem; max-width: 70ch; }
+.notes ul { padding-inline-start: 18px; display: grid; gap: 4px; }
+.notes li::marker { color: var(--highlight-text); }
+.notes .lead strong { color: var(--heading); }
+
+.stage { display: flex; justify-content: center; }
+.frame { width: 1440px; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: var(--background); box-shadow: var(--shadow-md); flex: none; }
+.frame.phone { width: 390px; }
+.frame > img { display: block; width: 100%; height: auto; }
+.frame > img + img { border-top: 1px dashed var(--border-strong); }
+.hint { text-align: center; font-size: 0.8125rem; color: var(--muted-foreground); margin: -6px 0 0; }
+
+/*===== Site Mock: Shared =====*/
+/* The mock answers to its own width (container queries), so the phone frame lays out as a phone. */
+.site { container: site / inline-size; font-size: 13px; line-height: 2; }
+.sec { max-width: 1208px; margin: 0 auto; padding: 48px 24px; }
+@container site (max-width: 600px) { .sec { padding: 32px 16px; } }
+
+/* TODO: the surroundings every option shares (section head, side panel), then one block per option:
+/*===== 1 · Name =====*/
+</style>
+</head>
+<body>
+<div class="viewer">
+  <div class="top">
+    <div>
+      <h1>TOPIC study</h1>
+      <p>TODO: the problem in one sentence. Real content from the live site; keys 0–4.</p>
+    </div>
+    <div class="controls">
+      <!-- TODO: topic toggles, e.g. <div class="seg" data-key="section">…</div>; add their defaults to `state`. -->
+      <div class="seg" data-key="device"><button data-v="desk">Desktop</button><button data-v="phone">Phone</button></div>
+      <div class="seg" data-key="lang"><button data-v="fa">فارسی</button><button data-v="en">English</button></div>
+      <div class="seg" data-key="theme"><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+    </div>
+  </div>
+  <!-- The notes come first, so the reader knows what an option is before comparing it. -->
+  <div class="notes" id="notes"></div>
+  <div class="options" id="options"></div>
+  <div class="variants" id="variants" hidden></div>
+  <div class="stage"><div class="frame" id="frame"></div></div>
+  <p class="hint" id="hint"></p>
+</div>
+
+<script>
+/*===== Data =====*/
+// TODO: the live content (from the procedure's JSON) and any measurements, e.g. photo ratios.
+const DATA = {};
+
+/*===== Copy (messages/fa.json, messages/en.json) =====*/
+// The site's real strings for both languages; functions for anything with a number in it.
+const COPY = {
+  fa: {},
+  en: {},
+};
+
+/*===== Options =====*/
+// `fresh` marks options added in a follow-up round ("new"). A version of option K has `parent: K` and `num: "Kb"`;
+// the parent can set `label` for its own pill.
+const OPTIONS = [
+  { name: "Current", tag: "Screenshots of the live page",
+    lead: "<strong>Today.</strong> TODO: what it does and what is wrong with it.",
+    why: ["TODO"], risk: ["TODO"], cost: ["—"] },
+  // { name: "", tag: "", lead: "<strong></strong> ", why: [], risk: [], cost: [] },
+];
+
+/*===== Builders =====*/
+// One per option (index = option number; null for 0): { [section]: (c) => html }. The sections are the keys of
+// SECTIONS below.
+const BUILDERS = [null];
+
+/** The sections to render and how each wraps an option's markup; option 0 shows base/<section>-<device>-<lang>-<theme>.jpg. */
+const SECTIONS = {
+  main: (c, inner) => `<section class="sec">${inner}</section>`,
+};
+
+/** Text shown under the frame for an option that needs explaining (something to click or scroll). */
+const HINTS = {};
+
+/*===== State =====*/
+const KEY = "TOPIC-study";
+const state = { opt: 1, section: "all", device: "desk", lang: "fa", theme: "light" };
+try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch {}
+
+/*===== Render =====*/
+function render() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  if (!OPTIONS[state.opt]) state.opt = 0;
+  document.documentElement.classList.toggle("dark", state.theme === "dark");
+  document.querySelectorAll(".seg").forEach((seg) => seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(state[seg.dataset.key] === b.dataset.v))));
+
+  /*------ Options and versions ------*/
+  const o = OPTIONS[state.opt];
+  const family = o.parent ?? state.opt;
+  document.getElementById("options").innerHTML = OPTIONS.map((x, i) => x.parent != null ? "" : `<button class="opt" data-opt="${i}" aria-pressed="${i === family}"><span class="num">${i}</span><span class="name">${x.name}${x.fresh ? '<span class="new">new</span>' : ""}</span><span class="tag">${x.tag}</span></button>`).join("");
+  const kids = OPTIONS.map((x, i) => [x, i]).filter(([x]) => x.parent === family);
+  const vEl = document.getElementById("variants");
+  vEl.hidden = kids.length === 0;
+  vEl.innerHTML = kids.length ? `<span class="lbl">Versions (keys a–${String.fromCharCode(97 + kids.length)})</span>` + [[OPTIONS[family], family], ...kids].map(([x, i]) => `<button data-opt="${i}" aria-pressed="${i === state.opt}"><b>${x.num ?? family + "a"}</b>${x.parent != null ? x.name : x.label ?? x.name}</button>`).join("") : "";
+
+  /*------ Notes ------*/
+  const list = (xs) => `<ul>${xs.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+  document.getElementById("notes").innerHTML = `<div><h3>${o.num ?? state.opt} · ${o.name}</h3><p class="lead">${o.lead}</p></div><div><h3>Good</h3>${list(o.why)}</div><div><h3>Watch</h3>${list(o.risk)}</div><div><h3>Build</h3>${list(o.cost)}</div>`;
+
+  /*------ Frame ------*/
+  const frame = document.getElementById("frame");
+  frame.className = "frame" + (state.device === "phone" ? " phone" : "");
+  const secs = Object.keys(SECTIONS).filter((s) => state.section === "all" || state.section === s);
+  if (state.opt === 0) {
+    frame.innerHTML = secs.map((s) => `<img src="base/${s}-${state.device}-${state.lang}-${state.theme}.jpg" alt="">`).join("");
+  } else {
+    const c = COPY[state.lang];
+    const B = BUILDERS[state.opt];
+    const html = secs.map((s) => SECTIONS[s](c, B[s](c))).join("");
+    // An option's version also carries its parent's class, so it can reuse the parent's styles.
+    frame.innerHTML = `<div class="site o${state.opt}${o.parent != null ? ` o${o.parent}` : ""}" dir="${state.lang === "fa" ? "rtl" : "ltr"}" lang="${state.lang}">${html}</div>`;
+  }
+  document.getElementById("hint").textContent = HINTS[state.opt] ?? "";
+  fit();
+}
+
+/** Desktop frames scale down to the window; phone frames stay at 390. */
+function fit() {
+  const frame = document.getElementById("frame");
+  frame.style.zoom = frame.classList.contains("phone") ? 1 : Math.min(1, (document.querySelector(".viewer").clientWidth - 32) / 1442);
+}
+
+/*===== Events =====*/
+document.addEventListener("click", (e) => {
+  const seg = e.target.closest(".seg button");
+  if (seg) { state[seg.parentElement.dataset.key] = seg.dataset.v; render(); return; }
+  const opt = e.target.closest("[data-opt]");
+  if (opt) { state.opt = Number(opt.dataset.opt); render(); return; }
+  // Links in the mock go nowhere.
+  if (e.target.closest(".site a")) e.preventDefault();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+  // 0–9 pick a top-level option; a–d pick the versions of the option on screen.
+  const top = OPTIONS.flatMap((x, i) => (x.parent == null ? [i] : []));
+  if (/^\d$/.test(e.key) && top.includes(Number(e.key))) { state.opt = Number(e.key); render(); return; }
+  const family = OPTIONS[state.opt].parent ?? state.opt;
+  const ids = [family, ...OPTIONS.flatMap((x, i) => (x.parent === family ? [i] : []))];
+  const n = "abcd".indexOf(e.key);
+  if (ids.length > 1 && n >= 0 && n < ids.length) { state.opt = ids[n]; render(); }
+});
+addEventListener("resize", fit);
+render();
+</script>
+</body>
+</html>
