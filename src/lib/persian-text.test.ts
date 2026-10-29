@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizePersianText } from "#/lib/persian-text";
+import { matchesSearch, normalizePersianText, searchWords } from "#/lib/persian-text";
 
 /*===== Persian Text =====*/
 // Text that looks the same must be stored the same, or searches and comparisons miss it. What carries meaning (a ZWNJ
@@ -23,5 +23,15 @@ describe("normalizePersianText", () => {
     const text = "یادداشت‌های من برای ۱۴۰۳";
 
     expect(normalizePersianText(text)).toBe(text);
+  });
+});
+
+describe("matchesSearch", () => {
+  it("matches what the user sees, whatever was typed underneath", () => {
+    const texts = ["انتخاب‌واحد ترم ۱۴۰۳"];
+
+    expect(matchesSearch(searchWords("انتخاب واحد"), texts)).toBe(true);
+    expect(matchesSearch(searchWords("انتخاب واحد 1403"), texts)).toBe(true);
+    expect(matchesSearch(searchWords("انتخاب مهمان"), texts)).toBe(false);
   });
 });

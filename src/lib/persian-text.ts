@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { toLatinDigits } from "#/lib/digits";
+
 /*===== Persian Text =====*/
 // Persian text that looks identical can differ underneath: Arabic yeh and kaf from an Arabic keyboard layout,
 // direction marks and tatweel pasted from Word or Telegram, Arabic-Indic digits, NBSP, a BOM. Stored as typed, such
@@ -44,4 +46,30 @@ export function normalizePersianText(value: string): string {
  */
 export function persianText() {
   return z.string().overwrite(normalizePersianText);
+}
+
+/*===== Search =====*/
+
+// Compared as normalized, lower-cased text with ZWNJs read as spaces and every digit Latin, so «انتخاب‌واحد»,
+// «انتخاب واحد», an Arabic-keyboard «انتخاب واحد» and «۳۸۴۱» against «3841» all match.
+function searchable(value: string): string {
+  return toLatinDigits(normalizePersianText(value))
+    .toLowerCase()
+    .replace(/\u200c/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+/** The words of a search, ready for `matchesSearch`; none for an empty or blank query. */
+export function searchWords(query: string): string[] {
+  return searchable(query).split(" ").filter(Boolean);
+}
+
+/**
+ * Whether `texts` together contain every one of `words` (from `searchWords`), for filtering a list the page already
+ * has. No words match everything. A database search normalizes its query with `normalizePersianText` instead.
+ */
+export function matchesSearch(words: string[], texts: (string | null | undefined)[]): boolean {
+  if (words.length === 0) return true;
+  const text = searchable(texts.filter(Boolean).join(" "));
+  return words.every((word) => text.includes(word));
 }

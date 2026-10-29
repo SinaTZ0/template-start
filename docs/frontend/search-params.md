@@ -75,22 +75,28 @@ A filter change resets `page` to 1, or the page could land past the end of the n
 
 ### Text Inputs
 
-Keep the input's text in local state, and write it to the URL after a pause, so typing doesn't run the loader on each
-key:
+Keep the input's text in a draft, and write it to the URL after a pause, so typing doesn't run the loader on each key.
+`useSearchText` (`src/hooks/use-search-text.ts`) does both, and shows the URL's text again when Back or Forward changes
+it under the draft:
 
 ```tsx
 const { q } = Route.useSearch();
 const navigate = Route.useNavigate();
-const [text, setText] = useState(q);
-
-useEffect(() => {
-  if (text === q) return;
-  const timer = setTimeout(() => navigate({ search: (prev) => ({ ...prev, q: text, page: 1 }), replace: true }), 300);
-  return () => clearTimeout(timer);
-}, [text, q, navigate]);
+const commit = useCallback(
+  (q: string) => navigate({ search: (prev) => ({ ...prev, q, page: 1 }), replace: true }),
+  [navigate],
+);
+const [text, setText] = useSearchText({ value: q, onCommit: commit });
 
 <Input value={text} onChange={(event) => setText(event.target.value)} />;
 ```
+
+Keep `onCommit` stable (`useCallback`): a new function each render restarts the pause.
+
+A list the page already has (links, a directory) is filtered in the component: `listSearchSchema`
+(`src/lib/search-params.ts`) validates `?q=` and `?group=`, and `matchesSearch(searchWords(q), [title, description])`
+(`src/lib/persian-text.ts`) matches the way a reader expects: ZWNJ or space, Arabic or Persian letters, Persian or
+Latin digits. A list the server searches normalizes the query with `persianText()` in its input schema instead.
 
 ## History
 
