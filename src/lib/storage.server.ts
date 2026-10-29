@@ -7,9 +7,14 @@ import type { MediaKind } from "#/orpc/media/constants";
 /*===== S3 Client =====*/
 let client: S3Client | undefined;
 
-/** Created on first use, so importing this module never opens a connection. */
+/**
+ * Created on first use, so importing this module never opens a connection, and only once: the tracing middleware below
+ * can be added to a client only once ("Duplicate middleware name").
+ */
 function getClient(): S3Client {
-  client ??= new S3Client({
+  if (client) return client;
+
+  client = new S3Client({
     endpoint: env.S3_ENDPOINT,
     region: env.S3_REGION,
     credentials: { accessKeyId: env.S3_ACCESS_KEY, secretAccessKey: env.S3_SECRET_KEY },
