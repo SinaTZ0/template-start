@@ -199,6 +199,13 @@ return { id: result.id };
   Production only runs those files. The details, including renames and changes that span two deploys, are in
   [deployment.md](../deployment.md) → Database Changes.
 - Back what a query filters and sorts by with an index (`note_owner_id_created_at_idx`).
+- A column that holds one of a fixed set of values (a status, a kind) is `text`, with the set as a `const` array in
+  the feature's `constants.ts`: adding a value then needs no migration. The repository narrows what it reads with
+  `oneOf({ allowed, value, what })` (`src/orpc/allowed-values.ts`), which throws on a value outside the set rather
+  than passing on a guess, since only code writes these columns.
+- Text editors write in each language (a category's name, a page's title) is a `jsonb` `LocalizedText`
+  (`src/lib/localized-text.ts`), read with `localize()` in the request's locale ([frontend/i18n.md](../frontend/i18n.md)
+  → Content in Several Languages).
 
 ### Testing
 
