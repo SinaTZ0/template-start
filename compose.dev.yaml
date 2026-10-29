@@ -26,9 +26,11 @@ services:
   # S3 without authentication: fine on a development machine, never in production (`compose.prod.yaml` adds identities).
   # Each bucket claims several volumes up front, and the volume count is derived from free disk / volume size. With the
   # default 30 GB volumes a laptop runs out after two or three buckets ("No writable volumes"), so volumes stay small.
+  # `weed server` also reserves each volume's full size on disk when it creates it (7 × 1 GB for a bucket holding a few
+  # images), whatever its help says; volumePreallocate=false makes them grow as they're written.
   seaweedfs:
     image: chrislusf/seaweedfs:3.99
-    command: server -dir=/data -s3 -s3.port=8333 -master.volumeSizeLimitMB=1024
+    command: server -dir=/data -s3 -s3.port=8333 -master.volumeSizeLimitMB=1024 -master.volumePreallocate=false
     ports:
       - "8333:8333"
     volumes:
