@@ -17,13 +17,9 @@ x-logging: &logging # Docker keeps container logs forever by default; rotate the
     max-size: 10m
     max-file: "5"
 
-x-app-image:
-  &app-image # The same image runs the app and both jobs. Built once per deploy; the jobs reuse the cached layers.
-  build:
-    context: .
-    # The browser bundle reports its errors to this DSN, inlined at build time (`vite.config.ts`).
-    args:
-      SENTRY_DSN: ${SENTRY_DSN:-}
+x-app-image: &app-image
+  # The same image runs the app and both jobs. Only `app` builds it: with a `build` each, Compose builds the image three
+  # times and unpacks each copy, which can fill a small disk; the jobs use the image `app` built.
   image: template-app
   init: true
   logging: *logging
@@ -56,6 +52,11 @@ services:
 
   app:
     <<: *app-image
+    build:
+      context: .
+      # The browser bundle reports its errors to this DSN, inlined at build time (`vite.config.ts`).
+      args:
+        SENTRY_DSN: ${SENTRY_DSN:-}
     restart: unless-stopped
     # Listed one by one, so each container gets only its own secrets (never the store's admin key). A variable added to
     # `src/env.server.ts` must be added here too, and one read from `.env` also to `.env.production.example` and the
@@ -98,6 +99,8 @@ services:
   # ------ One-time Jobs ------
   migrate:
     <<: *app-image
+    # Never from Docker Hub: a missing `template-app` means `app` hasn't been built yet.
+    pull_policy: never
     command: ["node", "deploy/migrate.mjs"]
     restart: "no"
     environment:
@@ -108,6 +111,7 @@ services:
 
   storage-init:
     <<: *app-image
+    pull_policy: never
     command: ["node", "deploy/init-storage.mjs"]
     restart: "no"
     # The admin identity: creating a bucket is the one thing the app's own identity can't do.
