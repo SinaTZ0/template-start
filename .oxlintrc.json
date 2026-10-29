@@ -72,6 +72,8 @@
     "test-results/",
     "storybook-static/",
     "src/components/ui/",
-    "tools/error-viewer/static/htmx.min.js"
+    "tools/error-viewer/static/htmx.min.js",
+    "docs/frontend/reference/",
+    "target/"
   ]
 }

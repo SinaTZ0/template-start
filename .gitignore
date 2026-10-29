@@ -30,3 +30,6 @@
 # Storybook
 /storybook-static/
 *storybook.log
+
+# A design export as it arrived, unpacked locally while customizing the template (docs/customize-template.md)
+/target/

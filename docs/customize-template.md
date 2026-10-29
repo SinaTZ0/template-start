@@ -19,7 +19,9 @@ breaks one, tell the person and propose the smallest change that fixes it, rathe
   ask.
 
 Move the source and screenshots to `docs/frontend/reference/` so later work can compare against them. It is reference
-material, like `components/ui/`: never import from it.
+material, like `components/ui/`: never import from it. Typecheck, lint and Prettier skip that folder, so it stays as it
+was exported. A whole export that arrives as an archive can be unpacked in `target/` first (gitignored, skipped the same
+way); move only the homepage's files from there.
 
 The homepage usually leaves things out. Design these in its language and list them for the person at the end:
 
