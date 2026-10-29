@@ -73,12 +73,25 @@ different scroll positions, both pages would glide up or down across the screen.
 
 ## Animating More
 
+The `react-view-transitions` skill (`.agents/skills/`) has the patterns, the pitfalls and how to check a transition
+frame by frame.
+
 - **Morph an element between pages:** give it the same `view-transition-name` on both pages, built from the record's
   id (`note-42`), since a name must be unique on the page. The page fade then animates that element from its old box
   to its new one.
-- **Animate changes on the same page** (a filtered list, a deleted item): React's `<ViewTransition>` works for state
-  updates you start with `startTransition`. Query refetches don't run in a Transition, so a list that changes after an
-  invalidation doesn't animate on its own.
+- **Animate changes on the same page** with CSS transitions first: a panel that opens animates its height, a tab
+  switcher slides its indicator. A view transition animates bitmaps of the page, so round ends stretch and blur, the
+  whole page is captured, and a second one skips the one running, which makes quick clicks jump. Reach for React's
+  `<ViewTransition>` only when CSS can't follow the change: content swapped for content of another height (a form
+  replaced by its receipt), a filtered or reordered list. It works for state updates you start with `startTransition`;
+  query results and mutation data don't arrive in a Transition, so keep what is shown in local state and set it inside
+  one.
+- **Type every in-page transition.** Hydration also runs as a Transition, so a `<ViewTransition>` with a plain
+  `update` animates on page load whenever its content differs from the server HTML. Start the change with
+  `startTransition(() => { addTransitionType("form-swap"); update(); })`, and animate only that type:
+  `update={{ "form-swap": "form-card", default: "none" }}`.
+- **Focus and scroll go in `useLayoutEffect`** when the new content mounts. The browser captures the new state right
+  after layout effects; a `focus()` from `useEffect` scrolls mid-animation, and named elements end in the wrong place.
 
 ## Don'ts
 

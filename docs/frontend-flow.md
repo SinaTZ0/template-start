@@ -3,18 +3,18 @@
 Start here for any frontend work. The steps are the technical path for a new page; the design itself is yours to
 decide. The `notes` route (`src/routes/notes/`) is the worked example.
 
-| Doc                                                            | Covers                                                    |
-| -------------------------------------------------------------- | --------------------------------------------------------- |
-| [frontend/architecture.md](./frontend/architecture.md)         | Structure, route slices, data, state, forms, RTL, styling |
-| [frontend/data-loading.md](./frontend/data-loading.md)         | Loaders, the Query cache, preloading, freshness, guards   |
-| [frontend/app-identity.md](./frontend/app-identity.md)         | Mood, tone, theme tokens, hard constraints                |
-| [frontend/components.md](./frontend/components.md)             | Primitives, shared components, style maps, lint rules     |
-| [frontend/search-params.md](./frontend/search-params.md)       | URL state                                                 |
-| [frontend/jotai.md](./frontend/jotai.md)                       | Shared client state                                       |
-| [frontend/view-transitions.md](./frontend/view-transitions.md) | The page fade and slide                                   |
-| [frontend/seo.md](./frontend/seo.md)                           | Page meta, link previews, what to index, the sitemap      |
-| [frontend/i18n.md](./frontend/i18n.md)                         | Messages, Persian and English, direction, numbers, dates  |
-| [backend/media.md](./backend/media.md)                         | Uploading and rendering images                            |
+| Doc                                                            | Covers                                                     |
+| -------------------------------------------------------------- | ---------------------------------------------------------- |
+| [frontend/architecture.md](./frontend/architecture.md)         | Structure, route slices, data, state, forms, RTL, styling  |
+| [frontend/data-loading.md](./frontend/data-loading.md)         | Loaders, the Query cache, preloading, freshness, guards    |
+| [frontend/app-identity.md](./frontend/app-identity.md)         | Mood, tone, theme tokens, hard constraints                 |
+| [frontend/components.md](./frontend/components.md)             | Primitives, shared components, style maps, lint rules      |
+| [frontend/search-params.md](./frontend/search-params.md)       | URL state                                                  |
+| [frontend/jotai.md](./frontend/jotai.md)                       | Shared client state                                        |
+| [frontend/view-transitions.md](./frontend/view-transitions.md) | The page fade and slide, in-page changes CSS can't animate |
+| [frontend/seo.md](./frontend/seo.md)                           | Page meta, link previews, what to index, the sitemap       |
+| [frontend/i18n.md](./frontend/i18n.md)                         | Messages, Persian and English, direction, numbers, dates   |
+| [backend/media.md](./backend/media.md)                         | Uploading and rendering images                             |
 
 ## Steps
 
