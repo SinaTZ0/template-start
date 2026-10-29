@@ -1,5 +1,5 @@
 import { type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import { CircleAlertIcon } from "lucide-react";
 import { useMemo, type ComponentProps, type ReactNode } from "react";
 import { Label } from "../label/label";

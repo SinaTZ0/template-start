@@ -1,5 +1,5 @@
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import { tooltipArrowClasses, tooltipContentClasses, tooltipPositionerClasses } from "./tooltip.styles";
 
 /*===== Tooltip =====*/

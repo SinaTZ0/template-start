@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import type { ComponentProps } from "react";
 import { labelClasses } from "./label.styles";
 

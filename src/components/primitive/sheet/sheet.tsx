@@ -1,5 +1,5 @@
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import { XIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 

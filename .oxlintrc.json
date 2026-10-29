@@ -24,16 +24,38 @@
         "allow": ["**/*.css"]
       }
     ],
-    "shadcn/no-restyle": ["error", { "allow": ["layout"] }],
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": ["layout"]
+      }
+    ],
     "shadcn/no-raw-colors": "error",
     "shadcn/no-arbitrary-values": "error",
-    "shadcn/no-inline-styles": "error"
+    "shadcn/no-inline-styles": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "cn",
+            "message": "Import cn from #/lib/utils: it knows the app's type styles (docs/frontend/components.md)."
+          }
+        ]
+      }
+    ]
   },
   "overrides": [
     {
       "files": ["src/components/primitive/**"],
       "rules": {
         "shadcn/no-restyle": "off"
+      }
+    },
+    {
+      "files": ["src/lib/utils.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
       }
     }
   ],

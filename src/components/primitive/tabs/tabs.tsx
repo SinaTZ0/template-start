@@ -1,6 +1,6 @@
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import { tabsClasses, tabsContentClasses, tabsListVariants, tabsTriggerClasses } from "./tabs.styles";
 
 /*===== Tabs =====*/

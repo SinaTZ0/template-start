@@ -1,5 +1,5 @@
 import { type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import { ArrowLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 

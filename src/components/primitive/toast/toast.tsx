@@ -1,5 +1,5 @@
 import { Toast as ToastPrimitive } from "@base-ui/react/toast";
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import { CircleCheckIcon, InfoIcon, Loader2Icon, CircleAlertIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 

@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import type { CSSProperties } from "react";
 import { getMediaVariantSize, getMediaVariantSpec } from "#/orpc/media/constants";
 import type { Media } from "#/orpc/media/contract";

@@ -1,5 +1,5 @@
 import { type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import type { ComponentProps } from "react";
 import { Button, type ButtonProps } from "#/components/primitive/button/button";
 import { Input } from "#/components/primitive/input/input";

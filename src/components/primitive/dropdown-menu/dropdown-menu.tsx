@@ -1,5 +1,5 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
-import { cn } from "cn";
+import { cn } from "#/lib/utils";
 import { CheckIcon, ChevronLeftIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 

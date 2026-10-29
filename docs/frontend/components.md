@@ -84,6 +84,9 @@ type-checking. A group with a distinct sub-concern can take a capitalized suffix
 - `joinStyles(groups)` turns one set of groups into a class string, both for a part without variants and for a CVA base.
 - `composeStyles(map)` turns a map of variant options into CVA's `variants` and keeps the option keys literal.
 - Resolve Tailwind conflicts only at the element: `cn(componentVariants({ variant, size }), className)`.
+  Import `cn` from `#/lib/utils`, never from the `cn` package (lint enforces it): the app's copy knows the type styles,
+  and without them `cn("text-h1 text-primary")` reads both as colours and drops the type style. A new `--text-<name>`
+  in `src/styles.css` goes into its list too.
 - Export the variant maps as `twVariant`, `twSize`, and so on, so stories build their controls from them
   (`Object.keys(twVariant)`).
 

@@ -63,7 +63,8 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 - **Dark theme**: if the homepage has none, derive one from the same hues. Bands that are already dark may stay close
   to their light-theme values.
 - **Type styles**: replace the `--text-*` styles with the homepage's set. Rename, add or remove styles to match it, and
-  update every usage (search for `text-<name>`). Keep Persian line heights generous and text at 12px or larger.
+  update every usage (search for `text-<name>`) and the type-style list in `cn` (`src/lib/utils.ts`). Keep Persian
+  line heights generous and text at 12px or larger.
 - **Font**: if the homepage uses another font, self-host it with an `@fontsource` package or files in `public/`
   instead of an external font service, and update `--font-sans` in `styles.css`.
 - **Shape and layout**: radii, shadows (`--elevation-*`) and the content width (`--container-site`, used as `max-w-site`).
