@@ -7,12 +7,14 @@ import { getLocale, localizeHref, type Locale, locales } from "#/paraglide/runti
 export type LocaleLink = { locale: Locale; name: string; href: string };
 
 /**
- * The current page, search params included, in every locale but the current one: what the language switcher links to.
+ * The current page, search params included (not the hash), in every locale but the current one: what the language
+ * switcher links to.
  * Empty when the app has one locale.
  */
 export function useLocaleLinks(): LocaleLink[] {
-  // The router's own location, without the locale prefix (`rewrite` in `src/router.tsx`).
-  const href = useLocation({ select: (location) => location.href });
+  // The router's own location, without the locale prefix (`rewrite` in `src/router.tsx`). The hash is left out: the
+  // browser never sends it, so the server would render a different `href` and hydration would not match.
+  const href = useLocation({ select: (location) => location.pathname + location.searchStr });
   const current = getLocale();
 
   return locales
