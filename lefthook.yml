@@ -17,9 +17,17 @@ pre-commit:
       run: pnpm exec prettier --write --ignore-unknown {staged_files}
       # Re-stages what Prettier changed, so the commit holds the formatted files.
       stage_fixed: true
+    - name: deploy-binary
+      # The deploy tool is committed as a binary (docs/deployment.md → The Deploy Tool): a source change needs it rebuilt.
+      glob: "tools/deploy/**"
+      run: bash tools/deploy/build.sh --check
 
 # Conventional Commits (`feat: …`, `fix(scope): …`), checked by commitlint (`commitlint.config.js`).
 commit-msg:
   jobs:
     - name: commitlint
       run: pnpm exec commitlint --edit {1}
+    # A commit that changes the server's seed data needs a deploy step, or `Deploy-Step: none` in its message
+    # (deploy/steps/README.md). Here and not in pre-commit, because it reads the message.
+    - name: deploy-steps
+      run: bash scripts/check-deploy-steps.sh {1}

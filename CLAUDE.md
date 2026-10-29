@@ -17,6 +17,7 @@ The docs have two entry points. Start backend work at `docs/backend-flow.md` and
 - After making code changes, run `pnpm lint` and fix all errors.
 - Do not create, switch to, or push branches, worktrees, or tags. All work is committed directly on `main`; if a task seems to need a branch, ask the user first.
 - Commit messages follow Conventional Commits (`feat: …`, `fix(note): …`, lowercase subject); the `commit-msg` hook rejects anything else. Never bypass the hooks with `--no-verify`.
+- Before committing a change to seed data (the paths in `deploy/steps/needs-step.txt`), add the deploy step the server needs (`deploy/steps/`, the `how-update-server` skill); the `commit-msg` hook checks.
 - Put temporary scripts, diagnostics, experiments, and logs in `./.tmp-claude/`.
 - Create `./.tmp-claude/` as needed. It is gitignored and must never contain deliverable source files.
 

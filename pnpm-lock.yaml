@@ -335,6 +335,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.11
         version: 0.31.11
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       lefthook:
         specifier: ^2.2.2
         version: 2.2.2

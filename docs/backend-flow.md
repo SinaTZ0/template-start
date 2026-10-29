@@ -44,8 +44,9 @@ The `note` feature (`src/orpc/note/`) is the worked example. Copy its shape.
 8. **Status codes**: a new error code that oRPC doesn't map already gets its HTTP status in `ERROR_STATUS_MAP`
    (`src/orpc/errors.ts`). `NOT_FOUND`, `CONFLICT`, `UNAUTHORIZED` and `FORBIDDEN` need nothing.
 9. **Environment variables**: a new one goes in `src/env.server.ts`, `.env.example`, the `app` service in
-   `compose.prod.yaml`, `.env.production.example` and the settings registry in `deploy/deploy.sh`. A required one the
-   script can't generate (a domain, an API key, an external URL) gets a kind that asks for it
+   `compose.prod.yaml`, `.env.production.example` and the deploy tool's settings registry
+   (`tools/deploy/internal/settings/settings.go`). A required one the tool can't generate (a domain, an API key, an
+   external URL) gets a kind that asks for it
    ([deployment.md](./deployment.md) → Adding a Variable).
 
 ## Check

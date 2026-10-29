@@ -130,3 +130,23 @@ export const note = pgTable(
   },
   (table) => [index("note_owner_id_created_at_idx").on(table.ownerId, table.createdAt)],
 );
+
+/*===== Deploy Steps =====*/
+// The server's record of the deploy steps it ran (`deploy/steps/`, docs/deployment.md → Deploy Steps). Only the deploy
+// tool reads and writes it, through psql; the app never does. It lives in the database so that a restored dump rolls
+// it back with the data the steps changed. The `_baseline` row marks a ledger started: the steps that existed then
+// are `skipped`, since a new server's seed already loads what they would.
+
+export const deployStep = pgTable("deploy_step", {
+  /** The step file's name without `.md`, or `_baseline`. */
+  name: text("name").primaryKey(),
+  /** How many commands the step has. */
+  commands: integer("commands").notNull(),
+  /** How many of them finished; a rerun starts after these. */
+  done: integer("done").notNull().default(0),
+  /** Marked done without running, when the ledger was started. */
+  skipped: boolean("skipped").notNull().default(false),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  /** Null until every command finished. */
+  finishedAt: timestamp("finished_at"),
+});

@@ -57,10 +57,12 @@ services:
       # The browser bundle reports its errors to this DSN, inlined at build time (`vite.config.ts`).
       args:
         SENTRY_DSN: ${SENTRY_DSN:-}
+        # An npm mirror, for a server that can't reach registry.npmjs.org. Empty uses npm's.
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
     restart: unless-stopped
     # Listed one by one, so each container gets only its own secrets (never the store's admin key). A variable added to
     # `src/env.server.ts` must be added here too, and one read from `.env` also to `.env.production.example` and the
-    # settings registry in `deploy/deploy.sh` (docs/deployment.md → Adding a Variable).
+    # settings registry in `tools/deploy/internal/settings` (docs/deployment.md → Adding a Variable).
     environment:
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -172,6 +174,41 @@ services:
       BASE_URL: https://${ERRORS_DOMAIN}
     volumes:
       - error-viewer-data:/data
+    logging: *logging
+
+  # ------ Database Browser ------
+  # pgweb, for emergencies (docs/deployment.md → Database Browser): full read and write access to the whole database,
+  # as the app's own user. Never started by a deploy (the `tools` profile): `deploy/deploy.sh pgweb open` starts it with
+  # a sign-in made for that session and its closing time, passed through the environment of that one `docker compose`
+  # call, and `pgweb close` removes it. Bound to the server's loopback, so it's reached through an SSH tunnel only.
+  pgweb:
+    image: sosedoff/pgweb:0.16.2
+    profiles: [tools]
+    # `timeout` stops it on time even with the deploy tool gone; `restart: "no"` keeps it down after that, and after a
+    # reboot. Started by hand, without the tool, it stops after a second.
+    restart: "no"
+    entrypoint:
+      - timeout
+      - "${PGWEB_SECONDS:-1}"
+      - /usr/bin/pgweb
+      - --bind=0.0.0.0
+      - --listen=8081
+      - --lock-session
+      - --no-idle-timeout
+      - --no-ssh
+      - --skip-open
+    environment:
+      PGWEB_DATABASE_URL: postgres://app:${POSTGRES_PASSWORD}@db:5432/app?sslmode=disable&application_name=pgweb
+      PGWEB_AUTH_USER: ${PGWEB_AUTH_USER:-}
+      PGWEB_AUTH_PASS: ${PGWEB_AUTH_PASS:-}
+    labels:
+      # Every run of the deploy tool closes a browser past this time (epoch seconds).
+      deploy.pgweb.closes-at: "${PGWEB_CLOSES_AT:-0}"
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
     logging: *logging
 
 # ===== Store Identities =====

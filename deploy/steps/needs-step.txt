@@ -1,0 +1,7 @@
+# Paths whose change doesn't reach the server's data by itself: a commit that changes one needs a deploy step
+# (README.md here), or a `Deploy-Step: none` line in its message. Read by scripts/check-deploy-steps.sh (the commit-msg
+# hook) and the how-update-server skill. One pattern per line; `*` matches across folders. A new seed adds its data
+# and script here.
+
+# The note feature's sample notes.
+src/db/seed-notes.ts

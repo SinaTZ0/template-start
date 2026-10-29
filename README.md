@@ -65,7 +65,8 @@ src/
   paraglide/                       generated message functions (gitignored, docs/frontend/i18n.md)
 messages/, project.inlang/         the text per locale; Paraglide settings and config
 drizzle/                           SQL migrations (generated, committed)
-deploy/                            Caddyfile and the production jobs (migrate, init-storage)
+deploy/                            deploy.sh (the deploy tool's binary in bin/), Caddyfile, production jobs, steps/
+tools/deploy/, tools/error-viewer/ the deploy tool's Go source (docs/deployment.md), the error viewer
 docs/                              start at backend-flow.md or frontend-flow.md
 ```
 

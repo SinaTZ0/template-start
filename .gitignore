@@ -5,12 +5,13 @@
 !.env.production.example
 /node_modules/
 
-# Production server state (deploy/deploy.sh): certificates, private keys and database dumps never belong in git.
+# Production server state (deploy/deploy.sh): certificates, private keys, database dumps and its logs never belong in git.
 /certs/
 /backups/
+/deploy/logs/
 *.key
 *.pfx
-# Tools deploy/deploy.sh downloads for itself (gum).
+# What the Bash deploy script downloaded for itself (gum), left on servers set up before the deploy tool.
 /deploy/.bin/
 
 # Paraglide's compiled messages (pnpm i18n:compile, docs/frontend/i18n.md)

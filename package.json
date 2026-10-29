@@ -31,6 +31,7 @@
     "db:seed:notes": "tsx src/db/seed-notes.ts",
     "services": "docker compose -f compose.dev.yaml up -d && node --env-file=.env deploy/init-storage.mjs",
     "errors": "cd tools/error-viewer && PUBLIC_KEY=developmentkey ADMIN_PASSWORD=admin SESSION_SECRET=development-only-session-secret-at-least-32-characters ALLOWED_ORIGIN=http://localhost:5173,http://localhost:3000 BASE_URL=http://localhost:8000 DATA_DIR=./data go run .",
+    "deploy:build": "bash tools/deploy/build.sh",
     "prepare": "lefthook install && pnpm i18n:compile",
     "i18n:compile": "paraglide-js compile --silent --output-structure locale-modules",
     "generate-routes": "tsr generate"
@@ -94,6 +95,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "0.28.2",
     "lefthook": "^2.2.2",
     "nitro": "3.0.260903-beta",
     "oxlint": "^1.89.0",
