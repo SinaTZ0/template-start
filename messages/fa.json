@@ -6,6 +6,7 @@
   "common_skip_to_content": "پرش به محتوای اصلی",
   "common_language": "زبان",
   "common_new_tab": "(در زبانه تازه باز می‌شود)",
+  "common_captcha_failed": "بررسی امنیتی انجام نشد. دوباره ارسال کنید.",
   "common_error_network": "ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.",
   "common_error_signed_out": "از حساب خارج شده‌اید. صفحه را تازه کنید و دوباره وارد شوید.",
   "common_error_with_reference": "{message} کد پیگیری: {errorId}",

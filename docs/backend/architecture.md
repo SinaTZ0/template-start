@@ -158,6 +158,24 @@ return { id: result.id };
 
 - Better-Auth (`src/lib/auth.server.ts`) owns sign-up, sign-in and sessions at `/api/auth/*`. The sign-up captcha
   (Altcha) is a `before` hook there; the browser gets its challenge from `captcha.createChallenge`.
+- A public procedure that writes (a contact form, a comment, a signup for news) takes a solved challenge too, so
+  scripts can't fill its tables. Its input has `captcha: z.string()`, its contract declares `captchaErrors`, and the
+  procedure applies `captchaMiddleware` right after its own rate limit, so a flood is turned away before any
+  verification work:
+
+  ```ts
+  export const submitContactProcedure = base.contact.submit
+    .use(rateLimitMiddleware(SUBMIT_RATE_LIMIT))
+    .use(captchaMiddleware)
+    .use(provideDbMiddleware)
+    .handler(/* … */);
+  ```
+
+  The browser solves it with `useCaptcha` (`src/hooks/use-captcha.ts`), the same hook sign-up uses. For a visible
+  «I'm not a robot» check beside the submit button, `useCaptchaCheck` solves in the background from the form's first
+  focus, so the answer is usually ready when the visitor sends. A payload works once and expires after 10 minutes, so
+  a failed send needs a new solve (`start` again).
+
 - `requireUserMiddleware` puts the signed-in user in `context.user`; `requireRoleMiddleware(...roles)` also checks the
   role. Declare `authErrors` (and `roleErrors`) on their contracts. A procedure with neither is public.
 - **Ownership is checked in the data layer.** A user's records are read with the owner in the query

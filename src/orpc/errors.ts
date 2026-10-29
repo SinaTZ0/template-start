@@ -34,4 +34,5 @@ export const commonErrors = {
 /** Statuses for codes oRPC doesn't already map (see `COMMON_ERROR_STATUS_MAP`). */
 export const ERROR_STATUS_MAP = {
   INVALID_INPUT: 422,
+  CAPTCHA_FAILED: 400,
 };

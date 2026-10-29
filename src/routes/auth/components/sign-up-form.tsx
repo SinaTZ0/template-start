@@ -11,7 +11,7 @@ import { authClient } from "#/lib/auth-client";
 import { ALTCHA_HEADER } from "#/lib/auth-constants";
 import { m } from "#/paraglide/messages";
 import { describeAuthError } from "#/routes/auth/auth-errors";
-import { useCaptcha } from "#/routes/auth/hooks/use-captcha";
+import { useCaptcha } from "#/hooks/use-captcha";
 import { PASSWORD_MIN_LENGTH, signUpSchema, type SignUpValues } from "#/routes/auth/schema";
 
 /*===== Sign Up Form =====*/
