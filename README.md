@@ -15,7 +15,7 @@ English as a second language.
 
 ## Getting Started
 
-Requirements: Node 24, pnpm, Docker (for the dev services), Go 1.26+ (for the error viewer).
+Requirements: Node 26, pnpm, Docker (for the dev services), Go 1.26+ (for the error viewer).
 
 ```bash
 pnpm install

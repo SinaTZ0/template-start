@@ -5,17 +5,19 @@
 # See docs/deployment.md.
 
 # ===== Base =====
-FROM node:24-slim AS base
+FROM node:26-slim AS base
 WORKDIR /app
 # pnpm at the version in package.json's `packageManager`.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-# The npm registry, for corepack's download of pnpm and for pnpm's of the packages: `NPM_REGISTRY` in .env, a mirror
-# for a server that can't reach registry.npmjs.org (docs/deployment.md → Package Registries). Empty uses npm's. pnpm
-# reads `pnpm_config_registry` (not `npm_config_registry`), with the trailing slash.
+# The npm registry, for npm's download of corepack, corepack's of pnpm and pnpm's of the packages: `NPM_REGISTRY` in
+# .env, a mirror for a server that can't reach registry.npmjs.org (docs/deployment.md → Package Registries). Empty uses
+# npm's. pnpm reads `pnpm_config_registry` (not `npm_config_registry`), with the trailing slash.
 ARG NPM_REGISTRY=""
 ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmjs.org} \
+    npm_config_registry=${NPM_REGISTRY:-https://registry.npmjs.org}/ \
     pnpm_config_registry=${NPM_REGISTRY:-https://registry.npmjs.org}/
-RUN corepack enable
+# Node stopped bundling corepack in v25, so it comes from npm, pinned like any other tool.
+RUN npm install --global corepack@0.36.0 && corepack enable
 
 # ===== Dependencies =====
 FROM base AS deps
@@ -40,11 +42,11 @@ RUN pnpm build
 # image has no TypeScript loader or `#/` alias. Packages stay imports, read from the runtime's node_modules. A new seed
 # is added to this list (docs/deployment.md → Seed).
 RUN pnpm exec esbuild src/db/seed-notes.ts --bundle \
-    --platform=node --format=esm --target=node24 --packages=external --sourcemap --outdir=/app/deploy-dist \
+    --platform=node --format=esm --target=node26 --packages=external --sourcemap --outdir=/app/deploy-dist \
     --out-extension:.js=.mjs
 
 # ===== Runtime =====
-FROM node:24-slim AS runtime
+FROM node:26-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
