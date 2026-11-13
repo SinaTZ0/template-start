@@ -8,7 +8,9 @@ node_modules
 .nitro
 # Regenerated from messages/ by the build (docs/frontend/i18n.md).
 src/paraglide
-project.inlang/cache
+# The compiler's own cache. `project.inlang/cache/plugins` stays in: the committed inlang plugins, which the build
+# falls back to where the server can't reach jsDelivr (docs/deployment.md → Package Registries).
+project.inlang/cache/paraglide-js
 .tmp-claude
 src/routes/design_study
 .claude

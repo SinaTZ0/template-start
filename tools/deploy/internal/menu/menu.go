@@ -86,6 +86,12 @@ func Run(t *commands.Tool) error {
 			return it.run(t)
 		}
 
+		release, err := t.Lock(it.key, nil)
+		if err != nil {
+			ui.PrintError(err)
+			ui.Pause()
+			continue
+		}
 		log := t.OpenLog(it.key, nil)
 		err = it.run(t)
 		failed = ""
@@ -100,6 +106,7 @@ func Run(t *commands.Tool) error {
 			}
 		}
 		log.Close(err)
+		release()
 		ui.Pause()
 		if it.key == "update" && err == nil {
 			return t.Restart()

@@ -19,7 +19,7 @@ pre-commit:
       stage_fixed: true
     - name: i18n
       # A key missing from one locale compiles fine and shows the other language's text (docs/frontend/i18n.md).
-      glob: "messages/*.json"
+      glob: "{messages/*.json,project.inlang/settings.json}"
       run: node scripts/i18n-check.mjs
     - name: deploy-binary
       # The deploy tool is committed as a binary (docs/deployment.md → The Deploy Tool): a source change needs it rebuilt.

@@ -61,14 +61,20 @@ func main() {
 		commands.Help(ui.Err)
 		os.Exit(2)
 	}
-	// The menu keeps a log per action it runs.
+	// The menu takes the lock and keeps a log per action it runs: an open menu must not hold up cron's backup.
 	var log *runlog.Log
+	release := func() {}
 	if command != "menu" {
+		var err error
+		if release, err = t.Lock(command, args); err != nil {
+			os.Exit(exitCode(err))
+		}
 		log = t.OpenLog(command, args)
 	}
 	err := run(args)
 	code := exitCode(err)
 	log.Close(err)
+	release()
 	os.Exit(code)
 }
 

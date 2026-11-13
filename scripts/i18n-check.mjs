@@ -1,8 +1,10 @@
 // Checks the message files (`messages/<locale>.json`) for what Paraglide compiles without complaint but the site can't
 // afford: a key missing from a locale (Paraglide quietly shows the base locale's text), an empty message, and a
 // placeholder a translation uses that the Persian doesn't have (the caller passes what the Persian needs; a translation
-// may leave a value out where its grammar does without it). Run by `pnpm lint`. See docs/frontend/i18n.md.
-import { readFileSync } from "node:fs";
+// may leave a value out where its grammar does without it). It also checks that the inlang plugins are committed (see
+// Plugins below). Run by `pnpm lint`. See docs/frontend/i18n.md.
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
@@ -43,6 +45,43 @@ if (problems.length === 0) {
         if (extra.length > 0) problems.push(`${where}: {${extra.join("}, {")}} is not in the ${baseLocale} message`);
       }
     }
+  }
+}
+
+/*===== Plugins =====*/
+// The compiler downloads the plugins in `settings.json` from jsDelivr on every compile and falls back to its copy in
+// `project.inlang/cache/plugins/` when that fails. Without either it compiles no messages and still reports success.
+// So the copies are committed: the image build must not depend on a CDN the server may not reach. inlang ignores its
+// whole folder, hence `git add -f`; a plugin whose version changed gets a new file name, which is what this catches.
+
+/** The cache file name inlang gives a plugin: the 64-bit FNV-1a hash of its URL, in base 36 (`@inlang/sdk`). */
+function pluginCacheName(url) {
+  let hash = 14695981039346656037n;
+  for (const byte of new TextEncoder().encode(url)) hash = BigInt.asUintN(64, (hash ^ BigInt(byte)) * 1099511628211n);
+  return hash.toString(36);
+}
+
+/** Whether git tracks the file. True outside a repository, where there is nothing to ask. */
+function isTracked(path) {
+  try {
+    execFileSync("git", ["rev-parse", "--git-dir"], { cwd: root, stdio: "ignore" });
+  } catch {
+    return true;
+  }
+  try {
+    execFileSync("git", ["ls-files", "--error-unmatch", path], { cwd: root, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+for (const url of settings.modules ?? []) {
+  const path = `project.inlang/cache/plugins/${pluginCacheName(url)}`;
+  if (!existsSync(join(root, path))) {
+    problems.push(`${path}: missing, the copy of ${url}. Run pnpm i18n:compile online, then git add -f ${path}`);
+  } else if (!isTracked(path)) {
+    problems.push(`${path}: not committed, the copy of ${url}. Run git add -f ${path}`);
   }
 }
 

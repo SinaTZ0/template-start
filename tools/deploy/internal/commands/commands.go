@@ -11,6 +11,7 @@ import (
 
 	"deploy/internal/envfile"
 	"deploy/internal/interrupt"
+	"deploy/internal/lock"
 	"deploy/internal/project"
 	"deploy/internal/runlog"
 	"deploy/internal/stack"
@@ -45,6 +46,16 @@ func (t *Tool) OpenLog(command string, args []string) *runlog.Log {
 		return nil
 	}
 	return runlog.Open(t.P.Root, command, args)
+}
+
+// Lock takes the checkout's lock (package lock) for a command that changes something, and returns what releases it.
+// Status, Logs and `env --check` only look, and may run beside anything. Outside a checkout there's nothing to lock.
+func (t *Tool) Lock(command string, args []string) (release func(), err error) {
+	onlyLooks := command == "status" || command == "logs" || (command == "env" && len(args) == 1 && args[0] == "--check")
+	if onlyLooks || !t.P.IsCheckout() {
+		return func() {}, nil
+	}
+	return lock.Acquire(t.P.Root, command)
 }
 
 func (t *Tool) requireSetUp() error {

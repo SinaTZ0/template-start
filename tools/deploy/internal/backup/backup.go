@@ -159,9 +159,20 @@ func DB(s *stack.Stack, dir, stamp, suffix string) (string, error) {
 	return path, nil
 }
 
-// RestoreDB replaces the database with a dump. A dump of the current one is taken first; the app is stopped while the
-// dump loads, so nothing writes in between, and `--single-transaction` makes a failed restore roll back to the
-// database as it was.
+// The dump loads into restoreDB, which then takes the live database's name; replacedDB is the live one on its way out.
+const (
+	liveDB     = "app"
+	restoreDB  = "app_restore"
+	replacedDB = "app_replaced"
+)
+
+// RestoreDB replaces the database with a dump. A dump of the current one is taken first, and the app is stopped while
+// the dump loads, so nothing writes in between.
+//
+// The dump loads into a new, empty database that then takes the live one's name. Loading it over the live database
+// (`pg_restore --clean`) only drops what the dump itself holds: a table a later migration added would stay, next to a
+// migration history that says it was never made, and the next deploy would fail on "already exists". A restore that
+// fails leaves the live database untouched.
 func RestoreDB(s *stack.Stack, file, dir string) error {
 	ui.Step("Backing up the current database first")
 	if _, err := DB(s, dir, Stamp(), "-pre-restore"); err != nil {
@@ -177,19 +188,32 @@ func RestoreDB(s *stack.Stack, file, dir string) error {
 	}
 	defer in.Close()
 	restoreErr := ui.Spin("Restoring "+filepath.Base(file), func(stderr io.Writer) error {
-		cmd := s.Command(nil, "exec", "-T", "db", "pg_restore", "-U", "app", "-d", "app", "--clean", "--if-exists",
-			"--no-owner", "--single-transaction")
+		// Left behind only by a restore that was killed part-way.
+		if err := psql(s, stderr, dropDB(restoreDB), dropDB(replacedDB), "CREATE DATABASE "+restoreDB); err != nil {
+			return err
+		}
+		cmd := s.Command(nil, "exec", "-T", "db", "pg_restore", "-U", "app", "-d", restoreDB, "--no-owner",
+			"--single-transaction")
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = in, stderr, stderr
-		return cmd.Run()
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+		// A database can't be renamed while anyone is connected to it (the database browser, a forgotten psql). One
+		// statement list is one transaction: both names change, or neither.
+		return psql(s, stderr,
+			"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '"+liveDB+"' AND pid <> pg_backend_pid(); "+
+				"ALTER DATABASE "+liveDB+" RENAME TO "+replacedDB+"; "+
+				"ALTER DATABASE "+restoreDB+" RENAME TO "+liveDB)
 	})
-	// Started again even after Ctrl-C: a stopped app is worse than a restore given up on.
+	// Cleaned up and started again even after Ctrl-C: a stopped app is worse than a restore given up on.
 	interrupt.Reset()
+	_ = psql(s, io.Discard, dropDB(restoreDB), dropDB(replacedDB))
 	ui.Step("Starting the app")
 	if err := s.Run("start", "app"); err != nil {
 		return err
 	}
 	if restoreErr != nil {
-		return ui.Fail("The restore failed and was rolled back: the database is as it was, and the app is running.")
+		return ui.Fail("The restore failed (see above): the database is as it was, and the app is running.")
 	}
 	if err := ui.Spin("Waiting for the app to turn healthy", func(io.Writer) error {
 		return s.WaitHealthy("app", 180*time.Second)
@@ -198,6 +222,23 @@ func RestoreDB(s *stack.Stack, file, dir string) error {
 	}
 	ui.OK("Database restored from %s", filepath.Base(file))
 	return nil
+}
+
+func dropDB(name string) string { return "DROP DATABASE IF EXISTS " + name + " WITH (FORCE)" }
+
+// psql runs statements against the server's `postgres` database, since the ones here create, rename and drop the
+// app's own. Each statement is its own transaction (`DROP DATABASE` refuses to run inside one), and the first that
+// fails stops the rest.
+func psql(s *stack.Stack, stderr io.Writer, statements ...string) error {
+	// Without the notices ("database does not exist, skipping"), which would read as something having gone wrong.
+	args := []string{"exec", "-T", "-e", "PGOPTIONS=--client-min-messages=warning", "db", "psql", "-U", "app", "-d",
+		"postgres", "-q", "-v", "ON_ERROR_STOP=1"}
+	for _, statement := range statements {
+		args = append(args, "-c", statement)
+	}
+	cmd := s.Command(nil, args...)
+	cmd.Stdout, cmd.Stderr = io.Discard, stderr
+	return cmd.Run()
 }
 
 /*===== Media =====*/

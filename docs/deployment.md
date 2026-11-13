@@ -110,6 +110,12 @@ database browser's password is shown on screen but never written to a log. While
 print to the log and the terminal through a pipe, so Docker and git show plain lines instead of their redrawn
 progress.
 
+**One action at a time.** An action that changes something holds a lock on the checkout (`deploy/logs/.lock`) until
+it ends, so cron's backup can't start in the middle of an Update, and a second terminal can't restore while the first
+one deploys. The second action stops at once and names the first: run it again when that one is done. Status, Logs
+and `env --check` only look, so they run beside anything, and an open menu holds the lock only while one of its
+actions runs. The lock ends with the process, so a tool that crashed or was killed leaves nothing to clean up.
+
 **How it's built.** The tool is a Go program in `tools/deploy/` (one package per area: settings, `.env`, the stack,
 certificates, backups, the status lines, the menu). It's built into a static binary per architecture,
 `deploy/bin/linux-amd64/deploy`, which is committed, so the server gets it with `git clone` and `git pull` and needs
@@ -258,6 +264,10 @@ For one that doesn't answer, it offers a mirror and writes it to `.env`:
 | `NPM_REGISTRY` | `https://registry.npmmirror.com` |
 | `GOPROXY`      | `https://goproxy.cn`             |
 
+The build never needs jsDelivr, though `project.inlang/settings.json` names two inlang plugins there: the compiler
+tries the CDN first and falls back to the copies committed in `project.inlang/cache/plugins/`
+(`docs/frontend/i18n.md`).
+
 Both mirrors are run by third parties in China, so the tool asks instead of switching by itself. Packages are still
 checked against the hashes in `pnpm-lock.yaml` and `go.sum`, so a mirror can't swap one. Without a terminal (cron), it
 stops before the build and names the setting to add. Once a setting has a value, it isn't checked again: to keep the
@@ -296,7 +306,8 @@ both have succeeded; expect a few seconds of downtime while the app container is
 3. Start a second app container on the new image beside the old one, and wait for it to turn healthy. Caddy proxies
    to `app`, which Docker's DNS resolves to both, and retries a request that can't connect for up to 5 seconds
    (`lb_try_duration` in `deploy/Caddyfile`).
-4. Stop and remove the old container. It finishes what it's serving on SIGTERM.
+4. Stop and remove the old container. On SIGTERM it stops taking requests and gets 25 seconds to finish the ones it's
+   serving (`SERVER_SHUTDOWN_TIMEOUT` in `compose.prod.yaml`; Docker kills it after `stop_grace_period`, 30 seconds).
 
 A new container that doesn't turn healthy within 3 minutes is removed, its last log lines are printed, and the old one
 keeps serving. The migrations it ran stay applied; the pre-update dump has the database from before them. When the app
@@ -372,7 +383,9 @@ version undoes a roll back.
 **The database.** The old version runs on the database as the newer version's migrations left it. That works as long
 as they only added things (the two-deploy rule in Database Changes below). When it doesn't, the tool offers the dump
 Update took when that version was replaced (the oldest `db-*-pre-update.dump` newer than its image) and restores it
-after you type the domain, the same as Restore. Everything written since that dump is lost, so it's off by default.
+after you type the domain, the same as Restore: the database becomes exactly what the dump holds, without the tables
+and the migration history the newer version added, so the next Update applies those migrations again. Everything
+written since that dump is lost, so it's off by default.
 Without a terminal it only prints the restore command.
 
 ## Settings (.env)
@@ -522,16 +535,22 @@ The backups stay on the server: copy them off it too (another machine, or object
 them with it.
 
 **Restore.** Choose Restore, pick a backup, and type the domain to confirm. A database restore first dumps the current
-database (`-pre-restore`), stops the app, loads the dump in one transaction (a failure leaves the database as it was)
-and starts the app again. A media restore offers to back up the current media first, then replaces the volume's
+database (`-pre-restore`), stops the app, loads the dump into a new, empty database, gives that one the live
+database's name and starts the app again. The result is exactly what the dump holds: a table added after the dump was
+taken is gone, with its line in the migration history, so the next deploy creates it again. A restore that fails
+leaves the database as it was. While the dump loads, both copies are on the disk. A media restore offers to back up the current media first, then replaces the volume's
 contents. Without a terminal: `deploy/deploy.sh restore <file> --confirm <domain>`.
 
 By hand:
 
 ```bash
 docker compose -f compose.prod.yaml exec -T db pg_dump -U app -Fc app > "backup-$(date +%F).dump"
-# restore (drops and recreates every object in the dump):
-docker compose -f compose.prod.yaml exec -T db pg_restore -U app -d app --clean --if-exists < backup.dump
+# restore, with the app stopped: an empty database first, so nothing newer than the dump is left in it
+docker compose -f compose.prod.yaml stop app
+docker compose -f compose.prod.yaml exec -T db psql -U app -d postgres \
+  -c "DROP DATABASE app WITH (FORCE)" -c "CREATE DATABASE app"
+docker compose -f compose.prod.yaml exec -T db pg_restore -U app -d app --no-owner < backup.dump
+docker compose -f compose.prod.yaml start app
 ```
 
 ## Database Browser
