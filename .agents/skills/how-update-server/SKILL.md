@@ -6,7 +6,7 @@ description: How a change in this repo reaches the production server, and writin
 # How Update Server
 
 `deploy/deploy.sh update` on the server pulls `main`, rebuilds the image, runs pending migrations, swaps the app
-without downtime, then **runs the deploy steps** the server hasn't run yet (`docs/deployment.md` → Deploy Steps). Code
+without downtime, then **runs the deploy steps** the server hasn't run yet (`docs/deploy-tool.md` → Deploy Steps). Code
 and schema need nothing more. Data the database already holds (whatever a seed loaded) only changes through a step: a
 file in `deploy/steps/` that the commit adds. This skill decides whether a commit needs one and writes it.
 

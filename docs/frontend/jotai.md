@@ -55,7 +55,7 @@ export const removeCartItemAtom = atom(null, (get, set, itemId: string) => {
 Atoms follow the same colocation rule as every other piece of code:
 
 - An atom used by one route lives in that route's `atoms.ts` (`src/routes/<slice>/atoms.ts`).
-- Move it to `src/atoms/<domain>.ts` only when a second route needs it. Never import atoms from another route's slice.
+- Move it to `src/atoms/<domain>.ts` only when a second route needs it (the folder doesn't exist until then). Never import atoms from another route's slice.
 - Import atoms directly from the file that defines them. Don't add barrel files.
 
 ## Reading and Writing

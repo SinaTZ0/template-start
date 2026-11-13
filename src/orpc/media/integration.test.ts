@@ -9,7 +9,7 @@ import { findOrphanedMediaIds } from "#/orpc/media/repository";
 import { attachMedia, MEDIA_ATTACH_WINDOW_MS, ORPHANED_MEDIA_AGE_MS } from "#/orpc/media/service";
 
 /*===== Orphaned Media =====*/
-// Runs against the real database (`DATABASE_URL`, after `pnpm db:push`). Only rows and the scan are tested: the
+// Runs against the real database (`DATABASE_URL`, after `pnpm db:migrate`). Only rows and the scan are tested: the
 // cleanup's bucket deletes go through `deleteMedia`, and running the cleanup itself would delete the database's other
 // orphans too.
 

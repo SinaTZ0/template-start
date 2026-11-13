@@ -5,16 +5,16 @@ the route-side rules. Upstream page: `https://orpc.dev/docs/adapters/tanstack-st
 
 ## Mounting the Handler
 
-A catch-all server route mounts the RPC handler. The handler itself lives in `app/orpc/handler.server.ts`; the route
+A catch-all server route mounts the RPC handler. The handler itself lives in `src/orpc/handler.server.ts`; the route
 only adapts Start's `request` to it.
 
 ```ts
-// app/routes.ts (virtual file routes)
+// src/routes.ts (virtual file routes)
 route("/rpc/$", "rpc/rpc.ts"),
 ```
 
 ```ts
-// app/routes/rpc/rpc.ts: a server route, no component
+// src/routes/rpc/rpc.ts: a server route, no component
 import { createFileRoute } from "@tanstack/react-router";
 
 import { rpcHandler } from "~/orpc/handler.server";
@@ -37,7 +37,7 @@ export const Route = createFileRoute("/rpc/$")({
 
 ## One Client for Loaders and the Browser
 
-Route loaders are isomorphic, so the client is too (`app/orpc/client.ts`):
+Route loaders are isomorphic, so the client is too (`src/orpc/client.ts`):
 
 ```ts
 const getClient = createIsomorphicFn()
@@ -74,7 +74,7 @@ Consequences of the in-process server branch:
 
 - Mutations use `useMutation(orpc.<feature>.<procedure>.mutationOptions())` and then invalidate the keys they change:
   `queryClient.invalidateQueries({ queryKey: orpc.note.list.key() })`. Never hand-write `fetch` calls to `/rpc`.
-- The `QueryClient` is created in `getRouter()` (`app/router.tsx`) and provided by the SSR Query integration; don't
+- The `QueryClient` is created in `getRouter()` (`src/router.tsx`) and provided by the SSR Query integration; don't
   add another `QueryClientProvider`.
 - Forms: show the server's per-field messages from typed errors (`isDefinedError` / `safe`) next to their fields.
 
@@ -83,4 +83,4 @@ Consequences of the in-process server branch:
 Start's import protection fails the build when browser-reachable code imports a `*.server.ts` module outside a server
 function's handler or an isomorphic function's `.server()` branch. Keep the implementer, router, handler, services,
 and repositories server-only; components may import only contracts, `constants.ts`, `*.errors.ts`, and
-`app/orpc/client.ts`. Type-only imports (`import type`) are erased and safe.
+`src/orpc/client.ts`. Type-only imports (`import type`) are erased and safe.

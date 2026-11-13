@@ -2,7 +2,7 @@
 
 Commands a commit needs on the server after its code is deployed, such as loading edited seed data again. Every
 deploy (`deploy/deploy.sh update` or `apply`) runs the steps the server's ledger hasn't recorded, in name order, and
-stops at the first that fails. The rules are in `docs/deployment.md` → Deploy Steps.
+stops at the first that fails. How the tool runs them is in `docs/deploy-tool.md` → Deploy Steps.
 
 A step is a file named `<yyyymmdd>-<hhmm>-<what>.md`, added in the commit that needs it:
 

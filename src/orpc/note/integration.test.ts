@@ -9,7 +9,7 @@ import { NOTE_PAGE_SIZE } from "#/orpc/note/constants";
 import { addNote, editNote, listNotes, readNote, removeNote } from "#/orpc/note/service";
 
 /*===== Notes =====*/
-// Runs against the real database (`DATABASE_URL`, after `pnpm db:push`): ownership is enforced by the queries, which
+// Runs against the real database (`DATABASE_URL`, after `pnpm db:migrate`): ownership is enforced by the queries, which
 // only a real table shows. Every row is created per run and removed afterwards.
 
 const runId = randomUUID().slice(0, 8);

@@ -6,7 +6,7 @@ import { note, user } from "#/db/schema";
 /*===== Seed Notes =====*/
 // Loads a set of sample notes, so a new server (or a fresh local database) has something on /notes. It's the note
 // feature's seed, the worked example of a seed the deploy tool runs (`deploy/deploy.sh seed notes`, docs/deployment.md
-// → Seed): replace it with the project's own once the note feature is deleted.
+// → First Deploy, Seed): replace it with the project's own once the note feature is deleted.
 //
 //   pnpm db:seed:notes                      the first admin's notes (`pnpm db:seed`, or `deploy/deploy.sh admin`)
 //   pnpm db:seed:notes --owner a@b.c        someone else's

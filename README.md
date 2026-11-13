@@ -19,8 +19,8 @@ English as a second language.
 Requirements: Node 26, pnpm, Docker (for the dev services), Go 1.26+ (for the error viewer).
 
 ```bash
-pnpm install
-cp .env.example .env          # then set the two secrets
+pnpm install                  # in a git repository (`git init` first), so the git hooks are installed
+cp .env.example .env          # then set BETTER_AUTH_SECRET and ALTCHA_HMAC_KEY
 pnpm services                 # Postgres on 5432, SeaweedFS (S3) on 8333, media bucket
 pnpm db:migrate               # create the tables
 pnpm db:seed                  # optional: the admin from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
@@ -29,27 +29,37 @@ pnpm dev                      # http://localhost:5173
 pnpm errors                   # optional, in a second terminal: error viewer on http://localhost:8000
 ```
 
-Generate the secrets with `openssl rand -base64 32`. `pnpm install` also installs the git hooks: staged files are
-linted and formatted before each commit, and commit messages must follow
-[Conventional Commits](https://www.conventionalcommits.org) (`feat: add note search`, `fix(auth): …`).
+- **Secrets.** Generate each of the two with `openssl rand -base64 32`.
+- **Signing in.** Sign up at `/auth`, or sign in as the seeded admin with `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`
+  from `.env`.
+- **Error viewer.** The app reports to it only when `.env` has `SENTRY_DSN=http://developmentkey@localhost:8000/1`
+  (restart `pnpm dev` after setting it). The viewer's password is `admin`.
+- **Git hooks.** `pnpm install` installs them: staged files are linted and formatted before each commit, and commit
+  messages must follow [Conventional Commits](https://www.conventionalcommits.org) (`feat: add note search`,
+  `fix(auth): …`). Outside a git repository they are skipped; run `pnpm install` again after `git init`.
+- **Browser tests.** `pnpm test:e2e` needs Playwright's browser once: `pnpm exec playwright install chromium`.
 
 ## Scripts
 
-| Script                            | What it does                                     |
-| --------------------------------- | ------------------------------------------------ |
-| `pnpm dev` / `build` / `start`    | Dev server, production build, production server  |
-| `pnpm lint` / `typecheck`         | oxlint + message check; compile, routes + tsc    |
-| `pnpm lint:tw`                    | Lists non-canonical Tailwind classes (advisory)  |
-| `pnpm i18n:compile`               | Compiles `messages/` into `src/paraglide/`       |
-| `pnpm format`                     | Prettier (sorts Tailwind classes)                |
-| `pnpm test`                       | Vitest (integration tests need the database)     |
-| `pnpm test:e2e`                   | Playwright against the production build          |
-| `pnpm storybook`                  | Component previews on port 6006                  |
-| `pnpm db:generate` / `db:migrate` | Record a schema change as a migration; apply it  |
-| `pnpm check`                      | typecheck, lint, format check and tests, as CI   |
-| `pnpm services` / `services:down` | Starts `compose.dev.yaml` and creates the bucket |
-| `pnpm db:reset`                   | Empties the dev database and applies migrations  |
-| `pnpm errors`                     | The error viewer on port 8000, with `go run`     |
+| Script                                 | What it does                                                          |
+| -------------------------------------- | --------------------------------------------------------------------- |
+| `pnpm dev` / `build` / `start`         | Dev server, production build, production server                       |
+| `pnpm lint` / `lint:fix` / `typecheck` | oxlint + message check; its automatic fixes; compile, routes + tsc    |
+| `pnpm lint:tw`                         | Lists non-canonical Tailwind classes (advisory)                       |
+| `pnpm i18n:compile`                    | Compiles `messages/` into `src/paraglide/`                            |
+| `pnpm format` / `format:check`         | Prettier (sorts Tailwind classes); the check CI runs                  |
+| `pnpm test` / `test:watch`             | Vitest (integration tests need the database)                          |
+| `pnpm test:e2e`                        | Playwright against the production build                               |
+| `pnpm check`                           | typecheck, lint, format check and tests, as CI                        |
+| `pnpm storybook`                       | Component previews on port 6006                                       |
+| `pnpm services` / `services:down`      | Starts `compose.dev.yaml` and creates the bucket; stops it            |
+| `pnpm db:generate` / `db:migrate`      | Record a schema change as a migration; apply it                       |
+| `pnpm db:check` / `db:studio`          | Checks the migrations for conflicts; Drizzle Studio                   |
+| `pnpm db:reset`                        | Empties the dev database and applies the migrations                   |
+| `pnpm db:seed` / `db:seed:notes`       | The first admin; sample notes for that admin                          |
+| `pnpm db:push`                         | Schema straight into a throwaway database, never one `db:migrate` ran |
+| `pnpm errors`                          | The error viewer on port 8000, with `go run`                          |
+| `pnpm deploy:build`                    | Rebuilds the deploy tool's binary after a change in `tools/deploy/`   |
 
 ## Layout
 
@@ -69,7 +79,7 @@ src/
 messages/, project.inlang/         the text per locale; Paraglide settings and config
 drizzle/                           SQL migrations (generated, committed)
 deploy/                            deploy.sh (the deploy tool's binary in bin/), Caddyfile, production jobs, steps/
-tools/deploy/, tools/error-viewer/ the deploy tool's Go source (docs/deployment.md), the error viewer
+tools/deploy/, tools/error-viewer/ the deploy tool's Go source (docs/deploy-tool.md), the error viewer
 docs/                              start at backend-flow.md or frontend-flow.md
 ```
 
@@ -87,14 +97,37 @@ docs/                              start at backend-flow.md or frontend-flow.md
 
 2. Rename: `name` in `package.json`, `compose.dev.yaml` and `compose.prod.yaml` (and `image` there), the bucket name in
    `.env.example` and `.env.production.example`, the `site_name` and `site_description` messages in `messages/*.json`,
-   and a `SITE_IMAGE` for link previews in `src/lib/site.ts`. Keep English, or change the languages
+   and the image `siteImage()` returns for link previews in `src/lib/site.ts`. Keep English, or change the languages
    (`docs/frontend/i18n.md` → Adding or Removing a Language).
 3. Design the look. Everything that ships (colours, type styles, radius and shadows in `src/styles.css`, the primitives'
    styles) is a neutral placeholder. Design the homepage, then give it to an agent with
    `docs/customize-template.md`, which turns it into app-identity, tokens, primitives, header, footer and the home
    route.
 4. Rewrite this README and the first paragraph of `CLAUDE.md` for the project.
-5. Build the first real feature by copying the shape of `note`, then delete the example (`src/orpc/note/`,
-   `src/routes/notes*`, `src/components/shared/note-form/`, the `note` table, its entries in `contract.ts`, `router.ts` and `routes.ts`). Before the first
-   deploy, replace `drizzle/` with one fresh migration: delete the folder and run `pnpm db:generate --name init`.
+5. Build the first real feature by copying the shape of `note`, then delete the example (Deleting the Note Example
+   below). Before the first deploy, replace `drizzle/` with one fresh migration: delete the folder and run
+   `pnpm db:generate --name init`.
 6. Deploy with `compose.prod.yaml` and go through "Before Going Live" in `docs/deployment.md`.
+
+## Deleting the Note Example
+
+Once the project has a feature of its own, remove `note` everywhere it reaches. `pnpm typecheck` and `pnpm lint` find
+most of what is left behind; the deploy tool and the docs they can't see.
+
+- **API:** `src/orpc/note/`, and its entries in `src/orpc/contract.ts` and `src/orpc/router.ts`.
+- **Pages:** `src/routes/notes/`, `src/routes/notes_noteId/` and `src/components/shared/note-form/`, and their two
+  routes in `src/routes.ts`. `src/routes/notes_layout/` is the signed-in guard: keep it, renamed, for the project's
+  own signed-in pages.
+- **Links to `/notes`:** `ROLE_HOME` in `src/lib/viewer.ts` (where sign-in lands), the navigation in
+  `src/components/shared/site-header/site-header.tsx`, and the button in `src/routes/home/home.tsx`.
+- **Database:** the `note` table in `src/db/schema.ts`, with a migration that drops it (or the fresh `init` migration
+  of step 5).
+- **Seed:** `src/db/seed-notes.ts`, the `db:seed:notes` script, its file in the Dockerfile's esbuild line, its path in
+  `deploy/steps/needs-step.txt`, and the `notes` part of the deploy tool (`Seed`, `checkSeed` and `seedNotes` in
+  `tools/deploy/internal/commands/misc.go`, and the help text), followed by `pnpm deploy:build`. A project with no
+  seed of its own removes the esbuild step and the `COPY` of its output from the Dockerfile.
+- **Messages:** every `notes_*` and `note_error_*` key, `nav_notes` and `home_go_to_notes`, in each file of
+  `messages/`.
+- **Tests:** `e2e/locale.spec.ts` clicks the Notes link; point it at a guarded page of the project.
+- **Docs:** the rule docs name `note` files as their examples. Point them at the project's feature as it replaces
+  them, along with the paragraph about `note` in `CLAUDE.md`.

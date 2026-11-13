@@ -44,7 +44,7 @@ All processing uses [sharp](https://sharp.pixelplumbing.com/) (`processing.serve
 
 1. **Limits:** at most **10 MB** per file and **40 megapixels**. Larger files are rejected before decoding.
 2. **Check the real type** with sharp, never the file name or `Content-Type`. Accept `jpeg`, `png` and `webp`; reject
-   everything else (HEIC included) with a Persian message.
+   everything else (HEIC included) with a message in the request's language.
 3. **Rotate** by the EXIF orientation, then **drop all metadata**: phone photos carry GPS location.
 4. **Convert to sRGB** and **flatten transparency** onto `FLATTEN_BACKGROUND`, except avatars.
 5. **Encode WebP** at quality 80 (`thumb`: 72), `effort: 4`.

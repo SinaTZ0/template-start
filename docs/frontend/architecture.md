@@ -31,7 +31,7 @@ src/
     shared/                 # app-made UI shared by multiple routes
     ui/                     # shadcn source, reference only
   hooks/                    # hooks shared by multiple routes
-  atoms/                    # Jotai atoms shared by multiple routes
+  atoms/                    # Jotai atoms shared by multiple routes (create it with the first one)
   lib/                      # shared helpers (browser-safe, or *.server.ts)
   orpc/client.ts            # isomorphic API client and query utilities (see ./data-loading.md)
   paraglide/                # generated message functions and runtime; never edit (see ./i18n.md)

@@ -1,6 +1,6 @@
 ---
 name: orpc
-description: Build typesafe APIs with oRPC v2 (beta) — contracts, implementers, procedures, routers, middleware, context, typesafe errors, metadata, RPC handler/link, server-side clients, TanStack Query utilities, plugins, and helpers. Use when adding or changing anything under `app/orpc/`, mounting the RPC handler in TanStack Start, calling procedures from route loaders or the browser, or when code imports from `@orpc/*`.
+description: Build typesafe APIs with oRPC v2 (beta) — contracts, implementers, procedures, routers, middleware, context, typesafe errors, metadata, RPC handler/link, server-side clients, TanStack Query utilities, plugins, and helpers. Use when adding or changing anything under `src/orpc/`, mounting the RPC handler in TanStack Start, calling procedures from route loaders or the browser, or when code imports from `@orpc/*`.
 license: MIT
 ---
 
@@ -13,7 +13,7 @@ differently, so never write oRPC code from memory: check it against the v2 docs 
 ## Before Writing Code
 
 1. **Read the project architecture.** `docs/backend-flow.md` gives the steps for adding a feature.
-   `docs/backend/architecture.md` defines the contract-first `app/orpc/` layout, layers, error rules, middleware
+   `docs/backend/architecture.md` defines the contract-first `src/orpc/` layout, layers, error rules, middleware
    placement, and naming. `docs/frontend/architecture.md` defines how routes consume the API. Those docs win over
    generic oRPC examples. This skill covers the library API only.
 2. **Check the installed version.** Read `version` in `node_modules/@orpc/server/package.json`. All `@orpc/*`
@@ -38,12 +38,12 @@ Never use `v1.orpc.dev` or docs for `@orpc/*` versions below 2.
 
 ## Installing Packages
 
-Always install with the `@beta` tag, or npm resolves v1:
+Always install with the `@beta` tag, or the registry resolves v1:
 
 ```sh
-npm install @orpc/contract@beta @orpc/server@beta @orpc/client@beta
-npm install @orpc/tanstack-query@beta @tanstack/react-query   # TanStack Query utilities
-npm install @orpc/openapi@beta                                # only for OpenAPI handler/spec, or form-data helpers
+pnpm add @orpc/contract@beta @orpc/server@beta @orpc/client@beta
+pnpm add @orpc/tanstack-query@beta @tanstack/react-query   # TanStack Query utilities
+pnpm add @orpc/openapi@beta                                # only for OpenAPI handler/spec, or form-data helpers
 ```
 
 Zod is already a dependency. oRPC v2 accepts Zod v4 schemas directly through Standard Schema; `@orpc/zod` is only
@@ -80,5 +80,5 @@ All paths are relative to `https://orpc.dev/docs/`.
 
 ## Verify
 
-After changing oRPC code, run `npm run typecheck`. Contract/implementer mismatches, missing router keys, and
-undeclared errors surface there, not at runtime. Then run `npm run lint`.
+After changing oRPC code, run `pnpm typecheck`. Contract/implementer mismatches, missing router keys, and
+undeclared errors surface there, not at runtime. Then run `pnpm lint`.

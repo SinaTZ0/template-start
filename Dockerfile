@@ -43,7 +43,7 @@ COPY . .
 RUN pnpm build
 # The seeds `deploy/deploy.sh seed` runs in a one-off container, each as one plain-JavaScript file, since the runtime
 # image has no TypeScript loader or `#/` alias. Packages stay imports, read from the runtime's node_modules. A new seed
-# is added to this list (docs/deployment.md → Seed).
+# is added to this list (docs/deployment.md → First Deploy, Seed).
 RUN pnpm exec esbuild src/db/seed-notes.ts --bundle \
     --platform=node --format=esm --target=node26 --packages=external --sourcemap --outdir=/app/deploy-dist \
     --out-extension:.js=.mjs

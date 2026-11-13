@@ -1,6 +1,6 @@
 # Repository Instructions
 
-These instructions apply to the entire repository unless overridden by a more specific `AGENTS.md` in a subdirectory.
+These instructions apply to the entire repository.
 
 This is a TanStack Start application (TanStack Router + TanStack Query, built by Vite and served by Nitro), started from the project template. The application is Persian first (right-to-left), with English (left-to-right) as a second language; every text a person reads is a Paraglide message (`docs/frontend/i18n.md`). Its look and feel is defined in `docs/frontend/app-identity.md`.
 
@@ -8,7 +8,7 @@ The docs have two entry points. Start backend work at `docs/backend-flow.md` and
 
 - Backend: contract-first oRPC, Better-Auth email + password with an Altcha sign-up captcha, per-address rate limits on the API and auth endpoints (`docs/backend/architecture.md` → Rate limiting), Drizzle + Postgres, image uploads to S3-compatible storage (`docs/backend/media.md`), and pino logging with per-request timing, plus error and slow-request reports to the error viewer, a small Go service in `tools/error-viewer/` (`docs/backend/logging.md`).
 - Frontend: flat route slices and primitives (`docs/frontend/architecture.md`, `docs/frontend/components.md`), TanStack Query as the one data cache, filled by route loaders and preloaded on hover (`docs/frontend/data-loading.md`), typed search params (`docs/frontend/search-params.md`), page meta through `pageMeta` (`docs/frontend/seo.md`), and Persian and English messages through Paraglide JS, with the language in the URL (`/notes`, `/en/notes`; `docs/frontend/i18n.md`).
-- Production: Docker Compose with Caddy in front, migrations applied before each deploy, and a `/healthz` check (`docs/deployment.md`).
+- Production: Docker Compose with Caddy in front, migrations applied before each deploy, and a `/healthz` check (`docs/deployment.md`), run on the server by `deploy/deploy.sh` (`docs/deploy-tool.md`).
 - The `note` feature (`src/orpc/note/`, `src/routes/notes/`, `src/routes/notes_noteId/`, `src/components/shared/note-form/`) is the template's worked example. Copy its shape for new features; delete it once the project has its own.
 
 ## Working Directory

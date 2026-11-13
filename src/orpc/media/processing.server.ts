@@ -47,7 +47,7 @@ export type ProcessImageResult = { kind: "success"; image: ProcessedImage } | { 
  * orientation and every piece of metadata is dropped (phone photos carry GPS), converted to sRGB and, except for
  * avatars, flattened onto `FLATTEN_BACKGROUND`.
  *
- * @returns `invalid` with a Persian message when the file is too big, not a JPEG, PNG or WebP (HEIC included), or
+ * @returns `invalid` with a message in the request's language when the file is too big, not a JPEG, PNG or WebP (HEIC included), or
  * can't be decoded.
  */
 export async function processImage({ file, kind }: { file: File; kind: MediaKind }): Promise<ProcessImageResult> {

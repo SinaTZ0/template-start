@@ -198,6 +198,30 @@ return { id: result.id };
   therefore checks the origin and a rate limit first, and caps the body at 1 MB. A procedure that takes a file is
   listed in `UPLOAD_PATHS` (`src/orpc/handler.server.ts`), which gives it the upload size and a stricter limit.
 
+#### Roles and blocked accounts
+
+A role is a value of `USER_ROLES` and a status a value of `USER_STATUSES` (`src/lib/user-constants.ts`), both stored
+as text on `user`, so neither needs a migration. Sign-up can't set them (`input: false` in `auth.server.ts`): everyone
+starts as an active `user`.
+
+A new role touches:
+
+1. `USER_ROLES`, which is its type.
+2. `ROLE_HOME` (`src/lib/viewer.ts`): where the role lands after sign-in. The type makes this one required.
+3. The layout guards: add it to the `ROLES` of every layout whose pages it may open (`notes_layout`), or give its
+   pages their own layout with their own `ROLES`.
+4. The procedures: `requireRoleMiddleware("editor", "admin")` on what the role may call, with `roleErrors` on the
+   contract. A procedure with `requireUserMiddleware` is open to every role.
+5. How an account gets it. Only the server sets a role: the seed (`src/db/seed.ts`) and the deploy tool's Make admin
+   set `admin`; any other role needs the project's own admin procedure (behind `requireRoleMiddleware("admin")`), or
+   an `update` by hand until that exists.
+
+Blocking an account is setting `user.status` to `blocked`. Nothing in the template does it yet, so until the project
+has an admin screen it is an `update` by hand (the deploy tool's database browser in production). From then on sign-in
+refuses the account, `requireUserMiddleware` answers `UNAUTHORIZED` whatever session it holds, and the next guarded
+page it opens deletes its sessions (`session.viewer`). A procedure that blocks someone should call
+`revokeUserSessions(userId)` itself, so the sessions end at once. Unblocking is setting it back to `active`.
+
 ### Rate limiting
 
 - One limiter (`src/lib/rate-limit.server.ts`) covers both the API and `/api/auth/*`, keyed by the client address
@@ -226,10 +250,14 @@ return { id: result.id };
 
 - Drizzle tables live in `src/db/schema.ts`, Better-Auth's tables included. A change to Better-Auth's user fields
   (`additionalFields` in `auth.server.ts`) needs the matching column there.
-- While building, sync the local database with `pnpm db:push`. Before committing, run
-  `pnpm db:generate --name <what-changed>`, review the SQL in `drizzle/`, and commit it with the schema change.
-  Production only runs those files. The details, including renames and changes that span two deploys, are in
+- Every schema change is a migration, locally too: run `pnpm db:generate --name <what-changed>`, review the SQL in
+  `drizzle/`, apply it with `pnpm db:migrate`, and commit it with the schema change. Production only runs those
+  files. The details, including renames and changes that span two deploys, are in
   [deployment.md](../deployment.md) → Database Changes.
+- To change a migration that isn't committed yet, put `drizzle/` back to the last commit
+  (`git restore drizzle && git clean -f drizzle`), generate again and run `pnpm db:reset`.
+- Don't use `pnpm db:push` on a database that `db:migrate` manages: it creates the tables without recording a
+  migration, and the next `db:migrate` fails on tables that already exist.
 - The pool (`src/db/client.server.ts`) fails a request that waits more than 5 seconds for a connection, and Postgres
   cancels a statement after 30 seconds. A job that needs longer (a report, a bulk import) sets its own
   `statement_timeout` inside its transaction (`set local`).

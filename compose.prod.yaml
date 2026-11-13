@@ -195,7 +195,7 @@ services:
     logging: *logging
 
   # ------ Database Browser ------
-  # pgweb, for emergencies (docs/deployment.md → Database Browser): full read and write access to the whole database,
+  # pgweb, for emergencies (docs/deploy-tool.md → Database Browser): full read and write access to the whole database,
   # as the app's own user. Never started by a deploy (the `tools` profile): `deploy/deploy.sh pgweb open` starts it with
   # a sign-in made for that session and its closing time, passed through the environment of that one `docker compose`
   # call, and `pgweb close` removes it. Bound to the server's loopback, so it's reached through an SSH tunnel only.

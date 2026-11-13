@@ -94,7 +94,7 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 - Its copy goes into `messages/fa.json` as written, and into the other locale files translated
   ([i18n.md](./frontend/i18n.md)). Static content data that only the homepage shows can stay in the slice until a
   procedure serves it, but its text still comes from messages.
-- Until the features behind its content exist (news, events…), keep that content as static data in the slice, in its
+- Until the features behind its content exist (a list of articles, a schedule…), keep that content as static data in the slice, in its
   own file with a comment saying which future procedure replaces it.
 - Images go in `public/` for now; uploads come later through [media.md](./backend/media.md).
 
