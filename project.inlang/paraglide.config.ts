@@ -6,6 +6,10 @@ export default defineConfig({
   outdir: "./src/paraglide",
   // Typed declarations for the generated JavaScript, so `tsc` checks message names and parameters.
   emitTsDeclarations: true,
+  // One module per locale, the layout `pnpm i18n:compile` writes too. Paraglide 3's Vite default keeps the messages in
+  // virtual modules, which its CLI can't write: a typecheck would then rewrite this folder under a running dev server.
+  // The production build overrides this in `vite.config.ts`.
+  outputStructure: "locale-modules",
 
   /*------ Locale Resolution ------*/
   // A page's language is its URL, nothing else: no cookie and no Accept-Language redirect, so a shared link and a

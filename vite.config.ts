@@ -8,14 +8,18 @@ import { defineConfig } from "vite";
 
 import { traceLayers } from "./vite-plugins/trace-layers.ts";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     // First, as the devtools plugin requires. It removes the devtools from production builds.
     devtools(),
     tailwindcss(),
     // Compiles `messages/` into `src/paraglide/` before anything imports it, and again when a message file changes.
     // Its options are in `project.inlang/paraglide.config.ts` (docs/frontend/i18n.md).
-    paraglideVitePlugin({ project: "./project.inlang" }),
+    // A build writes one module per message, so messages no page uses drop out of the bundle.
+    paraglideVitePlugin({
+      project: "./project.inlang",
+      ...(command === "build" && { outputStructure: "message-modules" as const }),
+    }),
     // Must come before `viteReact()`: it generates the route tree and compiles server functions first. The route tree
     // is declared in code (`src/routes.ts`, set in `tsr.config.json`, which `tsr generate` reads too), so route slices
     // stay flat folders (CLAUDE.md → Route Slices).
@@ -44,4 +48,4 @@ export default defineConfig({
   environments: {
     ssr: { build: { sourcemap: true } },
   },
-});
+}));
