@@ -27,6 +27,7 @@ export function ImagePicker({
   serverError?: string;
 }) {
   const inputId = useId();
+  const errorId = `${inputId}-error`;
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useMutation(orpc.media.upload.mutationOptions({ onSuccess: onChange }));
   const failure = upload.error
@@ -58,6 +59,7 @@ export function ImagePicker({
           variant="outline"
           className="self-start"
           disabled={upload.isPending}
+          aria-describedby={error ? errorId : undefined}
           onClick={() => inputRef.current?.click()}
         >
           {upload.isPending ? <Spinner data-icon="inline-start" /> : <ImageIcon data-icon="inline-start" />}
@@ -71,13 +73,15 @@ export function ImagePicker({
         type="file"
         accept={MEDIA_ACCEPTED_TYPES}
         className="sr-only"
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
           if (file) upload.mutate({ kind: "image", file });
         }}
       />
-      <FieldError>{error}</FieldError>
+      <FieldError id={errorId}>{error}</FieldError>
     </Field>
   );
 }

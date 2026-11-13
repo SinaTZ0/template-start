@@ -176,8 +176,13 @@ return { id: result.id };
   focus, so the answer is usually ready when the visitor sends. A payload works once and expires after 10 minutes, so
   a failed send needs a new solve (`start` again).
 
+  No procedure in the template is public and writes, so none uses it yet; `captcha.middleware.test.ts` shows a call
+  with and without a solution.
+
 - `requireUserMiddleware` puts the signed-in user in `context.user`; `requireRoleMiddleware(...roles)` also checks the
-  role. Declare `authErrors` (and `roleErrors`) on their contracts. A procedure with neither is public.
+  role (`note.stats` is for admins only). Declare `authErrors` (and `roleErrors`) on their contracts. A procedure with
+  neither is public. The page asks for a role's data only for that role (the notes loader reads `note.stats` for
+  admins), since the procedure answers anyone else with `FORBIDDEN`.
 - **Ownership is checked in the data layer.** A user's records are read with the owner in the query
   (`findOwnedNote({ id, ownerId })`), so another user's record looks exactly like a missing one (`NOT_FOUND`), never
   `FORBIDDEN`.
@@ -228,7 +233,16 @@ return { id: result.id };
 - The pool (`src/db/client.server.ts`) fails a request that waits more than 5 seconds for a connection, and Postgres
   cancels a statement after 30 seconds. A job that needs longer (a report, a bulk import) sets its own
   `statement_timeout` inside its transaction (`set local`).
-- Back what a query filters and sorts by with an index (`note_owner_id_created_at_idx`).
+- Back what a query filters and sorts by with an index (`note_owner_id_created_at_idx`), and index a foreign key
+  column whose parent rows get deleted (`note_image_media_id_idx`): Postgres doesn't do it for you, and clearing the
+  references would scan the table.
+- Time columns are `timestamptz(...)` (the helper at the top of `schema.ts`), never a plain `timestamp`: that type
+  keeps no zone, so `now()` and psql read and write it in the session's zone.
+- A list that can grow returns a page and a cursor, not everything (`listNotes`): the query continues after the last
+  row's sort values (`findNotesByOwner`) and reads one row more than a page to know whether another follows. A column
+  the cursor compares is stored with the precision a JavaScript `Date` holds (`note.created_at`, milliseconds).
+- A change that depends on what the row holds now reads it with `for update` in its transaction (`lockOwnedNote`,
+  before an edit swaps the note's image), so two at once can't both act on the old value.
 - A column that holds one of a fixed set of values (a status, a kind) is `text`, with the set as a `const` array in
   the feature's `constants.ts`: adding a value then needs no migration. The repository narrows what it reads with
   `oneOf({ allowed, value, what })` (`src/orpc/allowed-values.ts`), which throws on a value outside the set rather
@@ -243,7 +257,8 @@ return { id: result.id };
   failures that matter (rejection, ownership, idempotency, cleanup). Call the service directly; it takes `db` as a
   parameter, so no HTTP or session is needed.
 - Test through `createRouterClient(router, { context: { headers } })` or the RPC handler only when the behavior lives above the service: auth middleware,
-  the error shape, status codes.
+  the error shape, status codes. `src/orpc/note/access.test.ts` does it for a signed-out visitor, a blocked account
+  and the wrong role, with only the session faked, so it needs no database.
 - Each test creates its own rows with a per-run ID and deletes them afterwards, so it can run against a development
   database.
 

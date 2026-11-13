@@ -68,8 +68,8 @@ The full rules are in [data-loading.md](./data-loading.md). In short:
   files never import server-only modules. Feature data comes from oRPC procedures through
   `orpc.<feature>.<procedure>.queryOptions()`, the viewer and site origin included. There are no server functions
   (`createServerFn`). Never call the API with a hand-written `fetch`.
-- **Mutations invalidate what they change**: `useMutation(orpc.note.create.mutationOptions(...))`, then
-  `queryClient.invalidateQueries({ queryKey: orpc.note.list.key() })`. Don't patch local copies.
+- **Mutations invalidate what they change**: `useMutation(orpc.note.delete.mutationOptions(...))`, then
+  `queryClient.invalidateQueries({ queryKey: orpc.note.key() })`. Don't patch local copies.
 - **Guards** are a layout's `beforeLoad`: it loads the viewer (`orpc.session.viewer.queryOptions()`) and throws
   `redirect(...)`. What it returns becomes route context for the routes below. Procedures check auth again on their
   own.
@@ -100,13 +100,17 @@ The full rules are in [data-loading.md](./data-loading.md). In short:
 ## Forms
 
 - Forms use `react-hook-form` with `zodResolver` and the `Field` primitives (`Field`, `FieldLabel`, `FieldError`).
-- Each form has its own schema in its route's `schema.ts`, written for user experience (messages, when to validate).
+- Each form has its own schema in its route's `schema.ts` (beside the form once it is shared,
+  `note-form.schema.ts`), written for user experience (messages, when to validate).
   Do not derive it from backend validation, even when the rules currently match; update both explicitly when a
   requirement changes.
 - Shared option lists (select values, limits) are imported from the feature's browser-safe constants.
 - The server is the final authority. `describeApiFailure` (`src/lib/api-error.ts`) turns an API error into per-field
   messages, shown next to the matching fields, and a general message for the form's `FormAlert`.
 - Disable submission while pending and keep the user's input after a failure.
+- A field with an error says so to a screen reader, whichever side found it: the input gets `aria-invalid` and an
+  `aria-describedby` naming its `FieldError` (`src/components/shared/note-form/note-form.tsx`). The red border alone
+  tells it nothing.
 
 ## Components
 
@@ -115,8 +119,11 @@ The full rules are in [data-loading.md](./data-loading.md). In short:
   atoms or URL state, which keeps them reusable and easy to preview. The exception is an app-wide action with one
   meaning everywhere, through a hook in `src/hooks/` (the header's `useSignOut`, the toggle's `useTheme`).
 - Inside a route slice, loading stays in the route file. A slice component may own the mutation it triggers (the
-  note form calls `useMutation` itself) and tells the page through a callback such as `onCreated`; the page decides
+  note card calls `useMutation` itself) and tells the page through a callback such as `onDeleted`; the page decides
   which queries to invalidate.
+- A feature's form that two of its routes use moves to `src/components/shared/` with its mutation (`note-form`: the
+  list page creates with it, the note's page edits). It still takes the record and a callback through props and
+  leaves invalidation to the page.
 - Primitives and visible shared components have Storybook stories. Stories are maintained UI documentation; keep them
   in sync with the component.
 - Handle every state a user can see: loading, empty, error, and success.

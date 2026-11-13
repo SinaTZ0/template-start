@@ -34,13 +34,15 @@ only run in the browser uses `createClientOnlyFn` (see `src/lib/error-reporting.
 The loader puts the query in the cache; the component reads the same options:
 
 ```tsx
-export const Route = createFileRoute("/_site-layout/_notes-layout/notes")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(orpc.note.list.queryOptions()),
-  component: NotesPage,
+export const Route = createFileRoute("/_site-layout/_notes-layout/notes/$noteId")({
+  loader: ({ context, params }) =>
+    context.queryClient.ensureQueryData(orpc.note.get.queryOptions({ input: { id: params.noteId } })),
+  component: NotePage,
 });
 
-function NotesPage() {
-  const { data: notes } = useSuspenseQuery(orpc.note.list.queryOptions());
+function NotePage() {
+  const { noteId } = Route.useParams();
+  const { data: note } = useSuspenseQuery(orpc.note.get.queryOptions({ input: { id: noteId } }));
   // ...
 }
 ```
@@ -81,6 +83,10 @@ function ProductsPage() {
 ```
 
 Return only the params the loader uses from `loaderDeps`; anything else would refetch for no reason.
+
+The notes page (`src/routes/notes/`) pages its list this way. Its param is a cursor (`?before=`), the `nextCursor`
+the API returned with the page before, rather than a page number: a page then stays the same while notes are added
+above it ([backend/architecture.md](../backend/architecture.md) → Database).
 
 ### Query Keys
 
@@ -129,7 +135,12 @@ Every mutation invalidates the query keys it changes; a missed key shows stale d
 
 ```tsx
 const queryClient = useQueryClient();
-const refresh = () => void queryClient.invalidateQueries({ queryKey: orpc.note.list.key() });
+const refresh = () => queryClient.invalidateQueries({ queryKey: orpc.note.key() });
+// ...
+<NoteCard note={note} onDeleted={refresh} />;
+
+// In the card, which owns the mutation:
+const remove = useMutation(orpc.note.delete.mutationOptions({ onSuccess: () => onDeleted() }));
 ```
 
 - `orpc.<feature>.<procedure>.key()` is the key of that procedure's queries, all inputs included;
@@ -137,8 +148,11 @@ const refresh = () => void queryClient.invalidateQueries({ queryKey: orpc.note.l
   procedure of the feature. Invalidate the narrowest key that covers the change.
 - Invalidation refetches the queries the page is showing right away, and marks the rest stale, so they refetch the
   next time they are used.
-- Slice components that own a mutation tell the page through a callback (`onCreated`, `onDeleted`), and the page
-  decides what to invalidate (`src/routes/notes/notes.tsx`).
+- Components that own a mutation tell the page through a callback (`onSaved`, `onDeleted`), and the page decides
+  what to invalidate (`src/routes/notes/notes.tsx`).
+- **Return the invalidation's promise from `onSuccess`.** The mutation then stays pending until the queries on screen
+  have been read again, so a button disabled by `isPending` stays disabled until the page shows the change. With
+  `void`, a delete button comes back to life over a note that is already gone.
 - `router.invalidate()` reruns the matched routes' `beforeLoad` and `loader`. It is only needed when a guard's input
   changed, and the cache usually handles that already.
 
@@ -184,7 +198,7 @@ home.
   reload and a way home). An oRPC error arrives as `ORPCError`.
 - A missing item is a 404, not an error: wrap the loader's read in `orNotFound` (`src/lib/not-found.ts`), which turns
   the API's `NOT_FOUND` into `notFound()`, and give the route `notFoundComponent: NotFoundPage`
-  (`src/components/shared/not-found-page/`). The page is then drawn between the header and footer with a 404 status, as
+  (`src/components/shared/not-found-page/`), as the note's page does (`src/routes/notes_noteId/`). The page is then drawn between the header and footer with a 404 status, as
   it is for an address no route answers (the catch-all `src/routes/not_found/`). The component goes on the page route,
   not the layout: a route's `notFoundComponent` replaces that route's own component.
 - Inside a page, mutation errors go through `describeApiFailure` to the form ([architecture.md](./architecture.md) →

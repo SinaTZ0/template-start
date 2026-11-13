@@ -10,8 +10,9 @@ English as a second language.
   light/dark themes, TanStack Query as the one data cache (filled by route loaders, preloaded on hover), typed search
   params, Jotai and Storybook, and Persian and English messages with [Paraglide JS](https://paraglidejs.com)
   (`/notes`, `/en/notes`).
-- **Example feature:** notes (`src/orpc/note/`, `src/routes/notes/`) shows the whole path: a guarded page, a loader that fills the Query cache,
-  a form with server field errors, an image upload and a delete.
+- **Example feature:** notes (`src/orpc/note/`, `src/routes/notes/`, `src/routes/notes_noteId/`) shows the whole
+  path: a guarded page, a loader that fills the Query cache, a list paged through the URL, a form with server field
+  errors that creates and edits, an image upload, a delete, a 404 for a missing note and a number only admins see.
 
 ## Getting Started
 
@@ -94,6 +95,6 @@ docs/                              start at backend-flow.md or frontend-flow.md
    route.
 4. Rewrite this README and the first paragraph of `CLAUDE.md` for the project.
 5. Build the first real feature by copying the shape of `note`, then delete the example (`src/orpc/note/`,
-   `src/routes/notes*`, the `note` table, its entries in `contract.ts`, `router.ts` and `routes.ts`). Before the first
+   `src/routes/notes*`, `src/components/shared/note-form/`, the `note` table, its entries in `contract.ts`, `router.ts` and `routes.ts`). Before the first
    deploy, replace `drizzle/` with one fresh migration: delete the folder and run `pnpm db:generate --name init`.
 6. Deploy with `compose.prod.yaml` and go through "Before Going Live" in `docs/deployment.md`.

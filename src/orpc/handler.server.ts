@@ -47,6 +47,17 @@ const MAX_UPLOAD_BODY_BYTES = MEDIA_MAX_BYTES + 1024 * 1024;
 /** Paths (after `/rpc`) of the procedures that take a file. A new upload procedure is added here. */
 const UPLOAD_PATHS = new Set(["/media/upload"]);
 
+/*===== Malformed Bodies =====*/
+/**
+ * Whether the error is a request body that couldn't be decoded: broken JSON, or multipart data without its boundary.
+ * oRPC answers those with `BAD_REQUEST`, but the interceptor sees the parser's own error first. Anyone can send one,
+ * so it is a client error, and logging it as a server error would let a script fill the error viewer.
+ */
+function isMalformedBody(err: unknown): boolean {
+  if (err instanceof SyntaxError) return true;
+  return err instanceof TypeError && err.message.startsWith("Failed to parse body as FormData");
+}
+
 /*===== RPC Handler =====*/
 function createHandler({ maxBodySize, rateLimit }: { maxBodySize: number; rateLimit: RateLimitPolicy }) {
   return new RPCHandler(router, {
@@ -60,6 +71,7 @@ function createHandler({ maxBodySize, rateLimit }: { maxBodySize: number; rateLi
       onError((err) => {
         if (!(err instanceof ORPCError) || err.code !== "INTERNAL_SERVER_ERROR") {
           if (err instanceof ORPCError) return log.debug({ err }, "client error");
+          if (isMalformedBody(err)) return log.debug({ err }, "client error: malformed request body");
           return log.error({ err }, "handler error");
         }
         const errorId: unknown = (err.data as { errorId?: unknown } | undefined)?.errorId;

@@ -4,7 +4,7 @@ import { persianText } from "#/lib/persian-text";
 import { NOTE_BODY_MAX_LENGTH, NOTE_TITLE_MAX_LENGTH } from "#/orpc/note/constants";
 import { m } from "#/paraglide/messages";
 
-/*===== New Note Form =====*/
+/*===== Note Form =====*/
 // Written for the form's messages; the server's `validation.ts` is the final authority.
 export const noteFormSchema = z.object({
   title: persianText()

@@ -9,6 +9,7 @@
   "common_captcha_failed": "The security check didn't go through. Please send again.",
   "common_error_network": "Couldn't reach the server. Check your internet connection and try again.",
   "common_error_signed_out": "You've been signed out. Refresh the page and sign in again.",
+  "common_error_forbidden": "Your account isn't allowed to do this.",
   "common_error_with_reference": "{message} Reference: {errorId}",
   "common_rate_limited": "Too many requests. Wait a moment and try again.",
   "site_name": "Project Template",
@@ -33,9 +34,31 @@
   "notes_new_heading": "New note, {name}",
   "notes_list_label": "Your notes",
   "notes_empty": "You don't have any notes yet. Create your first one with the form.",
+  "notes_empty_page": "There are no older notes.",
+  "notes_pages_label": "Pages of notes",
+  "notes_older": "Older notes",
+  "notes_newest": "Newest notes",
+  "notes_stats": [
+    {
+      "declarations": [
+        "input notes",
+        "input owners",
+        "local notesText = notes: number",
+        "local ownersText = owners: number"
+      ],
+      "match": {
+        "": "All accounts together: {notesText} notes by {ownersText} people."
+      }
+    }
+  ],
   "notes_title_label": "Title",
   "notes_body_label": "Text",
   "notes_submit": "Add note",
+  "notes_save": "Save changes",
+  "notes_edit_title": "Edit note",
+  "notes_edit_created": "Written on {date}",
+  "notes_back": "Back to notes",
+  "notes_open_label": "Open “{title}”",
   "notes_save_failed": "The note wasn't saved.",
   "notes_delete_label": "Delete “{title}”",
   "notes_delete_failed": "The note wasn't deleted.",

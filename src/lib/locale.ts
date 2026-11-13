@@ -33,6 +33,13 @@ export function localizedPath(path: string): string {
 
 /*===== Dates =====*/
 
+/**
+ * The time zone every date is shown in, whoever reads it. A formatter without one uses its machine's zone, so the
+ * server (UTC in production) and a browser in Tehran would print different days for a note written at 22:00 UTC, and
+ * React would replace the server's text on hydration. Change it to the zone the app's readers live in.
+ */
+export const APP_TIME_ZONE = "Asia/Tehran";
+
 /** A calendar date stored as ISO (`2026-10-30`) as a `Date` at UTC noon, so it's the same day in every time zone. */
 export function isoToDate(iso: string): Date {
   return new Date(`${iso}T12:00:00Z`);
@@ -55,7 +62,10 @@ export function formatNumber(value: number, options: Intl.NumberFormatOptions = 
   return format.format(value);
 }
 
-/** Formats a date for the current locale: the Jalali calendar with Persian digits in Persian, Gregorian in English. */
+/**
+ * Formats a date for the current locale: the Jalali calendar with Persian digits in Persian, Gregorian in English.
+ * Shown in `APP_TIME_ZONE`, like every date helper here, unless `options` names another `timeZone`.
+ */
 export function formatDate(
   value: Date | number,
   options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
@@ -64,7 +74,7 @@ export function formatDate(
   const key = `${locale}|${JSON.stringify(options)}`;
   let format = dateFormats.get(key);
   if (!format) {
-    format = new Intl.DateTimeFormat(locale, options);
+    format = new Intl.DateTimeFormat(locale, { timeZone: APP_TIME_ZONE, ...options });
     dateFormats.set(key, format);
   }
   return format.format(value);
@@ -91,7 +101,7 @@ export function formatDateRange({
   const key = `${locale}|${JSON.stringify(options)}`;
   let format = dateFormats.get(key);
   if (!format) {
-    format = new Intl.DateTimeFormat(locale, options);
+    format = new Intl.DateTimeFormat(locale, { timeZone: APP_TIME_ZONE, ...options });
     dateFormats.set(key, format);
   }
   return format.formatRange(start, end).replaceAll("\u2009", " ");
@@ -109,7 +119,7 @@ export function formatDateParts(
   const key = `${locale}|parts|${month}`;
   let format = dateFormats.get(key);
   if (!format) {
-    format = new Intl.DateTimeFormat(locale, { day: "numeric", month, year: "numeric" });
+    format = new Intl.DateTimeFormat(locale, { timeZone: APP_TIME_ZONE, day: "numeric", month, year: "numeric" });
     dateFormats.set(key, format);
   }
   const parts = Object.fromEntries(format.formatToParts(value).map((part) => [part.type, part.value]));

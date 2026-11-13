@@ -18,8 +18,12 @@ export function describeApiFailure({ error, fallback }: { error: unknown; fallba
     return { message: m.common_error_network(), fields: {} };
   }
 
-  if (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN") {
+  if (error.code === "UNAUTHORIZED") {
     return { message: m.common_error_signed_out(), fields: {} };
+  }
+  // Signed in, but the role can't do this: signing in again wouldn't help, so it must not be suggested.
+  if (error.code === "FORBIDDEN") {
+    return { message: m.common_error_forbidden(), fields: {} };
   }
 
   const parsed = errorDataSchema.safeParse(error.data);

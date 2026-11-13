@@ -36,7 +36,10 @@ export const routes = rootRoute("__root.tsx", [
   layout("site_layout/site-layout.tsx", [
     index("home/home.tsx"),
     route("/auth", "auth/auth.tsx"),
-    layout("notes_layout/notes-layout.tsx", [route("/notes", "notes/notes.tsx")]),
+    layout("notes_layout/notes-layout.tsx", [
+      route("/notes", "notes/notes.tsx"),
+      route("/notes/$noteId", "notes_noteId/notes-note-id.tsx"),
+    ]),
     ...designStudies("site"),
     // Last, and for every address nothing above answers: a 404 inside the site's header and footer.
     route("/$", "not_found/not-found.tsx"),

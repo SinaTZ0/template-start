@@ -1,7 +1,14 @@
 import { createCaptchaChallengeProcedure } from "#/orpc/captcha/procedure";
 import { implementer } from "#/orpc/implementer.server";
 import { uploadMediaProcedure } from "#/orpc/media/procedure";
-import { createNoteProcedure, deleteNoteProcedure, listNotesProcedure } from "#/orpc/note/procedure";
+import {
+  createNoteProcedure,
+  deleteNoteProcedure,
+  getNoteProcedure,
+  listNotesProcedure,
+  noteStatsProcedure,
+  updateNoteProcedure,
+} from "#/orpc/note/procedure";
 import { viewerProcedure } from "#/orpc/session/procedure";
 import { siteOriginProcedure } from "#/orpc/site/procedure";
 
@@ -16,8 +23,11 @@ export const router = implementer.router({
   },
   note: {
     list: listNotesProcedure,
+    get: getNoteProcedure,
     create: createNoteProcedure,
+    update: updateNoteProcedure,
     delete: deleteNoteProcedure,
+    stats: noteStatsProcedure,
   },
   session: {
     viewer: viewerProcedure,

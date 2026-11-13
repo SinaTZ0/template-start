@@ -77,12 +77,20 @@ One `media` table records every upload (`src/db/schema.ts`). Entities point to i
 4. When an entity is deleted or its image replaced, the service calls `releaseMedia` in the same transaction, which
    clears `attachedAt`, then `discardMedia` once it has committed, which deletes the files and the row (bucket first).
    If the bucket fails, `discardMedia` logs it and the media stays unattached, so the cleanup below deletes it later.
-   `note` shows both steps (`src/orpc/note/service.ts`).
+   `note` shows both: `removeNote` for a deleted entity, `editNote` for a replaced image, which attaches the new one
+   before it releases the old (`src/orpc/note/service.ts`).
 5. **Cleanup:** uploads whose form was never saved are orphans. `startMediaCleanup` (`src/orpc/media/cleanup.server.ts`),
    started from the server entry (`src/server.ts`), runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
    unattached 25 hours after upload (`ORPHANED_MEDIA_AGE_MS`), in batches of 200 until none are left, through `deleteMedia`. The extra hour
    past the attach window means a save and the cleanup can never race. The `attached_at, created_at` index serves the
    scan.
+
+### Deleting a user
+
+`media.uploaded_by` is `on delete restrict`, so the database refuses to delete a user who still has media rows. That
+is deliberate: a cascade would remove the rows and leave their files in the bucket with nothing pointing at them. Code
+that deletes an account first deletes that user's entities through their services (which release and discard their
+media) and then any media still left with `deleteMedia`, and only then the user.
 
 ## Rendering
 

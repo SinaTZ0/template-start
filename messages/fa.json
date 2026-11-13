@@ -9,6 +9,7 @@
   "common_captcha_failed": "بررسی امنیتی انجام نشد. دوباره ارسال کنید.",
   "common_error_network": "ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.",
   "common_error_signed_out": "از حساب خارج شده‌اید. صفحه را تازه کنید و دوباره وارد شوید.",
+  "common_error_forbidden": "حساب شما اجازهٔ این کار را ندارد.",
   "common_error_with_reference": "{message} کد پیگیری: {errorId}",
   "common_rate_limited": "تعداد درخواست‌ها زیاد بود. کمی صبر کنید و دوباره امتحان کنید.",
   "site_name": "قالب پروژه",
@@ -33,9 +34,31 @@
   "notes_new_heading": "یادداشت تازه، {name}",
   "notes_list_label": "یادداشت‌های شما",
   "notes_empty": "هنوز یادداشتی ندارید. اولین یادداشت را از فرم کنار بسازید.",
+  "notes_empty_page": "یادداشت قدیمی‌تری نیست.",
+  "notes_pages_label": "صفحه‌های یادداشت‌ها",
+  "notes_older": "یادداشت‌های قدیمی‌تر",
+  "notes_newest": "تازه‌ترین یادداشت‌ها",
+  "notes_stats": [
+    {
+      "declarations": [
+        "input notes",
+        "input owners",
+        "local notesText = notes: number",
+        "local ownersText = owners: number"
+      ],
+      "match": {
+        "": "همهٔ حساب‌ها روی هم: {notesText} یادداشت از {ownersText} نفر."
+      }
+    }
+  ],
   "notes_title_label": "عنوان",
   "notes_body_label": "متن",
   "notes_submit": "افزودن یادداشت",
+  "notes_save": "ذخیرهٔ تغییرها",
+  "notes_edit_title": "ویرایش یادداشت",
+  "notes_edit_created": "نوشته‌شده در {date}",
+  "notes_back": "بازگشت به یادداشت‌ها",
+  "notes_open_label": "باز کردن «{title}»",
   "notes_save_failed": "یادداشت ذخیره نشد.",
   "notes_delete_label": "حذف «{title}»",
   "notes_delete_failed": "یادداشت حذف نشد.",

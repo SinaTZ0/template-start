@@ -4,11 +4,11 @@ import { persianText } from "#/lib/persian-text";
 import { NOTE_BODY_MAX_LENGTH, NOTE_TITLE_MAX_LENGTH } from "#/orpc/note/constants";
 import { m } from "#/paraglide/messages";
 
-/*===== New Note =====*/
-// Domain rules for a note. Messages are user-facing because they surface as field errors, so each is a function zod
-// calls when the check fails, in the request's locale. Free text is normalized (`persianText`) before its limits are
-// checked.
-export const newNoteSchema = z.object({
+/*===== Note Fields =====*/
+// Domain rules for a note, the same for a new one and an edited one. Messages are user-facing because they surface as
+// field errors, so each is a function zod calls when the check fails, in the request's locale. Free text is normalized
+// (`persianText`) before its limits are checked.
+export const noteFieldsSchema = z.object({
   title: persianText()
     .min(1, { error: () => m.note_error_title_required() })
     .max(NOTE_TITLE_MAX_LENGTH, { error: () => m.note_error_title_too_long({ max: NOTE_TITLE_MAX_LENGTH }) }),
@@ -22,4 +22,4 @@ export const newNoteSchema = z.object({
     .transform((value) => value || null),
 });
 
-export type NewNote = z.output<typeof newNoteSchema>;
+export type NoteFields = z.output<typeof noteFieldsSchema>;

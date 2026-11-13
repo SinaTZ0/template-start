@@ -40,7 +40,7 @@ decide. The `notes` route (`src/routes/notes/`) is the worked example.
    scope; layout uses logical classes so it works in both directions ([i18n.md](./frontend/i18n.md)).
 4. **Forms**: add the form's `schema.ts` (each check's message an `error: () => m.<key>()` function), run it with `react-hook-form` and `zodResolver`, and lay fields out with the
    `Field` primitives. Submit with `useMutation(orpc.<feature>.<procedure>.mutationOptions())`, show the server's
-   errors through `describeApiFailure`, and invalidate the queries the mutation changed on success. `note-form.tsx` in the notes slice does
+   errors through `describeApiFailure`, and invalidate the queries the mutation changed on success. `src/components/shared/note-form/note-form.tsx` does
    all of this ([architecture.md](./frontend/architecture.md) → Forms). Image fields follow
    [media.md](./backend/media.md).
 5. **Promote**: move a slice component to `components/shared/` (or a hook to `src/hooks/`) once a second route needs it.

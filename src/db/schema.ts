@@ -5,6 +5,15 @@ import { boolean, index, integer, pgTable, text, timestamp, uuid } from "drizzle
 // runtime client (`client.server.ts`). Every change ships as a migration: `pnpm db:generate --name <what-changed>`, then
 // `pnpm db:migrate` (docs/backend/architecture.md, Database).
 
+/*===== Columns =====*/
+/**
+ * A moment in time, stored as `timestamp with time zone`. Use it for every time column: the plain `timestamp` type
+ * keeps no zone, so `now()` and psql would read and write it in whatever zone the database's session is set to.
+ */
+function timestamptz(name: string) {
+  return timestamp(name, { withTimezone: true });
+}
+
 /*===== Auth (Better-Auth) =====*/
 // Mirrors Better-Auth's core tables. Table and column names must match its model and field
 // names (`user`, `emailVerified`, …) because the Drizzle adapter looks them up by key, so keep
@@ -20,8 +29,8 @@ export const user = pgTable("user", {
   // (`input: false` in `auth.server.ts`).
   role: text("role").notNull().default("user"),
   status: text("status").notNull().default("active"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at")
+  createdAt: timestamptz("created_at").notNull().defaultNow(),
+  updatedAt: timestamptz("updated_at")
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
@@ -31,10 +40,10 @@ export const session = pgTable(
   "session",
   {
     id: text("id").primaryKey(),
-    expiresAt: timestamp("expires_at").notNull(),
+    expiresAt: timestamptz("expires_at").notNull(),
     token: text("token").notNull().unique(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+    updatedAt: timestamptz("updated_at")
       .notNull()
       .$onUpdate(() => new Date()),
     ipAddress: text("ip_address"),
@@ -58,12 +67,12 @@ export const account = pgTable(
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at"),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+    accessTokenExpiresAt: timestamptz("access_token_expires_at"),
+    refreshTokenExpiresAt: timestamptz("refresh_token_expires_at"),
     scope: text("scope"),
     password: text("password"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+    updatedAt: timestamptz("updated_at")
       .notNull()
       .$onUpdate(() => new Date()),
   },
@@ -76,9 +85,9 @@ export const verification = pgTable(
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
     value: text("value").notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at")
+    expiresAt: timestamptz("expires_at").notNull(),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+    updatedAt: timestamptz("updated_at")
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
@@ -96,6 +105,8 @@ export const media = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     // Plain text instead of a pg enum. Allowed values and their variants live in `src/orpc/media/constants.ts`.
     kind: text("kind").notNull(),
+    // `restrict` on purpose: deleting the row would leave its files in the bucket with nothing pointing at them. Code
+    // that deletes a user deletes their media first, through `deleteMedia` (docs/backend/media.md → Deleting a user).
     uploadedBy: text("uploaded_by")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
@@ -105,11 +116,15 @@ export const media = pgTable(
     /** Data URI of a 16 px wide WebP, shown blurred while the image loads. */
     placeholder: text("placeholder").notNull(),
     /** Set when an entity starts using it. Null means not used yet; the cleanup deletes it 25 hours after upload. */
-    attachedAt: timestamp("attached_at"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    attachedAt: timestamptz("attached_at"),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
   },
-  // Serves the cleanup's "unattached and older than 25 hours" scan (`findOrphanedMediaIds`).
-  (table) => [index("media_attached_at_created_at_idx").on(table.attachedAt, table.createdAt)],
+  (table) => [
+    // Serves the cleanup's "unattached and older than 25 hours" scan (`findOrphanedMediaIds`).
+    index("media_attached_at_created_at_idx").on(table.attachedAt, table.createdAt),
+    // Serves the upload quota's count (`countUnattachedMedia`) and the foreign key's check when a user is deleted.
+    index("media_uploaded_by_idx").on(table.uploadedBy),
+  ],
 );
 
 /*===== Notes (example feature) =====*/
@@ -126,9 +141,16 @@ export const note = pgTable(
     body: text("body").notNull().default(""),
     /** Cleared if the media row is ever deleted, so a note never points at a missing image. */
     imageMediaId: uuid("image_media_id").references(() => media.id, { onDelete: "set null" }),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    // Millisecond precision, which is all a JavaScript `Date` holds: the list's cursor sends this value back to
+    // compare with (`findNotesByOwner`), and a stored microsecond would make the note it came from match again.
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
   },
-  (table) => [index("note_owner_id_created_at_idx").on(table.ownerId, table.createdAt)],
+  (table) => [
+    // Serves the list: one owner's notes, newest first, a page at a time.
+    index("note_owner_id_created_at_idx").on(table.ownerId, table.createdAt),
+    // Without it, deleting a media row scans every note to clear this column.
+    index("note_image_media_id_idx").on(table.imageMediaId),
+  ],
 );
 
 /*===== Deploy Steps =====*/
@@ -146,7 +168,7 @@ export const deployStep = pgTable("deploy_step", {
   done: integer("done").notNull().default(0),
   /** Marked done without running, when the ledger was started. */
   skipped: boolean("skipped").notNull().default(false),
-  startedAt: timestamp("started_at").notNull().defaultNow(),
+  startedAt: timestamptz("started_at").notNull().defaultNow(),
   /** Null until every command finished. */
-  finishedAt: timestamp("finished_at"),
+  finishedAt: timestamptz("finished_at"),
 });

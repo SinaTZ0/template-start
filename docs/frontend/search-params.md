@@ -50,6 +50,8 @@ export const Route = createFileRoute("/_site-layout/orders")({
 - **Parse, don't trust.** Values from the URL are user input. Same-site redirect targets go through
   `redirectToParam`; ids are validated like any other input, and the procedure checks access again.
 - **Shared parsers** that more than one route needs live in `src/lib/search-params.ts`.
+- **A cursor instead of a page number** when the list is read by position: the notes page keeps `?before=<cursor>`
+  (`src/routes/notes/search-params.ts`), optional because a missing one means the newest notes.
 
 ## Reading in Loaders
 
