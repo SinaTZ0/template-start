@@ -14,13 +14,22 @@ import { limitRequest, rateLimitedMessage, type RateLimitPolicy } from "#/lib/ra
  */
 export function rateLimitMiddleware(policy: RateLimitPolicy) {
   return os.$context<{ headers: Headers }>().middleware(async ({ context, next }) => {
-    const result = limitRequest({ headers: context.headers, policy });
-    if (!result.allowed) {
-      throw new ORPCError("TOO_MANY_REQUESTS", {
-        message: "Too many requests.",
-        data: { errors: [rateLimitedMessage()], fields: {}, retryAfterSeconds: result.retryAfterSeconds },
-      });
-    }
+    assertWithinRateLimit({ headers: context.headers, policy });
     return next();
+  });
+}
+
+/**
+ * Counts one request against `policy`. Shared with the RPC handler, which checks before it reads the request body
+ * (`#/orpc/handler.server`).
+ *
+ * @throws `TOO_MANY_REQUESTS` with `retryAfterSeconds` once the limit is reached.
+ */
+export function assertWithinRateLimit({ headers, policy }: { headers: Headers; policy: RateLimitPolicy }): void {
+  const result = limitRequest({ headers, policy });
+  if (result.allowed) return;
+  throw new ORPCError("TOO_MANY_REQUESTS", {
+    message: "Too many requests.",
+    data: { errors: [rateLimitedMessage()], fields: {}, retryAfterSeconds: result.retryAfterSeconds },
   });
 }

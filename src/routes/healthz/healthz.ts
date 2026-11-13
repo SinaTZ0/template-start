@@ -20,7 +20,7 @@ async function handleGet() {
   const headers = { "Cache-Control": "no-store" };
 
   try {
-    // pg waits for a connection with no time limit by default, so an unreachable database would hang the probe.
+    // Shorter than the pool's own connection timeout (`#/db/client.server`), so the probe answers within its limit.
     await Promise.race([
       db.execute(sql`select 1`),
       new Promise((_, reject) =>

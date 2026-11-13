@@ -88,7 +88,16 @@ function tracePool(pool: Pool): Pool {
 }
 
 /*===== Pool =====*/
-const pool = new Pool({ connectionString: env.DATABASE_URL });
+// Without these, pg waits forever: a stalled Postgres would hang every request instead of failing it.
+const pool = new Pool({
+  connectionString: env.DATABASE_URL,
+  // How long a request waits for a free connection (all ten busy, or Postgres unreachable) before it fails.
+  connectionTimeoutMillis: 5_000,
+  // Far above any query the app runs. Postgres cancels a statement that takes longer, which frees its connection.
+  statement_timeout: 30_000,
+  // A transaction left open (a crashed handler, a lost await) would otherwise hold its connection and its locks.
+  idle_in_transaction_session_timeout: 60_000,
+});
 
 // Postgres closing an idle connection (a restart, a dropped network, an idle timeout) is emitted here. Without a
 // listener Node treats it as an uncaught error and the process exits. The pool has already dropped that connection

@@ -124,6 +124,7 @@
       }
     }
   ],
+  "media_error_too_many_waiting": "You have too many unsaved images. Save or close your open forms, then try again later.",
   "media_error_too_many_pixels": "The image dimensions are too large. Choose a smaller image.",
   "media_error_unsupported": "This image format isn't supported. Upload a JPG or PNG image.",
   "media_error_unreadable": "This file isn't a valid image. Try another one."

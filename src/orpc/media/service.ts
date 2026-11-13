@@ -12,8 +12,10 @@ import type { MediaKind } from "#/orpc/media/constants";
 import type { Media } from "#/orpc/media/contract";
 import { isMediaKind, toPublicMedia } from "#/orpc/media/mapper";
 import { processImage } from "#/orpc/media/processing.server";
+import { m } from "#/paraglide/messages";
 import {
   claimMedia,
+  countUnattachedMedia,
   deleteMediaRow,
   findMediaById,
   findOrphanedMediaIds,
@@ -33,6 +35,13 @@ export const MEDIA_ATTACH_WINDOW_MS = 24 * 60 * 60 * 1000;
  */
 export const ORPHANED_MEDIA_AGE_MS = MEDIA_ATTACH_WINDOW_MS + 60 * 60 * 1000;
 
+/*===== Quota =====*/
+/**
+ * How many uploads one user may have waiting to be attached. Far more than open forms ever hold, and it bounds what an
+ * account can park in the bucket: unattached uploads live for `ORPHANED_MEDIA_AGE_MS` before the cleanup deletes them.
+ */
+export const MAX_UNATTACHED_MEDIA_PER_USER = 30;
+
 /*===== Keys =====*/
 function variantKeys({ kind, mediaId }: { kind: MediaKind; mediaId: string }): string[] {
   return Object.keys(MEDIA_VARIANTS[kind]).map((variant) => mediaKey({ kind, mediaId, variant }));
@@ -49,7 +58,7 @@ type UploadMediaResult =
  * Nothing attaches the media to anything yet; the entity that uses it calls `attachMedia` when its form is saved.
  *
  * @returns `forbidden` when the role doesn't use this kind of image, `invalid` with a `file` message when the image is
- * rejected.
+ * rejected or the user already has `MAX_UNATTACHED_MEDIA_PER_USER` uploads waiting to be attached.
  * @throws When the bucket or the database fails. Variants already written are deleted first.
  */
 export async function uploadMedia({
@@ -64,6 +73,13 @@ export async function uploadMedia({
   file: File;
 }): Promise<UploadMediaResult> {
   if (!MEDIA_UPLOAD_KINDS_BY_ROLE[user.role]?.includes(kind)) return { kind: "forbidden" };
+
+  // Before the image is decoded, so an account at its quota costs one count query. Two uploads racing past the last
+  // free place overshoot by one, which the quota can afford.
+  const waiting = await countUnattachedMedia({ db, userId: user.id });
+  if (waiting >= MAX_UNATTACHED_MEDIA_PER_USER) {
+    return { kind: "invalid", fields: { file: m.media_error_too_many_waiting() } };
+  }
 
   // Resizing and encoding is CPU work no other span covers.
   const processed = await span({ kind: "task", name: "media.processImage" }, () => processImage({ file, kind }));
@@ -206,11 +222,12 @@ export async function deleteMedia({ db, mediaId }: { db: Database; mediaId: stri
 
 /*===== Orphan Cleanup =====*/
 const ORPHAN_BATCH_SIZE = 200;
+/** Ends a run that keeps finding work, so one pass never occupies the process for hours. The next run goes on. */
+const ORPHAN_MAX_BATCHES = 50;
 
 /**
- * Deletes up to one batch of uploads that were never attached (forms that were never saved) and are older than
- * `ORPHANED_MEDIA_AGE_MS`. Run on a schedule (`cleanup.server.ts`); a backlog bigger than one batch clears over the
- * following runs.
+ * Deletes the uploads that were never attached (forms that were never saved) and are older than
+ * `ORPHANED_MEDIA_AGE_MS`, a batch at a time until none are left. Run on a schedule (`cleanup.server.ts`).
  *
  * A media that fails to delete is logged and skipped, so one broken row can't block the rest. It stays unattached and
  * is retried on the next run.
@@ -224,23 +241,29 @@ export async function deleteOrphanedMedia({
   db: Database;
   now?: Date;
 }): Promise<{ deleted: number; failed: number }> {
-  const ids = await findOrphanedMediaIds({
-    db,
-    uploadedBefore: new Date(now.getTime() - ORPHANED_MEDIA_AGE_MS),
-    limit: ORPHAN_BATCH_SIZE,
-  });
-
+  const uploadedBefore = new Date(now.getTime() - ORPHANED_MEDIA_AGE_MS);
+  // Skipped in later batches: a media that failed is still unattached, so the query returns it again.
+  const failedIds = new Set<string>();
   let deleted = 0;
-  let failed = 0;
-  // One at a time: the job runs in the app's process and shouldn't compete with requests for the pool or the bucket.
-  for (const mediaId of ids) {
-    try {
-      await deleteMedia({ db, mediaId });
-      deleted += 1;
-    } catch (error) {
-      failed += 1;
-      log.error({ err: error, mediaId }, "could not delete an orphaned media");
+
+  for (let batch = 0; batch < ORPHAN_MAX_BATCHES; batch++) {
+    const ids = await findOrphanedMediaIds({ db, uploadedBefore, limit: ORPHAN_BATCH_SIZE });
+    const pending = ids.filter((id) => !failedIds.has(id));
+    // Nothing new: the backlog is empty, or the oldest batch is all failures and the next run retries them.
+    if (pending.length === 0) break;
+
+    // One at a time: the job runs in the app's process and shouldn't compete with requests for the pool or the bucket.
+    for (const mediaId of pending) {
+      try {
+        await deleteMedia({ db, mediaId });
+        deleted += 1;
+      } catch (error) {
+        failedIds.add(mediaId);
+        log.error({ err: error, mediaId }, "could not delete an orphaned media");
+      }
     }
+
+    if (ids.length < ORPHAN_BATCH_SIZE) break;
   }
-  return { deleted, failed };
+  return { deleted, failed: failedIds.size };
 }

@@ -186,12 +186,18 @@ return { id: result.id };
   The UI guard is never the only check.
 - **CSRF.** `/rpc` only accepts POST, and Better-Auth sets its session cookie `SameSite=Lax`, so a request from another
   site arrives without the session. Keep both: don't allow GET on the RPC handler, and don't loosen the cookie's
-  `sameSite`. The app has no server functions (`createServerFn`), which would be a second way in to protect.
+  `sameSite`. A sibling subdomain counts as the same site and does send the cookie, so the handler also refuses a
+  request whose `Origin` names another host (`assertSameOrigin` in `src/orpc/handler.server.ts`). The app has no server
+  functions (`createServerFn`), which would be a second way in to protect.
+- **Before the body is read.** oRPC decodes a request's body before any procedure middleware runs. The handler
+  therefore checks the origin and a rate limit first, and caps the body at 1 MB. A procedure that takes a file is
+  listed in `UPLOAD_PATHS` (`src/orpc/handler.server.ts`), which gives it the upload size and a stricter limit.
 
 ### Rate limiting
 
 - One limiter (`src/lib/rate-limit.server.ts`) covers both the API and `/api/auth/*`, keyed by the client address
-  that Caddy sends in `X-Real-IP`. Better-Auth's own limiter is off.
+  that Caddy sends in `X-Real-IP`. An IPv6 address is counted by its `/64`, the block one subscriber gets
+  (`addressKey`). Better-Auth's own limiter is off.
 - Every procedure gets the general policy from `base` (300 a minute). A procedure that is expensive or abusable adds a
   stricter one as its first middleware: `.use(rateLimitMiddleware(UPLOAD_RATE_LIMIT))`, with the policy defined next to
   the procedure. Policy names must be unique, since they keep the counters apart.
@@ -201,6 +207,9 @@ return { id: result.id };
   policy. Add new Better-Auth endpoints of that kind to `CREDENTIAL_PATHS`.
 - Procedure calls a loader makes during SSR run in-process, with the page request's headers, so they count against
   the same address as the page request.
+- Browser calls are also counted once at the handler, before their body is read, with the same numbers on separate
+  counters (`RPC_RATE_LIMIT`, `RPC_UPLOAD_RATE_LIMIT`). When a procedure's policy is stricter than the general one and
+  its body is large, give its path the same numbers there.
 - Limits are per address, and many Iranian mobile users share one (CGNAT). Keep them high enough for that, and prefer
   a per-procedure policy over lowering the general one.
 - Counters are in memory, which fits the single app process production runs. Running several instances needs a shared
@@ -216,6 +225,9 @@ return { id: result.id };
   `pnpm db:generate --name <what-changed>`, review the SQL in `drizzle/`, and commit it with the schema change.
   Production only runs those files. The details, including renames and changes that span two deploys, are in
   [deployment.md](../deployment.md) → Database Changes.
+- The pool (`src/db/client.server.ts`) fails a request that waits more than 5 seconds for a connection, and Postgres
+  cancels a statement after 30 seconds. A job that needs longer (a report, a bulk import) sets its own
+  `statement_timeout` inside its transaction (`set local`).
 - Back what a query filters and sorts by with an index (`note_owner_id_created_at_idx`).
 - A column that holds one of a fixed set of values (a status, a kind) is `text`, with the set as a `const` array in
   the feature's `constants.ts`: adding a value then needs no migration. The repository narrows what it reads with

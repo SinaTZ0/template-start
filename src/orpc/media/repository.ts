@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, count, eq, isNull, lt } from "drizzle-orm";
 
 import type { Database } from "#/db/client.server";
 import { media } from "#/db/schema";
@@ -35,6 +35,15 @@ export async function findOrphanedMediaIds({
     .orderBy(asc(media.createdAt))
     .limit(limit);
   return rows.map((row) => row.id);
+}
+
+/** How many of a user's uploads nothing uses yet: forms still open, forms abandoned, and released media. */
+export async function countUnattachedMedia({ db, userId }: { db: Database; userId: string }): Promise<number> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(media)
+    .where(and(eq(media.uploadedBy, userId), isNull(media.attachedAt)));
+  return row?.total ?? 0;
 }
 
 /*===== Writes =====*/

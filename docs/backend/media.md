@@ -64,7 +64,8 @@ One `media` table records every upload (`src/db/schema.ts`). Entities point to i
 (`on delete set null`), e.g. `note.imageMediaId`.
 
 1. The form uploads the file as soon as it's picked, through `media.upload` (`kind` + `File`). Only signed-in users,
-   and only the kinds their role may upload.
+   and only the kinds their role may upload. A user may have 30 uploads waiting to be attached
+   (`MAX_UNATTACHED_MEDIA_PER_USER`); past that, uploads are refused until forms are saved or the cleanup has run.
 2. The server writes every variant, then inserts the row, and returns its ID, URLs and placeholder. If a write fails
    halfway, the variants already written are deleted, so a row only exists when all its variants do.
 3. Saving the form sends the media ID. The entity's service calls `attachMedia` in the transaction that writes the
@@ -79,7 +80,7 @@ One `media` table records every upload (`src/db/schema.ts`). Entities point to i
    `note` shows both steps (`src/orpc/note/service.ts`).
 5. **Cleanup:** uploads whose form was never saved are orphans. `startMediaCleanup` (`src/orpc/media/cleanup.server.ts`),
    started from the server entry (`src/server.ts`), runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
-   unattached 25 hours after upload (`ORPHANED_MEDIA_AGE_MS`), up to 200 per run, through `deleteMedia`. The extra hour
+   unattached 25 hours after upload (`ORPHANED_MEDIA_AGE_MS`), in batches of 200 until none are left, through `deleteMedia`. The extra hour
    past the attach window means a save and the cleanup can never race. The `attached_at, created_at` index serves the
    scan.
 

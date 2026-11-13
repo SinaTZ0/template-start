@@ -91,12 +91,35 @@ export function clientAddress(headers: Headers): string | null {
   const address = headers.get(CLIENT_ADDRESS_HEADER)?.trim();
   if (address) {
     noteAddressSeen(Date.now());
-    return address;
+    return addressKey(address);
   }
   // Development and tests have no proxy in front. One shared key keeps the limits working, and testable, locally.
   if (env.NODE_ENV !== "production") return "local";
   noteAddressMissing(Date.now());
   return null;
+}
+
+/**
+ * The part of an address that identifies one client. An IPv4 address is one client; an IPv6 customer is handed a whole
+ * /64 (2^64 addresses), so the limit counts the /64 and rotating through it buys nothing.
+ */
+export function addressKey(address: string): string {
+  if (!address.includes(":")) return address;
+
+  // An IPv4 client seen through an IPv6 socket (`::ffff:203.0.113.7`).
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+  if (mapped?.[1]) return mapped[1];
+
+  /*------ First Four Groups ------*/
+  // `::` stands for as many zero groups as it takes to reach eight.
+  const [head = "", tail] = address.toLowerCase().split("::");
+  const headGroups = head ? head.split(":") : [];
+  const tailGroups = tail ? tail.split(":") : [];
+  const zeros = tail === undefined ? 0 : Math.max(0, 8 - headGroups.length - tailGroups.length);
+  const groups = [...headGroups, ...Array.from({ length: zeros }, () => "0"), ...tailGroups];
+
+  const prefix = groups.slice(0, 4).map((group) => group.replace(/^0+(?=.)/, ""));
+  return `${prefix.join(":")}::/64`;
 }
 
 /*===== Missing Address Monitor =====*/
