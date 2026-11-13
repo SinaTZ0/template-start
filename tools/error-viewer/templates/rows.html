@@ -39,10 +39,38 @@
   </tr>
 {{end}}
 
+{{/*===== Groups =====*/}}
+{{/* The grouped list's rows (`eventGroup`): the group's newest event, with its count. */}}
+{{define "group-rows"}}
+  {{range .Groups}}
+    <tr class="level-{{.Level}}">
+      <td class="time"><time datetime="{{iso .ReceivedAt}}" title="{{exact .ReceivedAt}}" data-ago>{{ago .ReceivedAt}}</time></td>
+      <td><span class="badge level {{.Level}}">{{.Level}}</span></td>
+      <td><span class="badge kind">{{.KindLabel}}</span></td>
+      <td class="title"><a href="{{.Link}}">{{.Title}}</a></td>
+      <td class="path mono">{{if .Method}}<span class="method">{{.Method}}</span> {{end}}{{.Path}}</td>
+      <td class="num mono">{{.Count}}</td>
+      <td class="time"><time datetime="{{iso .FirstAt}}" title="{{exact .FirstAt}}" data-ago>{{ago .FirstAt}}</time></td>
+    </tr>
+  {{end}}
+  {{if .More}}
+    <tr id="more" class="more">
+      <td colspan="7">
+        <a class="button" href="{{.MoreURL}}" hx-get="{{.MoreRowsURL}}" hx-target="#more" hx-swap="outerHTML">
+          Load more <span class="htmx-indicator spinner" aria-hidden="true"></span>
+        </a>
+      </td>
+    </tr>
+  {{end}}
+{{end}}
+
 {{/*===== Auto-refresh =====*/}}
-{{/* Polls for newer rows. The response replaces this element with one that starts from the new newest row. */}}
+{{/* Polls for newer rows. The response replaces this element with one that starts from the new newest row. The
+     grouped list is reloaded as a whole instead (`Whole`): a new event changes a row's count and place. */}}
 {{define "poller"}}
-  {{if .On}}
+  {{if .Whole}}
+    <div id="poller" hx-get="{{.URL}}" hx-trigger="every 10s" hx-target="#results" hx-swap="outerHTML"></div>
+  {{else if .On}}
     <div id="poller" hx-get="{{.URL}}" hx-trigger="every 10s" hx-swap="outerHTML"></div>
   {{else}}
     <div id="poller"></div>

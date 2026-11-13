@@ -21,7 +21,7 @@
         type="search"
         name="q"
         value="{{.Query.Q}}"
-        placeholder="errorId, reqId, path:/notes, route:…, module:…, clientId:…, userId:…, or text in the title"
+        placeholder="errorId, reqId, path:/notes, route:…, module:…, clientId:…, userId:…, release:…, or text in the title"
         aria-label="Search"
         autocomplete="off"
         spellcheck="false"
@@ -52,6 +52,10 @@
         <input type="checkbox" name="auto" value="1" {{if .Query.Auto}}checked{{end}} />
         Auto-refresh
       </label>
+      <label class="toggle" title="Alike events as one row, with how many there are">
+        <input type="checkbox" name="group" value="1" {{if .Query.Group}}checked{{end}} />
+        Group alike
+      </label>
       <button type="submit" class="ghost">Search</button>
     </form>
 
@@ -59,6 +63,7 @@
     {{if .Days}}
       <figure class="days">
         <svg viewBox="0 0 207 32" width="207" height="32" role="img" aria-label="Events per day, last 14 days">
+          {{/* The reader's own days once app.js has set the `tz` cookie, UTC's before. */}}
           {{range .Days}}
             <rect x="{{.X}}" y="{{.Y}}" width="12" height="{{.Height}}" rx="1"><title>{{.Label}}: {{.Count}}</title></rect>
           {{end}}
@@ -75,6 +80,32 @@
 {{/* The part the filter form swaps. */}}
 {{define "results"}}
   <section id="results" class="results">
+    {{if .Query.Group}}
+      {{/*------ Groups ------*/}}
+      {{/* One row per kind of event: its newest event, how many alike are stored and when the first came. No
+           checkboxes: a row leads to the list of its events, where they can be selected or deleted together. */}}
+      <div class="table-wrap">
+        <table class="events">
+          <thead>
+            <tr>
+              <th scope="col">Last seen</th>
+              <th scope="col">Level</th>
+              <th scope="col">Kind</th>
+              <th scope="col">Title</th>
+              <th scope="col">Path</th>
+              <th scope="col" class="num">Events</th>
+              <th scope="col">First seen</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            {{template "group-rows" .Groups}}
+          </tbody>
+        </table>
+      </div>
+      {{if and .Groups.First (not .Groups.Groups)}}
+        <p class="empty">No events{{if .Query.Filtered}} match these filters{{end}}.</p>
+      {{end}}
+    {{else}}
     {{/*------ Delete Selected ------*/}}
     {{/* Wraps the table so each row's checkbox is part of the post. Without JS the checkboxes still work, and the
          button stays enabled; the server ignores an empty selection. */}}
@@ -119,10 +150,11 @@
     {{if and .Rows.First (not .Rows.Events)}}
       <p class="empty">No events{{if .Query.Filtered}} match these filters{{end}}.</p>
     {{end}}
+    {{end}}
     {{template "poller" .Poller}}
 
     {{/*------ Delete All Matching ------*/}}
-    {{if and .Query.Filtered .Rows.Events}}
+    {{if and .Query.Filtered (or .Rows.Events .Groups.Groups)}}
       <form
         class="delete-matching"
         method="post"
@@ -136,6 +168,7 @@
         <input type="hidden" name="platform" value="{{.Query.Platform}}" />
         <input type="hidden" name="env" value="{{.Query.Env}}" />
         <input type="hidden" name="range" value="{{.Query.Range}}" />
+        {{if .Query.Group}}<input type="hidden" name="group" value="1" />{{end}}
         <button type="submit" class="danger">Delete all matching</button>
       </form>
     {{end}}

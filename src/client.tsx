@@ -13,6 +13,8 @@ if (import.meta.env.SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.SENTRY_DSN,
     environment: import.meta.env.MODE,
+    // The build's commit, so the viewer can say which build an error came from. Empty in development.
+    release: import.meta.env.APP_RELEASE || undefined,
     // Query strings can carry tokens; cookies and headers carry the session.
     dataCollection: { userInfo: false, cookies: false, httpHeaders: false, urlQueryParams: false },
   });

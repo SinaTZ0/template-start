@@ -58,6 +58,13 @@
 		}
 	}
 
+	# The app keeps its client source maps next to the built files, for the error viewer to read inside the stack
+	# (`SOURCEMAP_ORIGIN` in `compose.prod.yaml`). Served to the outside they would publish the source.
+	@sourcemaps path *.map
+	handle @sourcemaps {
+		respond 404
+	}
+
 	handle {
 		reverse_proxy app:3000 {
 			# The app rate-limits by the visitor's address, which it reads from X-Real-IP (`src/lib/rate-limit.server.ts`).

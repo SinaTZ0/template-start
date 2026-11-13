@@ -40,6 +40,8 @@ if (env.SENTRY_DSN && !Sentry.isInitialized()) {
   Sentry.init({
     dsn: env.SENTRY_DSN,
     environment: env.NODE_ENV,
+    // The build's commit (`vite.config.ts`), so the viewer can say which build an error came from.
+    release: import.meta.env.APP_RELEASE || undefined,
     // The SDK collects request data by default. None of it is needed to fix a bug, and cookies, headers, bodies and
     // query strings can carry sessions, tokens and personal data. Stack frames keep their source lines.
     dataCollection: {

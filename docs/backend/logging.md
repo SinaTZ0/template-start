@@ -80,9 +80,10 @@ device, and identifies nobody: clearing cookies gives a new one. A browser's ver
 because the cookie is set once that page runs.
 
 **User ID.** Once a request's session is read (`getRequestSession` in `src/lib/auth.server.ts`, which every session
-lookup goes through), its log lines and reports carry the signed-in user's database ID as `userId`. The browser sets
-the same tag after hydration, from the viewer query (`src/routes/site_layout/`), and clears it on sign-out. Only the ID is sent, never the
-email or name. It does tie events to a person: the viewer is self-hosted, behind its password, and keeps events for
+lookup goes through), its log lines and reports carry the signed-in user's database ID as a `userId` tag. The browser
+sends the same ID as the report's user (`setReportedUser`, called after hydration from the viewer query in
+`src/routes/site_layout/`, and cleared on sign-out). The error viewer reads both, so `userId:` finds a user's server
+and browser events alike. Only the ID is sent, never the email or name. It does tie events to a person: the viewer is self-hosted, behind its password, and keeps events for
 30 days (`RETENTION_DAYS`), which is the accepted trade-off for finding one user's errors with `userId:`.
 
 **What isn't sent.** Cookies, headers, request bodies, query strings, IP addresses, local variables and the user's
@@ -104,12 +105,21 @@ and the server SDK's `beforeSend` redact the error's message and stack.
 It is a safety net, not a guarantee: a secret logged in a shape none of these match still goes out. Don't log
 credentials. Ordinary text, Persian included, is never changed.
 
+**Release.** A production build carries the commit it was made from (`APP_RELEASE`, read in `vite.config.ts`: the
+deploy tool passes it to the image build, and a build on your machine asks git). Both SDKs send it as the report's
+release; the viewer shows it and finds a build's events with `release:<commit>`. The dev server sends none.
+
 **Stacks point at source files.** The server bundle ships with source maps and runs with `--enable-source-maps`
 (`Dockerfile`), so stacks are mapped before they are logged or sent. The dev server maps them itself. The image also
 ships the server source (`src/`), because the SDK reads each frame's lines from the file it names: without it, reports
-would arrive with no source lines. Browser stacks
-from a production build are minified, because client source maps aren't published; the message, URL and browser still
-show what failed.
+would arrive with no source lines.
+
+Browser stacks from a production build are minified. The build writes the client's source maps next to the built files
+without linking to them (`sourcemap: "hidden"` in `vite.config.ts`), and the error viewer fetches the map for each
+frame from the app when the event arrives, then stores the event with source files, lines and the code around them
+(`tools/error-viewer/README.md` → Source maps). The maps hold the source, so in production Caddy refuses `*.map` to
+the outside; the viewer reaches the app inside the stack. An error from a tab still running the previous build, sent
+after a deploy replaced that build's files, stays minified.
 
 **Turning it off.** Without `SENTRY_DSN` nothing is sent, and the app works the same. Tests run that way.
 

@@ -94,6 +94,10 @@ document.addEventListener("click", async (event) => {
 });
 
 /*===== Times =====*/
+// The server knows no time zone but UTC. This tells it how far the reader's clock is ahead (minutes), so the next page
+// counts the day strip by their days. Set on every page, the sign-in page included, so the first list already has it.
+document.cookie = `tz=${-new Date().getTimezoneOffset()}; path=/; max-age=31536000; samesite=lax`;
+
 // The server renders "5m ago" in UTC terms; here it is kept current, and hovering shows the local time.
 function timeAgo(date) {
   const seconds = (Date.now() - date.getTime()) / 1000;
@@ -112,13 +116,30 @@ function updateTimes() {
   }
 }
 
+// `data-local` times are rendered in UTC and shown in the reader's time zone; hovering keeps the UTC text. With
+// `data-local="time"` only the time of day is shown, to the millisecond (breadcrumbs).
+function localizeTimes() {
+  for (const element of document.querySelectorAll("time[data-local]:not([data-localized])")) {
+    const date = new Date(element.dateTime);
+    if (Number.isNaN(date.getTime())) continue;
+    element.title = element.textContent;
+    element.textContent =
+      element.dataset.local === "time"
+        ? date.toLocaleTimeString([], { hour12: false, fractionalSecondDigits: 3 })
+        : date.toLocaleString();
+    element.dataset.localized = "";
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   updateTimes();
+  localizeTimes();
   syncSelection();
   groupRows();
 });
 document.addEventListener("htmx:afterSettle", () => {
   updateTimes();
+  localizeTimes();
   syncSelection();
   groupRows();
 });

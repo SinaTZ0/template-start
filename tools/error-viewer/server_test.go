@@ -19,15 +19,14 @@ import (
 
 const testKey = "0123456789abcdef0123456789abcdef"
 
-func newTestServer(t *testing.T) (*httptest.Server, *store) {
+// newTestServer starts the viewer on a temporary database. `configure` functions adjust the configuration first.
+func newTestServer(t *testing.T, configure ...func(*config)) (*httptest.Server, *store) {
 	t.Helper()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	st, err := openStore(filepath.Join(t.TempDir(), "errors.db"), log)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = st.close() })
-
 	base, _ := url.Parse("http://localhost:8000")
 	cfg := config{
 		ProjectID:     "1",
@@ -37,12 +36,23 @@ func newTestServer(t *testing.T) (*httptest.Server, *store) {
 		AllowedOrigin: "http://localhost:5173",
 		BaseURL:       base,
 	}
+	for _, fn := range configure {
+		fn(&cfg)
+	}
+	if cfg.NotifyURL != nil {
+		notify := newNotifier(context.Background(), cfg, log)
+		st.setAnnouncer(notify.offer)
+	}
 	handler, err := newHandler(st, cfg, log)
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
-	t.Cleanup(server.Close)
+	// The server first: a handler must not enqueue once the store's queue is closed.
+	t.Cleanup(func() {
+		server.Close()
+		_ = st.close()
+	})
 	return server, st
 }
 
@@ -212,4 +222,31 @@ func TestDashboardPagesRender(t *testing.T) {
 			t.Errorf("%s: status %d, body contains %q: %v", path, res.StatusCode, want, strings.Contains(string(body), want))
 		}
 	}
+}
+
+// signIn returns a client holding a session cookie.
+func signIn(t *testing.T, server *httptest.Server) *http.Client {
+	t.Helper()
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.PostForm(server.URL+"/login", url.Values{"password": {"password"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("sign-in: status %d", res.StatusCode)
+	}
+	return client
+}
+
+func getBody(t *testing.T, client *http.Client, target string) (int, string) {
+	t.Helper()
+	res, err := client.Get(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(body)
 }

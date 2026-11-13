@@ -57,6 +57,9 @@ services:
       # The browser bundle reports its errors to this DSN, inlined at build time (`vite.config.ts`).
       args:
         SENTRY_DSN: ${SENTRY_DSN:-}
+        # The commit being built, shown by the error viewer as the release. `deploy/deploy.sh` sets it for the build;
+        # by hand: APP_RELEASE=$(git rev-parse --short=7 HEAD) docker compose … build.
+        APP_RELEASE: ${APP_RELEASE:-}
         # An npm mirror, for a server that can't reach registry.npmjs.org. Empty uses npm's.
         NPM_REGISTRY: ${NPM_REGISTRY:-}
     restart: unless-stopped
@@ -172,6 +175,14 @@ services:
       # Browsers post their errors from the app's pages.
       ALLOWED_ORIGIN: https://${DOMAIN}
       BASE_URL: https://${ERRORS_DOMAIN}
+      # Where the viewer reads the app's client source maps, to show browser stacks as source. Inside the stack only:
+      # Caddy refuses `*.map` to the outside (`deploy/Caddyfile`).
+      SOURCEMAP_ORIGIN: http://app:3000
+      # Optional: a chat webhook that hears of each new kind of error (tools/error-viewer/README.md → Notifications).
+      NOTIFY_URL: ${ERROR_VIEWER_NOTIFY_URL:-}
+      NOTIFY_CHAT_ID: ${ERROR_VIEWER_NOTIFY_CHAT_ID:-}
+      # The most the viewer's database may take of the disk, in MB; the oldest events go first.
+      MAX_DB_MB: ${ERROR_VIEWER_MAX_DB_MB:-1024}
     volumes:
       - error-viewer-data:/data
     logging: *logging

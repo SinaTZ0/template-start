@@ -24,6 +24,8 @@ type ingest struct {
 	allowedOrigins map[string]bool
 	perIP          *rateLimiter
 	global         *rateLimiter
+	requests       *rateLimiter
+	maps           *symbolicator // nil without SOURCEMAP_ORIGIN
 	log            *slog.Logger
 }
 
@@ -35,9 +37,20 @@ const (
 	// For everyone together, so many clients can't fill the disk either.
 	ingestGlobalPerMinute = 600
 	ingestGlobalBurst     = 100
+	// Requests per client, whatever they carry, counted before the body is read. Looser than the event limit: the
+	// browser SDK also sends a session on every page load, and an office shares one address.
+	ingestRequestsPerMinute = 240
+	ingestRequestsBurst     = 120
+	// The largest event stored, as JSON before compression. An ordinary event is 5 to 50 KB; a larger one is trimmed
+	// (trimPayload).
+	maxEventBytes = 256 << 10
 )
 
 func newIngest(s *store, cfg config, log *slog.Logger) *ingest {
+	var maps *symbolicator
+	if cfg.SourcemapOrigin != nil {
+		maps = newSymbolicator(cfg.SourcemapOrigin, log)
+	}
 	return &ingest{
 		store:          s,
 		projectID:      cfg.ProjectID,
@@ -45,6 +58,8 @@ func newIngest(s *store, cfg config, log *slog.Logger) *ingest {
 		allowedOrigins: parseOrigins(cfg.AllowedOrigin),
 		perIP:          newRateLimiter(ingestPerIPPerMinute, ingestPerIPBurst),
 		global:         newRateLimiter(ingestGlobalPerMinute, ingestGlobalBurst),
+		requests:       newRateLimiter(ingestRequestsPerMinute, ingestRequestsBurst),
+		maps:           maps,
 		log:            log,
 	}
 }
@@ -87,6 +102,15 @@ func (h *ingest) receive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	/*------ Request Limit ------*/
+	// Before the body: reading, unzipping and parsing it is the costly part, and an envelope without events never
+	// reaches the event limit below.
+	now := time.Now()
+	if ok, wait := h.requests.take(clientIP(r), 1, now); !ok {
+		tooManyRequests(w, wait)
+		return
+	}
+
 	/*------ Body ------*/
 	body, status, err := readBody(w, r)
 	if err != nil {
@@ -99,15 +123,14 @@ func (h *ingest) receive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sessions, client reports and the like are accepted and dropped, and don't count against the rate limit: the
+	// Sessions, client reports and the like are accepted and dropped, and don't count against the event limit: the
 	// browser SDK sends a session on every page load.
 	if len(env.Events) == 0 {
 		writeJSON(w, http.StatusOK, map[string]string{"id": normalizeEventID(env.EventID)})
 		return
 	}
 
-	/*------ Rate Limit ------*/
-	now := time.Now()
+	/*------ Event Limit ------*/
 	if ok, wait := h.perIP.take(clientIP(r), len(env.Events), now); !ok {
 		tooManyRequests(w, wait)
 		return
@@ -126,12 +149,16 @@ func (h *ingest) receive(w http.ResponseWriter, r *http.Request) {
 		if i == 0 {
 			fallbackID = env.EventID
 		}
+		// A browser's minified frames are mapped to the source first, so the row's group is the source's.
+		if h.maps != nil {
+			payload = h.maps.apply(payload)
+		}
 		row, err := buildRow(payload, fallbackID, now)
 		if err != nil {
 			h.log.Warn("skipped an unreadable event", "err", err)
 			continue
 		}
-		row.Payload = compressPayload(payload)
+		row.Payload = compressPayload(trimPayload(payload))
 		if !h.store.enqueue(row) {
 			h.log.Warn("event queue full, rejecting events")
 			tooManyRequests(w, 10*time.Second)
@@ -214,6 +241,47 @@ func statusForReadError(err error) int {
 		return http.StatusRequestEntityTooLarge
 	}
 	return http.StatusBadRequest
+}
+
+/*------ Size Cap ------*/
+
+// trimmedInfo is the note trimPayload leaves in an event it cut down, shown on the detail page.
+type trimmedInfo struct {
+	Bytes   int      `json:"bytes"`
+	Dropped []string `json:"dropped"`
+}
+
+// trimPayload returns an event of at most maxEventBytes. A larger one loses its largest top-level fields, one at a
+// time, until it fits; what was dropped is recorded under `viewer_trimmed`. The row's columns are built from the whole
+// event before this, so a trimmed event is still found by search.
+func trimPayload(payload []byte) []byte {
+	if len(payload) <= maxEventBytes {
+		return payload
+	}
+	info := trimmedInfo{Bytes: len(payload)}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(payload, &fields) != nil {
+		fields = map[string]json.RawMessage{}
+	}
+
+	size := len(payload)
+	for size > maxEventBytes-1024 && len(fields) > 0 {
+		largest := ""
+		for key, value := range fields {
+			if largest == "" || len(value) > len(fields[largest]) {
+				largest = key
+			}
+		}
+		size -= len(fields[largest])
+		delete(fields, largest)
+		info.Dropped = append(info.Dropped, largest)
+	}
+	fields["viewer_trimmed"], _ = json.Marshal(info)
+	trimmed, err := json.Marshal(fields)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return trimmed
 }
 
 /*------ Responses ------*/

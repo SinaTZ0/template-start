@@ -42,7 +42,8 @@ func (s *Stack) Deploy(env *envfile.Settings) error {
 	/*------ Build ------*/
 	ui.Step("Building")
 	var log bytes.Buffer
-	build := s.Command(nil, "build")
+	// The commit goes into the build as the release the app's error reports carry (`APP_RELEASE` in compose.prod.yaml).
+	build := s.Command([]string{"APP_RELEASE=" + gitrepo.Version(s.Root)}, "build")
 	build.Stdout = io.MultiWriter(ui.Out, &log)
 	build.Stderr = io.MultiWriter(ui.Err, &log)
 	if err := interrupt.Check(build.Run()); err != nil {

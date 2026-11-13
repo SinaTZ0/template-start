@@ -14,10 +14,17 @@
           <span class="badge level {{.Level}}">{{.Level}}</span>
           <span class="badge kind">{{.KindLabel}}</span>
           <time datetime="{{iso .ReceivedAt}}" title="Received {{exact .ReceivedAt}}" data-ago>{{ago .ReceivedAt}}</time>
-          <span>received {{exact .ReceivedAt}}</span>
-          {{if .OccurredAt}}<span>occurred {{exact .OccurredAt}}</span>{{end}}
+          {{/* UTC as rendered; app.js rewrites `data-local` times in the reader's own time zone. */}}
+          <span>received <time datetime="{{iso .ReceivedAt}}" data-local>{{exact .ReceivedAt}}</time></span>
+          {{if .OccurredAt}}<span>occurred <time datetime="{{iso .OccurredAt}}" data-local>{{exact .OccurredAt}}</time></span>{{end}}
           {{if .Environment}}<span>env <b>{{.Environment}}</b></span>{{end}}
           {{if .Platform}}<span>platform <b>{{.Platform}}</b></span>{{end}}
+          {{if .Release}}
+            <span>release <a class="mono" href="{{searchURL "release" .Release}}" title="Every event from this release">{{.Release}}</a></span>
+          {{end}}
+          {{if gt $.Alike 1}}
+            <a href="{{searchURL "group" .GroupKey}}" title="Events with the same error, message or slow route">{{$.Alike}} alike events</a>
+          {{end}}
         </p>
         <form
           class="delete-one"
@@ -35,6 +42,13 @@
       <p class="hint throttled">
         {{.Suppressed}} more like this {{if eq .Suppressed 1}}was{{else}}were{{end}} not sent since the last report: the app
         sends at most 5 alike errors a minute.
+      </p>
+    {{end}}
+
+    {{with .Trimmed}}
+      <p class="hint throttled">
+        This event was {{.Bytes}} bytes, more than the viewer stores for one event. Left out:
+        {{range $i, $name := .Dropped}}{{if $i}}, {{end}}<span class="mono">{{$name}}</span>{{end}}.
       </p>
     {{end}}
 
@@ -205,6 +219,58 @@
           <h3>React component stack</h3>
           <pre class="block">{{.Component}}</pre>
         {{end}}
+      </section>
+    {{end}}
+
+    {{/*===== User =====*/}}
+    {{if .User}}
+      <section class="card">
+        <h2>User</h2>
+        {{template "fields" .User}}
+      </section>
+    {{end}}
+
+    {{/*===== Breadcrumbs =====*/}}
+    {{/* What the SDK noted before the event, oldest first: the last rows are what led to it. */}}
+    {{if .Breadcrumbs}}
+      <section class="card">
+        <details>
+          <summary>{{len .Breadcrumbs}} breadcrumb{{if gt (len .Breadcrumbs) 1}}s{{end}} before the event</summary>
+          {{if .CrumbsLeftOut}}<p class="hint">{{.CrumbsLeftOut}} older ones are in the raw JSON.</p>{{end}}
+          <div class="table-wrap">
+            <table class="crumb-table">
+              <thead>
+                <tr>
+                  <th scope="col">Time</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{range .Breadcrumbs}}
+                  <tr>
+                    <td class="time mono">
+                      {{if .At}}<time datetime="{{iso .At}}" data-local="time">{{clock .At}}</time>{{end}}
+                    </td>
+                    <td class="mono">
+                      {{.Category}}
+                      {{if and .Level (ne .Level "info")}}<span class="badge level {{.Level}}">{{.Level}}</span>{{end}}
+                    </td>
+                    <td class="mono pre">{{.Message}}{{if and .Message .Data}} {{end}}<span class="muted">{{.Data}}</span></td>
+                  </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+    {{end}}
+
+    {{/*===== Extra =====*/}}
+    {{if .Extra}}
+      <section class="card">
+        <h2>Extra</h2>
+        {{template "fields" .Extra}}
       </section>
     {{end}}
 

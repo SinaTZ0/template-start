@@ -17,10 +17,12 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     && mkdir -p /out/data /out/tmp && chmod 1777 /out/tmp
 
 # ===== Runtime =====
-# `scratch` is empty: no shell, no package manager, nothing to patch. The binary needs no libc, certificates or time
-# zones (it makes no outgoing HTTPS calls and shows UTC).
+# `scratch` is empty: no shell, no package manager, nothing to patch. The binary needs no libc or time zones (the
+# reader's browser shows local times).
 FROM scratch
 COPY --from=build /out/error-viewer /error-viewer
+# Root certificates, for the one outgoing HTTPS call there can be: a notification to NOTIFY_URL.
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # SQLite may spill large sorts to a temporary file.
 COPY --from=build /out/tmp /tmp
 # A new named volume mounted here starts with this directory's owner, so the non-root user can write to it.

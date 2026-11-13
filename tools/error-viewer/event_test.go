@@ -35,6 +35,10 @@ func TestBuildRowServerError(t *testing.T) {
 		ErrorID: "4f1c2b9e-0000-4000-8000-000000000000", ReqID: "638455eb2c7f1a90", Method: "GET", Path: "/notes",
 		Module: "orpc", ClientID: "0f4a9c2e8b7d4e1fa3c5b6d7e8f90a1b",
 	}
+	if row.GroupKey == "" {
+		t.Error("no group key")
+	}
+	want.GroupKey = row.GroupKey
 	if !reflect.DeepEqual(row, want) {
 		t.Errorf("row =\n%+v\nwant\n%+v", row, want)
 	}
@@ -89,5 +93,44 @@ func TestBuildRowMessageWithSyntheticException(t *testing.T) {
 	}
 	if row.Kind != "message" || row.Title != "cache warmed" {
 		t.Errorf("kind/title = %q %q", row.Kind, row.Title)
+	}
+}
+
+// The browser SDK carries the signed-in user in `user.id` (`Sentry.setUser`), not in a tag; `userId:` must find both.
+func TestBuildRowReadsBrowserUserAndRelease(t *testing.T) {
+	payload := `{"platform": "javascript", "message": "x", "release": "1a2b3c4", "user": {"id": "Hq3ZkV9xT2bLwA7mRc5NdY8e"}}`
+	row, err := buildRow([]byte(payload), "", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.UserID != "Hq3ZkV9xT2bLwA7mRc5NdY8e" || row.Release != "1a2b3c4" {
+		t.Errorf("userId/release = %q %q", row.UserID, row.Release)
+	}
+}
+
+// Two reports of one bug differ only in numbers and IDs; another error, or the same one elsewhere, is another group.
+func TestGroupKeyJoinsAlikeErrorsOnly(t *testing.T) {
+	event := func(message, function string) string {
+		return `{"platform": "node", "exception": {"values": [{"type": "Error", "value": "` + message + `",
+			"stacktrace": {"frames": [{"filename": "/app/src/orpc/note/service.ts", "function": "` + function + `",
+			"lineno": 12, "context_line": "throw"}]}}]}}`
+	}
+	key := func(payload string) string {
+		row, err := buildRow([]byte(payload), "", time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return row.GroupKey
+	}
+
+	first := key(event("note 4821 not found for 4f1c2b9e-0000-4000-8000-000000000000", "getNote"))
+	if again := key(event("note 77 not found for 9ec79c33-ec99-42ab-8353-589fcb2e04dc", "getNote")); again != first {
+		t.Error("the same error with other numbers got another group")
+	}
+	if other := key(event("note 4821 is locked", "getNote")); other == first {
+		t.Error("a different message got the same group")
+	}
+	if elsewhere := key(event("note 4821 not found for 4f1c2b9e-0000-4000-8000-000000000000", "deleteNote")); elsewhere == first {
+		t.Error("the same message thrown elsewhere got the same group")
 	}
 }

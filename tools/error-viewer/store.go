@@ -26,11 +26,21 @@ type store struct {
 	queue chan eventRow
 	done  chan struct{}
 	log   *slog.Logger
+	// Asks the retention loop to run now. The writer sends on it after every pruneAfterBytes it stores, so a flood
+	// can't outgrow the size cap between two hourly runs.
+	pruneNow chan struct{}
+	// Called by the writer for the first event of a kind of error that is new or back after notifyQuiet. Nil without
+	// notifications; set before the first enqueue (setAnnouncer).
+	announce func(eventRow)
 }
 
 const (
 	queueSize    = 1000
 	maxBatchSize = 100
+	// How much the writer stores between two size checks.
+	pruneAfterBytes = 32 << 20
+	// A kind of error is announced again once it has been silent this long.
+	notifyQuiet = 6 * time.Hour
 )
 
 var errNotFound = errors.New("event not found")
@@ -50,7 +60,8 @@ func openStore(path string, log *slog.Logger) (*store, error) {
 		return nil, fmt.Errorf("migrate %s: %w", path, err)
 	}
 
-	s := &store{db: db, queue: make(chan eventRow, queueSize), done: make(chan struct{}), log: log}
+	s := &store{db: db, queue: make(chan eventRow, queueSize), done: make(chan struct{}), log: log,
+		pruneNow: make(chan struct{}, 1)}
 	go s.runWriter()
 	return s, nil
 }
@@ -83,6 +94,21 @@ func migrate(db *sql.DB) error {
 			alter table events add column user_id text;
 			create index if not exists events_user_id on events (user_id, received_at desc) where user_id is not null;
 			pragma user_version = 3;
+		`)
+		if err != nil {
+			return err
+		}
+	}
+	if version < 4 {
+		// `release` and `group_key` are empty on events stored before this: they show no release and each is a group
+		// of its own. `meta` holds the session epoch.
+		_, err := db.Exec(`
+			alter table events add column release text;
+			alter table events add column group_key text;
+			create index if not exists events_group on events (group_key, received_at desc) where group_key is not null;
+			create index if not exists events_release on events (release, received_at desc) where release is not null;
+			create table if not exists meta (key text primary key, value integer not null);
+			pragma user_version = 4;
 		`)
 		if err != nil {
 			return err
@@ -140,11 +166,17 @@ func (s *store) enqueue(row eventRow) bool {
 	}
 }
 
+// setAnnouncer makes the writer call fn for events worth a notification. Call it before the server starts.
+func (s *store) setAnnouncer(fn func(eventRow)) {
+	s.announce = fn
+}
+
 // runWriter inserts queued rows until the queue is closed, taking whatever has piled up (up to maxBatchSize) into one
 // transaction.
 func (s *store) runWriter() {
 	defer close(s.done)
 	batch := make([]eventRow, 0, maxBatchSize)
+	written := 0
 	for row := range s.queue {
 		batch = append(batch[:0], row)
 	collect:
@@ -159,10 +191,76 @@ func (s *store) runWriter() {
 				break collect
 			}
 		}
-		if err := s.insert(batch); err != nil {
-			s.log.Error("could not store events", "err", err, "count", len(batch))
+		announce := s.worthAnnouncing(batch)
+		s.insertAll(batch)
+		for _, row := range announce {
+			s.announce(row)
+		}
+
+		/*------ Size Check ------*/
+		for _, row := range batch {
+			written += len(row.Payload)
+		}
+		if written >= pruneAfterBytes {
+			written = 0
+			select {
+			case s.pruneNow <- struct{}{}:
+			default:
+			}
 		}
 	}
+}
+
+// insertAll stores a batch and doesn't give up on the first failure: the events were already accepted, so the sender
+// won't send them again. A failed batch is tried once more (a locked database clears up), then row by row, so one row
+// SQLite refuses loses only itself.
+func (s *store) insertAll(batch []eventRow) {
+	err := s.insert(batch)
+	if err == nil {
+		return
+	}
+	s.log.Warn("could not store a batch of events, trying again", "err", err, "count", len(batch))
+	time.Sleep(200 * time.Millisecond)
+	if err = s.insert(batch); err == nil {
+		return
+	}
+
+	lost := 0
+	for _, row := range batch {
+		if rowErr := s.insert([]eventRow{row}); rowErr != nil {
+			lost++
+			err = rowErr
+		}
+	}
+	if lost > 0 {
+		s.log.Error("could not store events", "err", err, "lost", lost, "count", len(batch))
+	}
+}
+
+// worthAnnouncing picks, before the batch is stored, the errors whose kind (group) has no event in the last
+// notifyQuiet: at most one per group.
+func (s *store) worthAnnouncing(batch []eventRow) []eventRow {
+	if s.announce == nil {
+		return nil
+	}
+	var rows []eventRow
+	seen := map[string]bool{}
+	for _, row := range batch {
+		if row.GroupKey == "" || seen[row.GroupKey] || (row.Level != "error" && row.Level != "fatal") {
+			continue
+		}
+		seen[row.GroupKey] = true
+		var last sql.NullInt64
+		err := s.db.QueryRow("select max(received_at) from events where group_key = ?", row.GroupKey).Scan(&last)
+		if err != nil {
+			s.log.Warn("could not look up an event's group", "err", err)
+			continue
+		}
+		if !last.Valid || last.Int64 < row.ReceivedAt-notifyQuiet.Milliseconds() {
+			rows = append(rows, row)
+		}
+	}
+	return rows
 }
 
 // insert stores rows in one transaction. An ID that is already stored is skipped: SDKs retry a send they believe failed.
@@ -175,8 +273,8 @@ func (s *store) insert(rows []eventRow) error {
 
 	stmt, err := tx.Prepare(`
 		insert into events (id, received_at, occurred_at, kind, level, platform, environment, title, error_id, req_id,
-			method, path, route, module, client_id, user_id, payload)
-		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			method, path, route, module, client_id, user_id, release, group_key, payload)
+		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		on conflict (id) do nothing`)
 	if err != nil {
 		return err
@@ -191,7 +289,7 @@ func (s *store) insert(rows []eventRow) error {
 		_, err := stmt.Exec(r.ID, r.ReceivedAt, occurredAt, r.Kind, r.Level, nullable(r.Platform),
 			nullable(r.Environment), r.Title, nullable(r.ErrorID), nullable(r.ReqID), nullable(r.Method),
 			nullable(r.Path), nullable(r.Route), nullable(r.Module), nullable(r.ClientID),
-			nullable(r.UserID), r.Payload)
+			nullable(r.UserID), nullable(r.Release), nullable(r.GroupKey), r.Payload)
 		if err != nil {
 			return err
 		}
@@ -239,8 +337,7 @@ type eventFilter struct {
 	Platform    string
 	Environment string
 	Since       int64 // unix ms; 0 is "all time"
-	// One column matched exactly (`error_id`, `req_id`, `path`, `route`, `module`, `client_id` or `user_id`), from the
-	// search box.
+	// One column matched exactly (one of searchColumns), from the search box.
 	Column string
 	Value  string
 	// Matched anywhere in the title.
@@ -251,6 +348,7 @@ type eventFilter struct {
 // the SQL text.
 var searchColumns = map[string]bool{
 	"error_id": true, "req_id": true, "path": true, "route": true, "module": true, "client_id": true, "user_id": true,
+	"release": true, "group_key": true,
 }
 
 // where returns the filter as SQL conditions joined by `and` (starting with `where`, or empty) and their arguments.
@@ -328,11 +426,12 @@ func parseCursor(s string) (cursor, bool) {
 const listColumns = `id, received_at, coalesce(occurred_at, 0), kind, level, coalesce(platform, ''),
 	coalesce(environment, ''), title, coalesce(error_id, ''), coalesce(req_id, ''), coalesce(method, ''),
 	coalesce(path, ''), coalesce(route, ''), coalesce(module, ''), coalesce(client_id, ''),
-	coalesce(user_id, '')`
+	coalesce(user_id, ''), coalesce(release, ''), coalesce(group_key, '')`
 
-func scanRow(rows interface{ Scan(...any) error }, r *eventRow) error {
-	return rows.Scan(&r.ID, &r.ReceivedAt, &r.OccurredAt, &r.Kind, &r.Level, &r.Platform, &r.Environment, &r.Title,
-		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID, &r.UserID)
+// columns are the scan targets for listColumns, in its order.
+func (r *eventRow) columns() []any {
+	return []any{&r.ID, &r.ReceivedAt, &r.OccurredAt, &r.Kind, &r.Level, &r.Platform, &r.Environment, &r.Title,
+		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID, &r.UserID, &r.Release, &r.GroupKey}
 }
 
 // list returns up to limit events matching f, newest first, starting after `before` (nil for the newest). `more`
@@ -377,7 +476,7 @@ func (s *store) query(ctx context.Context, query string, args ...any) ([]eventRo
 	var events []eventRow
 	for rows.Next() {
 		var r eventRow
-		if err := scanRow(rows, &r); err != nil {
+		if err := rows.Scan(r.columns()...); err != nil {
 			return nil, err
 		}
 		events = append(events, r)
@@ -390,8 +489,7 @@ func (s *store) get(ctx context.Context, id string) (eventRow, error) {
 	var r eventRow
 	var compressed []byte
 	row := s.db.QueryRowContext(ctx, "select "+listColumns+", payload from events where id = ?", id)
-	err := row.Scan(&r.ID, &r.ReceivedAt, &r.OccurredAt, &r.Kind, &r.Level, &r.Platform, &r.Environment, &r.Title,
-		&r.ErrorID, &r.ReqID, &r.Method, &r.Path, &r.Route, &r.Module, &r.ClientID, &r.UserID, &compressed)
+	err := row.Scan(append(r.columns(), &compressed)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, errNotFound
 	}
@@ -402,21 +500,89 @@ func (s *store) get(ctx context.Context, id string) (eventRow, error) {
 	return r, err
 }
 
-// dayCount is the number of events received on one UTC day.
+/*------ Groups ------*/
+
+// eventGroup is a run of alike events (one group_key): its newest event, how many there are and when the first came.
+type eventGroup struct {
+	eventRow
+	Count   int
+	FirstAt int64
+}
+
+// Key is what the group is listed and paged by: the group key, or the event's own ID for an event stored before
+// groups existed.
+func (g eventGroup) Key() string {
+	if g.GroupKey != "" {
+		return g.GroupKey
+	}
+	return g.ID
+}
+
+// groups returns up to limit groups of the events matching f, the most recently seen first, starting after `before`.
+// The counts cover the matching events; "first seen" covers every stored event of the group.
+func (s *store) groups(ctx context.Context, f eventFilter, before *cursor, limit int) (groups []eventGroup, more bool, err error) {
+	where, args := f.where()
+	having := ""
+	if before != nil {
+		having = " having (max(received_at) < ? or (max(received_at) = ? and gk < ?))"
+		args = append(args, before.At, before.At, before.ID)
+	}
+	args = append(args, limit+1)
+
+	// With a single max() in an aggregate query, SQLite takes the other columns from the row that holds the maximum:
+	// here, each group's newest event.
+	rows, err := s.db.QueryContext(ctx, `
+		select g.*, coalesce((select min(received_at) from events f where f.group_key = g.gk), g.last) from (
+			select `+listColumns+`, coalesce(group_key, id) as gk, count(*) as n, max(received_at) as last
+			from events `+where+` group by gk`+having+` order by last desc, gk desc limit ?
+		) g order by g.last desc, g.gk desc`, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var g eventGroup
+		var key string
+		var last int64
+		if err := rows.Scan(append(g.columns(), &key, &g.Count, &last, &g.FirstAt)...); err != nil {
+			return nil, false, err
+		}
+		groups = append(groups, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if len(groups) > limit {
+		return groups[:limit], true, nil
+	}
+	return groups, false, nil
+}
+
+// countGroup returns how many stored events share a group key.
+func (s *store) countGroup(ctx context.Context, groupKey string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, "select count(*) from events where group_key = ?", groupKey).Scan(&n)
+	return n, err
+}
+
+// dayCount is the number of events received on one day.
 type dayCount struct {
 	Day   time.Time
 	Count int
 }
 
-// countByDay returns one entry per UTC day for the last `days` days, today last, zero-filled.
-func (s *store) countByDay(ctx context.Context, days int, now time.Time) ([]dayCount, error) {
+// countByDay returns one entry per day for the last `days` days, today last, zero-filled. Days are the reader's own:
+// `offset` is how far their clock is ahead of UTC. `Day` holds the day's date as if it were UTC.
+func (s *store) countByDay(ctx context.Context, days int, now time.Time, offset time.Duration) ([]dayCount, error) {
 	const dayMs = 24 * 60 * 60 * 1000
-	today := now.UTC().Truncate(24 * time.Hour)
+	shift := offset.Milliseconds()
+	today := now.UTC().Add(offset).Truncate(24 * time.Hour)
 	first := today.AddDate(0, 0, -(days - 1))
 
 	rows, err := s.db.QueryContext(ctx,
-		"select received_at / ? as day, count(*) from events where received_at >= ? group by day", dayMs,
-		first.UnixMilli())
+		"select (received_at + ?) / ? as day, count(*) from events where received_at >= ? group by day", shift, dayMs,
+		first.UnixMilli()-shift)
 	if err != nil {
 		return nil, err
 	}
@@ -499,33 +665,82 @@ func (s *store) deleteIDs(ctx context.Context, ids []string) (int64, error) {
 
 /*===== Retention =====*/
 
-// prune deletes events older than maxAge and all but the newest maxEvents, then returns the freed pages to the file
-// system.
-func (s *store) prune(ctx context.Context, maxAge time.Duration, maxEvents int, now time.Time) (int64, error) {
-	old, err := s.db.ExecContext(ctx, "delete from events where received_at < ?", now.Add(-maxAge).UnixMilli())
+// retention is what the store keeps: nothing older than MaxAge, at most MaxEvents, and at most MaxBytes of database.
+type retention struct {
+	MaxAge    time.Duration
+	MaxEvents int
+	MaxBytes  int64
+}
+
+// prune deletes events older than MaxAge and all but the newest MaxEvents, then the oldest ones until the database
+// is under MaxBytes, and returns the freed pages to the file system. Count and age alone don't bound the disk: events
+// differ a thousandfold in size.
+func (s *store) prune(ctx context.Context, keep retention, now time.Time) (int64, error) {
+	old, err := s.db.ExecContext(ctx, "delete from events where received_at < ?", now.Add(-keep.MaxAge).UnixMilli())
 	if err != nil {
 		return 0, err
 	}
 	excess, err := s.db.ExecContext(ctx, `delete from events where id in (
-		select id from events order by received_at desc, id desc limit -1 offset ?)`, maxEvents)
+		select id from events order by received_at desc, id desc limit -1 offset ?)`, keep.MaxEvents)
 	if err != nil {
 		return 0, err
 	}
-	if _, err := s.db.ExecContext(ctx, "pragma incremental_vacuum"); err != nil {
-		return 0, err
+	deleted, _ := old.RowsAffected()
+	excessCount, _ := excess.RowsAffected()
+	deleted += excessCount
+
+	/*------ Size ------*/
+	// A few rounds: how much a delete frees is only known afterwards.
+	for range 20 {
+		used, err := s.usedBytes(ctx)
+		if err != nil {
+			return deleted, err
+		}
+		if keep.MaxBytes <= 0 || used <= keep.MaxBytes {
+			break
+		}
+		var count int64
+		if err := s.db.QueryRowContext(ctx, "select count(*) from events").Scan(&count); err != nil {
+			return deleted, err
+		}
+		if count == 0 {
+			break
+		}
+		// The share of events that would free the excess if all were the same size, and a tenth more.
+		n := min(count, max(count*(used-keep.MaxBytes)/used*11/10, 1))
+		oldest, err := s.db.ExecContext(ctx, `delete from events where id in (
+			select id from events order by received_at asc, id asc limit ?)`, n)
+		if err != nil {
+			return deleted, err
+		}
+		oldestCount, _ := oldest.RowsAffected()
+		deleted += oldestCount
 	}
 
-	oldCount, _ := old.RowsAffected()
-	excessCount, _ := excess.RowsAffected()
-	return oldCount + excessCount, nil
+	if _, err := s.db.ExecContext(ctx, "pragma incremental_vacuum"); err != nil {
+		return deleted, err
+	}
+	return deleted, nil
 }
 
-// runRetention prunes once at start and then every hour until ctx ends.
-func (s *store) runRetention(ctx context.Context, maxAge time.Duration, maxEvents int) {
+// usedBytes is the size of the database's pages in use: the file, less the pages a delete has freed and the next
+// vacuum returns.
+func (s *store) usedBytes(ctx context.Context) (int64, error) {
+	var pages, free, pageSize int64
+	for pragma, target := range map[string]*int64{"page_count": &pages, "freelist_count": &free, "page_size": &pageSize} {
+		if err := s.db.QueryRowContext(ctx, "pragma "+pragma).Scan(target); err != nil {
+			return 0, err
+		}
+	}
+	return (pages - free) * pageSize, nil
+}
+
+// runRetention prunes once at start, then every hour and whenever the writer asks (pruneNow), until ctx ends.
+func (s *store) runRetention(ctx context.Context, keep retention) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
-		deleted, err := s.prune(ctx, maxAge, maxEvents, time.Now())
+		deleted, err := s.prune(ctx, keep, time.Now())
 		if err != nil && ctx.Err() == nil {
 			s.log.Error("retention failed", "err", err)
 		} else if deleted > 0 {
@@ -536,6 +751,27 @@ func (s *store) runRetention(ctx context.Context, maxAge time.Duration, maxEvent
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		case <-s.pruneNow:
 		}
 	}
+}
+
+/*===== Session Epoch =====*/
+
+// sessionEpoch is a counter every session cookie is signed with. Raising it (bumpSessionEpoch, on sign-out) makes
+// every cookie signed before worthless, which is how a session is revoked without a session table.
+func (s *store) sessionEpoch(ctx context.Context) (int64, error) {
+	var epoch int64
+	err := s.db.QueryRowContext(ctx, "select value from meta where key = 'session_epoch'").Scan(&epoch)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return epoch, err
+}
+
+func (s *store) bumpSessionEpoch(ctx context.Context) (int64, error) {
+	var epoch int64
+	err := s.db.QueryRowContext(ctx, `insert into meta (key, value) values ('session_epoch', 1)
+		on conflict (key) do update set value = value + 1 returning value`).Scan(&epoch)
+	return epoch, err
 }

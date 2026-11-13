@@ -2,11 +2,13 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -22,6 +24,7 @@ type sentryEvent struct {
 	Level       string                     `json:"level"`
 	Platform    string                     `json:"platform"`
 	Environment string                     `json:"environment"`
+	Release     string                     `json:"release"`
 	Message     json.RawMessage            `json:"message"`
 	Logentry    *messageObject             `json:"logentry"`
 	Exception   json.RawMessage            `json:"exception"`
@@ -29,6 +32,11 @@ type sentryEvent struct {
 	Tags        json.RawMessage            `json:"tags"`
 	Request     *eventRequest              `json:"request"`
 	Contexts    map[string]json.RawMessage `json:"contexts"`
+	User        json.RawMessage            `json:"user"`
+	Extra       json.RawMessage            `json:"extra"`
+	Breadcrumbs json.RawMessage            `json:"breadcrumbs"`
+	// Set by the viewer itself when it stored less than it received (trimPayload).
+	Trimmed *trimmedInfo `json:"viewer_trimmed"`
 }
 
 type messageObject struct {
@@ -133,6 +141,18 @@ func (ev sentryEvent) tags() map[string]string {
 	return tags
 }
 
+// userID returns `user.id`, which SDKs send as a string or a number. The browser SDK's `setUser({ id })` puts the
+// signed-in user there.
+func (ev sentryEvent) userID() string {
+	var user struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if len(ev.User) == 0 || json.Unmarshal(ev.User, &user) != nil || len(user.ID) == 0 || string(user.ID) == "null" {
+		return ""
+	}
+	return jsonText(user.ID)
+}
+
 // message returns the event's message: a string, or an object with `formatted` / `message`, or `logentry`.
 func (ev sentryEvent) message() string {
 	if len(ev.Message) > 0 {
@@ -199,6 +219,8 @@ type eventRow struct {
 	Module      string
 	ClientID    string // the browser's random ID (src/lib/client-id.ts), shared by its own and its requests' events
 	UserID      string // the signed-in user's database ID, on the server's and the browser's events
+	Release     string // the app build that sent it (its commit)
+	GroupKey    string // the same for alike events (groupKey); empty on events stored before groups existed
 	Payload     []byte
 }
 
@@ -234,7 +256,13 @@ func buildRow(payload []byte, fallbackID string, receivedAt time.Time) (eventRow
 		Module:      clip(tags["module"], columnMaxLen),
 		ClientID:    clip(tags["clientId"], 64),
 		UserID:      clip(tags["userId"], 64),
+		Release:     clip(ev.Release, 64),
 	}
+	// The server tags its reports with `userId`; the browser SDK carries the user in `user.id` instead.
+	if row.UserID == "" {
+		row.UserID = clip(ev.userID(), 64)
+	}
+	row.GroupKey = groupKey(ev, exceptions, row.Kind, row.Title)
 
 	/*------ Browser Events ------*/
 	// The browser SDK has no request tags; its page URL is in `request`.
@@ -302,6 +330,46 @@ func eventTitle(ev sentryEvent, exceptions []exception) string {
 		return "(no message)"
 	}
 	return clip(title, titleMaxLen)
+}
+
+/*===== Grouping =====*/
+
+// Numbers and IDs differ between two reports of one bug ("user 4821 not found"), so they don't count.
+var variableText = regexp.MustCompile(`[0-9a-fA-F]{8}(?:-?[0-9a-fA-F]{4,})+|[0-9]+`)
+
+// groupKey is the same for events that report the same thing, so the list can show them as one row with a count:
+//   - a slow request: its fingerprint (method and route);
+//   - an error: the thrown error's type, its message without numbers and IDs, and the innermost frame of the app's own
+//     code that names real source (file and function). A minified browser frame doesn't, and changes with every build;
+//   - a message: its level and text, without numbers and IDs.
+//
+// The platform is part of it: the same message from the server and from a browser are two things to fix.
+func groupKey(ev sentryEvent, exceptions []exception, kind, title string) string {
+	parts := []string{kind, ev.Platform}
+	switch {
+	case kind == "slow":
+		for _, part := range ev.Fingerprint {
+			parts = append(parts, jsonText(part))
+		}
+	case kind == "error" && len(exceptions) > 0:
+		thrown := exceptions[len(exceptions)-1]
+		message, _, _ := strings.Cut(strings.TrimSpace(thrown.Value), "\n")
+		parts = append(parts, thrown.Type, variableText.ReplaceAllString(message, "#"))
+		if thrown.Stacktrace != nil {
+			// Frames run from the oldest call to the innermost.
+			for i := len(thrown.Stacktrace.Frames) - 1; i >= 0; i-- {
+				f := thrown.Stacktrace.Frames[i]
+				if (f.InApp == nil || *f.InApp) && f.ContextLine != nil {
+					parts = append(parts, f.Filename, f.Function)
+					break
+				}
+			}
+		}
+	default:
+		parts = append(parts, normalizeLevel(ev.Level), variableText.ReplaceAllString(title, "#"))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:16])
 }
 
 var knownLevels = map[string]string{

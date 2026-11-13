@@ -56,6 +56,8 @@ var Registry = []Setting{
 	{"ERROR_VIEWER_PUBLIC_KEY", "secret:16", Stack},
 	{"ERROR_VIEWER_ADMIN_PASSWORD", "password:12", Stack},
 	{"ERROR_VIEWER_SESSION_SECRET", "secret:32:32", Stack},
+	{"ERROR_VIEWER_NOTIFY_URL", "optional", Stack},
+	{"ERROR_VIEWER_NOTIFY_CHAT_ID", "optional", Stack},
 	{"SENTRY_DSN", "derived", Stack},
 	{"GOPROXY", "optional", Stack},
 	{"NPM_REGISTRY", "registry", Stack},
@@ -71,6 +73,7 @@ var Registry = []Setting{
 	{"LOG_SLOW_REQUEST_MS", "int", Stack},
 	{"LOG_SLOW_QUERY_MS", "int", Stack},
 	{"LOG_QUERY_PARAMS", "optional", Stack},
+	{"ERROR_VIEWER_MAX_DB_MB", "int", Stack},
 }
 
 // Lookup finds a key's entry.

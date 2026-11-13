@@ -23,6 +23,12 @@ type detailView struct {
 	RequestReveal    []segment
 	LogMessageReveal []segment
 	Suppressed       int // alike errors the app left out since its previous report of this one (`throttle` context)
+	Alike            int // stored events of the same group, this one included
+	Trimmed          *trimmedInfo
+	User             []field
+	Extra            []field
+	Breadcrumbs      []crumbView
+	CrumbsLeftOut    int
 	Request          string
 	Tags             []tagView
 	Exceptions       []exceptionView
@@ -44,6 +50,19 @@ type field struct {
 	Key, Value string
 	Reveal     []segment
 }
+
+// crumbView is one breadcrumb: something the SDK noted before the error (a click, a navigation, a request, a console
+// line).
+type crumbView struct {
+	At       int64 // unix ms; 0 when the SDK sent none
+	Category string
+	Level    string
+	Message  string
+	Data     string // compact JSON
+}
+
+// maxBreadcrumbs is how many of the newest are shown; the SDKs keep up to 100.
+const maxBreadcrumbs = 100
 
 type exceptionView struct {
 	Type, Value string
@@ -168,6 +187,11 @@ func buildDetail(row eventRow) detailView {
 		view.Request = strings.TrimSpace(ev.Request.Method + " " + ev.Request.URL)
 		view.RequestReveal = revealHidden(view.Request)
 	}
+
+	view.Trimmed = ev.Trimmed
+	view.User = objectFields(ev.User)
+	view.Extra = objectFields(ev.Extra)
+	view.Breadcrumbs, view.CrumbsLeftOut = buildBreadcrumbs(ev.Breadcrumbs)
 
 	/*------ Tags ------*/
 	for key, value := range ev.tags() {
@@ -305,6 +329,56 @@ func buildFrame(f frame, inApp bool) frameView {
 		view.Lines = append(view.Lines, sourceLine{Number: *f.Lineno + 1 + i, Text: text})
 	}
 	return view
+}
+
+// buildBreadcrumbs reads `breadcrumbs`, which SDKs send as `{"values": [...]}` or a bare list, oldest first. It
+// returns the newest maxBreadcrumbs and how many older ones were left out.
+func buildBreadcrumbs(raw json.RawMessage) (crumbs []crumbView, leftOut int) {
+	type crumb struct {
+		Timestamp json.RawMessage `json:"timestamp"`
+		Category  string          `json:"category"`
+		Type      string          `json:"type"`
+		Level     string          `json:"level"`
+		Message   string          `json:"message"`
+		Data      json.RawMessage `json:"data"`
+	}
+	var wrapped struct {
+		Values []crumb `json:"values"`
+	}
+	var list []crumb
+	if len(raw) == 0 {
+		return nil, 0
+	}
+	if json.Unmarshal(raw, &list) != nil {
+		if json.Unmarshal(raw, &wrapped) != nil {
+			return nil, 0
+		}
+		list = wrapped.Values
+	}
+	if len(list) > maxBreadcrumbs {
+		leftOut = len(list) - maxBreadcrumbs
+		list = list[leftOut:]
+	}
+
+	for _, c := range list {
+		view := crumbView{
+			At:       sentryEvent{Timestamp: c.Timestamp}.occurredAt(),
+			Category: c.Category,
+			Level:    c.Level,
+			Message:  c.Message,
+		}
+		if view.Category == "" {
+			view.Category = c.Type
+		}
+		if len(c.Data) > 0 && string(c.Data) != "null" && string(c.Data) != "{}" {
+			var compact bytes.Buffer
+			if json.Compact(&compact, c.Data) == nil {
+				view.Data = clip(compact.String(), 2000)
+			}
+		}
+		crumbs = append(crumbs, view)
+	}
+	return crumbs, leftOut
 }
 
 /*===== Helpers =====*/

@@ -38,6 +38,17 @@ func newRateLimiter(perMinute, burst int) *rateLimiter {
 	}
 }
 
+// has reports whether key's bucket holds at least n tokens, without taking any.
+func (l *rateLimiter) has(key string, n int, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b, found := l.buckets[key]
+	if !found {
+		return l.burst >= float64(n)
+	}
+	return math.Min(l.burst, b.tokens+now.Sub(b.last).Seconds()*l.perSecond) >= float64(n)
+}
+
 // take removes n tokens from key's bucket. When there aren't enough it takes none and returns how long until there
 // will be.
 func (l *rateLimiter) take(key string, n int, now time.Time) (ok bool, retryAfter time.Duration) {
@@ -82,7 +93,8 @@ func (l *rateLimiter) sweep(now time.Time) {
 
 // clientIP is the address rate limits count against. Behind Caddy every connection comes from the proxy, which passes
 // the visitor's address in X-Real-IP (deploy/Caddyfile). The header is trusted only from a private or loopback
-// address (the Docker network), so a client connecting directly can't pick its own bucket.
+// address (the Docker network), so a client connecting directly can't pick its own bucket. The result is a bucket key
+// (addressKey), not always the address itself.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -94,8 +106,23 @@ func clientIP(r *http.Request) string {
 	}
 	if remote.IsLoopback() || remote.IsPrivate() {
 		if real, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-IP"))); err == nil {
-			return real.String()
+			return addressKey(real)
 		}
 	}
-	return remote.String()
+	return addressKey(remote)
+}
+
+// addressKey is the address a limit counts against: an IPv4 address itself, and an IPv6 address's /64. One IPv6
+// subscriber holds a whole /64 and can use a new address from it for every request, so counting single addresses would
+// limit nothing.
+func addressKey(addr netip.Addr) string {
+	addr = addr.Unmap()
+	if addr.Is4() {
+		return addr.String()
+	}
+	prefix, err := addr.Prefix(64)
+	if err != nil {
+		return addr.String()
+	}
+	return prefix.String()
 }

@@ -36,6 +36,9 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 FROM deps AS build
 # Inlined into the browser bundle so it can report errors (`vite.config.ts`). Empty turns browser reporting off.
 ARG SENTRY_DSN=""
+# The commit being built, which error reports carry as their release (`vite.config.ts`). The deploy tool passes it;
+# empty leaves reports without one.
+ARG APP_RELEASE=""
 COPY . .
 RUN pnpm build
 # The seeds `deploy/deploy.sh seed` runs in a one-off container, each as one plain-JavaScript file, since the runtime

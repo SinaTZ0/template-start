@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -18,6 +19,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -89,6 +91,10 @@ type web struct {
 	static    http.Handler
 	assetHash map[string]string
 	logins    *rateLimiter
+	// Wrong passwords from everyone together: what one address can't try, many addresses otherwise could.
+	failedLogins *rateLimiter
+	// The store's session epoch, part of every cookie's signature (store.sessionEpoch).
+	epoch atomic.Int64
 }
 
 const (
@@ -106,7 +112,14 @@ func newWeb(st *store, cfg config, log *slog.Logger) (*web, error) {
 		assetHash: map[string]string{},
 		// Five attempts a minute per address, after a first burst of ten.
 		logins: newRateLimiter(5, 10),
+		// Twenty wrong passwords a minute from all addresses, after a first forty.
+		failedLogins: newRateLimiter(20, 40),
 	}
+	epoch, err := st.sessionEpoch(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("read the session epoch: %w", err)
+	}
+	wb.epoch.Store(epoch)
 
 	/*------ Static Files ------*/
 	staticFS, err := fs.Sub(assets, "static")
@@ -142,6 +155,7 @@ func newWeb(st *store, cfg config, log *slog.Logger) (*web, error) {
 		"asset":     wb.assetURL,
 		"iso":       isoTime,
 		"exact":     exactTime,
+		"clock":     clockTime,
 		"ago":       func(ms int64) string { return ago(ms, time.Now()) },
 		"short":     func(s string) string { return clip(s, 9) },
 		"searchURL": searchURL,
@@ -248,6 +262,7 @@ type listQuery struct {
 	Env      string
 	Range    string
 	Auto     bool
+	Group    bool // alike events as one row with a count
 }
 
 var (
@@ -273,6 +288,7 @@ func readListQuery(values url.Values) listQuery {
 		Platform: oneOf(values.Get("platform"), platformOptions),
 		Env:      clip(values.Get("env"), 64),
 		Auto:     values.Get("auto") == "1",
+		Group:    values.Get("group") == "1",
 	}
 	if _, ok := rangeOptions[values.Get("range")]; ok {
 		q.Range = values.Get("range")
@@ -297,12 +313,15 @@ func (q listQuery) encode() string {
 	if q.Auto {
 		values.Set("auto", "1")
 	}
+	if q.Group {
+		values.Set("group", "1")
+	}
 	return values.Encode()
 }
 
-// Filtered reports whether anything narrows the list (auto-refresh doesn't).
+// Filtered reports whether anything narrows the list (auto-refresh and grouping don't).
 func (q listQuery) Filtered() bool {
-	q.Auto = false
+	q.Auto, q.Group = false, false
 	return q != listQuery{}
 }
 
@@ -323,12 +342,15 @@ var (
 		"clientid": {"client_id", true},
 		// Better-Auth's IDs are mixed-case, so this one is matched as typed.
 		"userid": {"user_id", false},
+		// A release is whatever the app's build was given: matched as typed.
+		"release": {"release", false},
+		"group":   {"group_key", true},
 	}
 )
 
 // filter turns the URL state into a store filter. The search box understands a bare errorId (a UUID), a bare reqId
-// (16 hex characters, or 8 for older events), `column:value` for errorId / reqId / path / route / module / clientId / userId, and otherwise searches
-// titles.
+// (16 hex characters, or 8 for older events), `column:value` for the columns in searchPrefixes, and otherwise
+// searches titles.
 func (q listQuery) filter(now time.Time) eventFilter {
 	f := eventFilter{Level: q.Level, Kind: q.Kind, Platform: q.Platform, Environment: q.Env}
 	if d, ok := rangeOptions[q.Range]; ok {
@@ -366,6 +388,7 @@ func searchURL(prefix, value string) string {
 type listView struct {
 	Query        listQuery
 	Rows         rowsView
+	Groups       groupsView // in place of Rows when Query.Group
 	Poller       pollerView
 	Environments []string
 	Days         []dayBar
@@ -383,11 +406,22 @@ type rowsView struct {
 	First       bool // the first page: an empty one shows "No events"
 }
 
+// groupsView is rowsView for the grouped list.
+type groupsView struct {
+	Groups      []eventGroup
+	More        bool
+	MoreURL     string
+	MoreRowsURL string
+	First       bool
+}
+
 // pollerView is the auto-refresh element: it asks for rows newer than the newest one shown every 10 s, prepends
-// them out of band and replaces itself with a poller that starts from the new newest row.
+// them out of band and replaces itself with a poller that starts from the new newest row. The grouped list can't be
+// added to that way (a new event changes a row's count and place), so there the poller reloads the results (`Whole`).
 type pollerView struct {
-	On  bool
-	URL string
+	On    bool
+	URL   string
+	Whole bool
 }
 
 type newerView struct {
@@ -404,18 +438,25 @@ func (wb *web) list(w http.ResponseWriter, r *http.Request) {
 		beforePtr = &before
 	}
 
-	events, more, err := wb.store.list(r.Context(), query.filter(now), beforePtr, pageSize)
-	if err != nil {
-		wb.serverError(w, r, err)
-		return
-	}
-	view := listView{
-		Query:     query,
-		Rows:      wb.rowsView(query, events, more, beforePtr == nil),
-		Poller:    wb.pollerView(query, events, cursor{}),
-		Levels:    levelOptions,
-		Kinds:     kindOptions,
-		Platforms: platformOptions,
+	view := listView{Query: query, Levels: levelOptions, Kinds: kindOptions, Platforms: platformOptions}
+	if query.Group {
+		groups, more, err := wb.store.groups(r.Context(), query.filter(now), beforePtr, pageSize)
+		if err != nil {
+			wb.serverError(w, r, err)
+			return
+		}
+		view.Groups = wb.groupsView(query, groups, more, beforePtr == nil)
+		if query.Auto {
+			view.Poller = pollerView{On: true, URL: "/?" + query.encode(), Whole: true}
+		}
+	} else {
+		events, more, err := wb.store.list(r.Context(), query.filter(now), beforePtr, pageSize)
+		if err != nil {
+			wb.serverError(w, r, err)
+			return
+		}
+		view.Rows = wb.rowsView(query, events, more, beforePtr == nil)
+		view.Poller = wb.pollerView(query, events, cursor{})
 	}
 	if isPartial(r, "results") {
 		wb.render(w, r, "list", "results", http.StatusOK, view)
@@ -423,11 +464,12 @@ func (wb *web) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	/*------ Whole Page ------*/
+	var err error
 	if view.Environments, err = wb.store.environments(r.Context()); err != nil {
 		wb.serverError(w, r, err)
 		return
 	}
-	counts, err := wb.store.countByDay(r.Context(), 14, now)
+	counts, err := wb.store.countByDay(r.Context(), 14, now, clockOffset(r))
 	if err != nil {
 		wb.serverError(w, r, err)
 		return
@@ -464,6 +506,15 @@ func (wb *web) rows(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad cursor", http.StatusBadRequest)
 		return
 	}
+	if query.Group {
+		groups, more, err := wb.store.groups(r.Context(), filter, &before, pageSize)
+		if err != nil {
+			wb.serverError(w, r, err)
+			return
+		}
+		wb.render(w, r, "list", "group-rows", http.StatusOK, wb.groupsView(query, groups, more, false))
+		return
+	}
 	events, more, err := wb.store.list(r.Context(), filter, &before, pageSize)
 	if err != nil {
 		wb.serverError(w, r, err)
@@ -487,6 +538,17 @@ func (wb *web) rowsView(query listQuery, events []eventRow, more, first bool) ro
 	return view
 }
 
+func (wb *web) groupsView(query listQuery, groups []eventGroup, more, first bool) groupsView {
+	view := groupsView{Groups: groups, More: more, First: first}
+	if more {
+		last := groups[len(groups)-1]
+		params := query.encode() + "&before=" + url.QueryEscape(cursor{At: last.ReceivedAt, ID: last.Key()}.String())
+		view.MoreURL = "/?" + params
+		view.MoreRowsURL = "/rows?" + params
+	}
+	return view
+}
+
 // pollerView starts from the newest of events, or from `from` when there are none (nothing new arrived).
 func (wb *web) pollerView(query listQuery, events []eventRow, from cursor) pollerView {
 	if !query.Auto {
@@ -503,6 +565,20 @@ func (wb *web) pollerView(query listQuery, events []eventRow, from cursor) polle
 }
 
 /*------ Count by Day ------*/
+
+// clockOffset is how far the reader's clock is ahead of UTC, from the `tz` cookie app.js sets (minutes), so the day
+// strip counts their days. Without the cookie (no script, or the very first page) the days are UTC's.
+func clockOffset(r *http.Request) time.Duration {
+	cookie, err := r.Cookie("tz")
+	if err != nil {
+		return 0
+	}
+	minutes, err := strconv.Atoi(cookie.Value)
+	if err != nil || minutes < -14*60 || minutes > 14*60 {
+		return 0
+	}
+	return time.Duration(minutes) * time.Minute
+}
 
 // dayBar is one bar of the 14-day strip, drawn as SVG (an inline `style` height would break the CSP).
 type dayBar struct {
@@ -557,8 +633,14 @@ func (wb *web) detail(w http.ResponseWriter, r *http.Request) {
 		wb.serverError(w, r, err)
 		return
 	}
-	wb.render(w, r, "detail", "layout", http.StatusOK,
-		page{Title: row.Title, SignedIn: true, Body: buildDetail(row)})
+	view := buildDetail(row)
+	if row.GroupKey != "" {
+		if view.Alike, err = wb.store.countGroup(r.Context(), row.GroupKey); err != nil {
+			wb.serverError(w, r, err)
+			return
+		}
+	}
+	wb.render(w, r, "detail", "layout", http.StatusOK, page{Title: row.Title, SignedIn: true, Body: view})
 }
 
 /*===== Deleting =====*/
@@ -663,15 +745,27 @@ func (wb *web) loginPage(w http.ResponseWriter, r *http.Request) {
 
 func (wb *web) login(w http.ResponseWriter, r *http.Request) {
 	next := r.PostFormValue("next")
-	if ok, _ := wb.logins.take(clientIP(r), 1, time.Now()); !ok {
+	now := time.Now()
+	tooMany := func() {
 		wb.render(w, r, "login", "layout", http.StatusTooManyRequests,
 			page{Title: "Sign in", Body: loginView{Next: next, Error: "Too many attempts. Wait a minute and try again."}})
+	}
+	if ok, _ := wb.logins.take(clientIP(r), 1, now); !ok {
+		tooMany()
+		return
+	}
+	// Checked before the password and charged only for a wrong one: while guesses from many addresses use it up, a
+	// right password is refused too, which is the price of the guesses being limited at all.
+	if !wb.failedLogins.has("", 1, now) {
+		wb.log.Warn("sign-in refused: too many wrong passwords from all addresses", "ip", clientIP(r))
+		tooMany()
 		return
 	}
 	// Comparing hashes keeps the comparison constant-time regardless of the guess's length.
 	given := sha256.Sum256([]byte(r.PostFormValue("password")))
 	want := sha256.Sum256([]byte(wb.cfg.AdminPassword))
 	if subtle.ConstantTimeCompare(given[:], want[:]) != 1 {
+		wb.failedLogins.take("", 1, now)
 		wb.log.Warn("failed sign-in", "ip", clientIP(r))
 		wb.render(w, r, "login", "layout", http.StatusUnauthorized,
 			page{Title: "Sign in", Body: loginView{Next: next, Error: "Wrong password."}})
@@ -692,7 +786,15 @@ func (wb *web) login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, safeNext(next), http.StatusSeeOther)
 }
 
+// logout ends every session, not only this browser's: there is one user, and a cookie that was copied or left on
+// another machine must stop working too. Raising the epoch does it (store.sessionEpoch).
 func (wb *web) logout(w http.ResponseWriter, r *http.Request) {
+	epoch, err := wb.store.bumpSessionEpoch(r.Context())
+	if err != nil {
+		wb.serverError(w, r, err)
+		return
+	}
+	wb.epoch.Store(epoch)
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Path:     "/",
@@ -705,9 +807,18 @@ func (wb *web) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // safeNext keeps the after-sign-in redirect on this site: a path, never `//host` or `/\host` (which browsers read
-// as another host).
+// as another host). Browsers also drop tabs and newlines from a URL before reading it, so `/<tab>/host` is `//host`
+// to them: no control character is accepted.
 func safeNext(next string) string {
 	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.Contains(next, `\`) {
+		return "/"
+	}
+	for _, r := range next {
+		if r < 0x20 || r == 0x7f {
+			return "/"
+		}
+	}
+	if u, err := url.Parse(next); err != nil || u.Host != "" || u.Scheme != "" {
 		return "/"
 	}
 	return next
@@ -716,7 +827,8 @@ func safeNext(next string) string {
 /*------ Session Cookie ------*/
 
 // signSession returns `<expiry>.<mac>`. There is one user, so the cookie only proves "signed in until expiry". The
-// MAC also covers a hash of the password, so changing ADMIN_PASSWORD (or SESSION_SECRET) signs everyone out.
+// MAC also covers a hash of the password, so changing ADMIN_PASSWORD (or SESSION_SECRET) signs everyone out, and the
+// session epoch, so signing out does.
 func (wb *web) signSession(expires int64) string {
 	exp := strconv.FormatInt(expires, 10)
 	return exp + "." + base64.RawURLEncoding.EncodeToString(wb.sessionMAC(exp))
@@ -725,7 +837,8 @@ func (wb *web) signSession(expires int64) string {
 func (wb *web) sessionMAC(exp string) []byte {
 	password := sha256.Sum256([]byte(wb.cfg.AdminPassword))
 	mac := hmac.New(sha256.New, []byte(wb.cfg.SessionSecret))
-	mac.Write([]byte("session|" + exp + "|" + hex.EncodeToString(password[:])))
+	mac.Write([]byte("session|" + exp + "|" + hex.EncodeToString(password[:]) + "|" +
+		strconv.FormatInt(wb.epoch.Load(), 10)))
 	return mac.Sum(nil)
 }
 
@@ -756,6 +869,11 @@ func exactTime(ms int64) string {
 	return time.UnixMilli(ms).UTC().Format("2006-01-02 15:04:05 UTC")
 }
 
+// clockTime is the time of day to the millisecond, for breadcrumbs: they are seconds apart.
+func clockTime(ms int64) string {
+	return time.UnixMilli(ms).UTC().Format("15:04:05.000")
+}
+
 // ago is a short relative time. app.js keeps it current in the browser and shows the local time on hover.
 func ago(ms int64, now time.Time) string {
 	d := now.Sub(time.UnixMilli(ms))
@@ -779,6 +897,14 @@ func (r eventRow) KindLabel() string {
 		return "browser"
 	}
 	return r.Kind
+}
+
+// Link is where a group's row leads: the list of its events, or the event itself when it is the only one.
+func (g eventGroup) Link() string {
+	if g.Count == 1 || g.GroupKey == "" {
+		return "/events/" + g.ID
+	}
+	return searchURL("group", g.GroupKey)
 }
 
 // Cursor is the row's position in the list, for paging.

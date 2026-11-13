@@ -22,16 +22,21 @@ import (
 /*===== Configuration =====*/
 
 type config struct {
-	ListenAddr    string
-	DataDir       string
-	ProjectID     string
-	PublicKey     string
-	AdminPassword string
-	SessionSecret string
-	AllowedOrigin string
-	BaseURL       *url.URL
-	RetentionDays int
-	MaxEvents     int
+	ListenAddr     string
+	DataDir        string
+	ProjectID      string
+	PublicKey      string
+	AdminPassword  string
+	SessionSecret  string
+	AllowedOrigin  string
+	BaseURL        *url.URL
+	RetentionDays  int
+	MaxEvents      int
+	MaxDBMegabytes int
+	// Optional: where the app serves its client source maps, and the chat webhook for new kinds of errors.
+	SourcemapOrigin *url.URL
+	NotifyURL       *url.URL
+	NotifyChatID    string
 }
 
 // loadConfig reads the environment. Every problem is collected, so one start shows all of them.
@@ -63,16 +68,32 @@ func loadConfig() (config, error) {
 	}
 
 	cfg := config{
-		ListenAddr:    optional("LISTEN_ADDR", ":8000"),
-		DataDir:       optional("DATA_DIR", "/data"),
-		ProjectID:     optional("PROJECT_ID", "1"),
-		PublicKey:     required("PUBLIC_KEY"),
-		AdminPassword: required("ADMIN_PASSWORD"),
-		SessionSecret: required("SESSION_SECRET"),
-		AllowedOrigin: required("ALLOWED_ORIGIN"),
-		RetentionDays: positiveInt("RETENTION_DAYS", 30),
-		MaxEvents:     positiveInt("MAX_EVENTS", 50_000),
+		ListenAddr:     optional("LISTEN_ADDR", ":8000"),
+		DataDir:        optional("DATA_DIR", "/data"),
+		ProjectID:      optional("PROJECT_ID", "1"),
+		PublicKey:      required("PUBLIC_KEY"),
+		AdminPassword:  required("ADMIN_PASSWORD"),
+		SessionSecret:  required("SESSION_SECRET"),
+		AllowedOrigin:  required("ALLOWED_ORIGIN"),
+		RetentionDays:  positiveInt("RETENTION_DAYS", 30),
+		MaxEvents:      positiveInt("MAX_EVENTS", 50_000),
+		MaxDBMegabytes: positiveInt("MAX_DB_MB", 1024),
+		NotifyChatID:   os.Getenv("NOTIFY_CHAT_ID"),
 	}
+	optionalURL := func(name string) *url.URL {
+		value := os.Getenv(name)
+		if value == "" {
+			return nil
+		}
+		u, err := url.Parse(value)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			problems = append(problems, fmt.Errorf("%s must be an http(s) URL", name))
+			return nil
+		}
+		return u
+	}
+	cfg.SourcemapOrigin = optionalURL("SOURCEMAP_ORIGIN")
+	cfg.NotifyURL = optionalURL("NOTIFY_URL")
 
 	if baseURL := required("BASE_URL"); baseURL != "" {
 		u, err := url.Parse(baseURL)
@@ -134,8 +155,20 @@ func run(log *slog.Logger) error {
 	retentionDone := make(chan struct{})
 	go func() {
 		defer close(retentionDone)
-		st.runRetention(ctx, time.Duration(cfg.RetentionDays)*24*time.Hour, cfg.MaxEvents)
+		st.runRetention(ctx, retention{
+			MaxAge:    time.Duration(cfg.RetentionDays) * 24 * time.Hour,
+			MaxEvents: cfg.MaxEvents,
+			MaxBytes:  int64(cfg.MaxDBMegabytes) << 20,
+		})
 	}()
+
+	/*------ Notifications ------*/
+	closeNotifier := func() {}
+	if cfg.NotifyURL != nil {
+		notify := newNotifier(ctx, cfg, log)
+		st.setAnnouncer(notify.offer)
+		closeNotifier = notify.close
+	}
 
 	/*------ HTTP ------*/
 	handler, err := newHandler(st, cfg, log)
@@ -160,6 +193,7 @@ func run(log *slog.Logger) error {
 		stop()
 		<-retentionDone
 		_ = st.close()
+		closeNotifier()
 		return err
 	case <-ctx.Done():
 	}
@@ -172,7 +206,9 @@ func run(log *slog.Logger) error {
 		log.Error("http shutdown", "err", err)
 	}
 	<-retentionDone
-	return st.close()
+	err = st.close()
+	closeNotifier()
+	return err
 }
 
 // healthcheck asks the running server's /healthz and returns the process exit code.

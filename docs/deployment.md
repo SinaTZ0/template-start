@@ -219,9 +219,24 @@ doesn't match). The viewer also prints it in its log at startup
 Settings → Apply does: the server reads it at startup, but the browser bundle has it baked in at build time.
 
 Until `SENTRY_DSN` is set, nothing is reported; errors are still in the logs. The viewer keeps its SQLite file in the
-`error-viewer-data` volume, separate from the app's backups, and deletes events older than 30 days or beyond the
-newest 50 000 (`RETENTION_DAYS`, `MAX_EVENTS` in `tools/error-viewer/README.md`). Losing the volume loses error
-history, nothing else.
+`error-viewer-data` volume, separate from the app's backups. It deletes events older than 30 days or beyond the
+newest 50 000, and the oldest ones once the file passes 1 GB (`ERROR_VIEWER_MAX_DB_MB` in `.env`, in MB), so it can't
+fill the disk. Losing the volume loses error history, nothing else.
+
+**Release.** Each build carries the commit it was made from (`APP_RELEASE`, set by the deploy tool for the build), and
+the viewer shows it on every event: `release:<commit>` in its search box lists what one build reported. A build
+started by hand has none unless you pass it: `APP_RELEASE=$(git rev-parse --short=7 HEAD) docker compose … build`.
+
+**Browser stacks.** The app keeps its client source maps next to the built files, and the viewer reads them from the
+app inside the stack (`SOURCEMAP_ORIGIN`) to show a browser error's stack as source files and lines. The maps hold the
+source, so Caddy answers `404` for every `*.map` from outside (`deploy/Caddyfile`). Keep that rule if you change the
+Caddyfile, and add the same to any other proxy you put in front of the app.
+
+**Notifications.** Set `ERROR_VIEWER_NOTIFY_URL` to a chat webhook and the viewer posts a short message when a kind of
+error shows up that is new, or back after six hours of silence: the title, where it happened and the link to the
+event. A Slack, Mattermost, Rocket.Chat or Google Chat webhook works as it is. For a bot API in Telegram's style, set
+the bot's `sendMessage` URL and the chat in `ERROR_VIEWER_NOTIFY_CHAT_ID`. The message leaves the server: an error's
+title can hold whatever the error message held. Empty (the default) sends nothing.
 
 ## Package Registries
 
