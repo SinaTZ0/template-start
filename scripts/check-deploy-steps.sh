@@ -22,7 +22,12 @@ fi
 
 # ------ Staged changes ------
 # `<status>\t<path>[\t<new path>]`, renames detected, so an edited step that was also renamed shows as one.
-mapfile -t changes < <(git diff --cached --name-status -M)
+# Read line by line and expanded as `${array[@]+"${array[@]}"}` below: macOS ships Bash 3.2, which has no `mapfile` and
+# calls an empty array unbound under `set -u`.
+changes=()
+while IFS= read -r line; do
+  changes+=("$line")
+done < <(git diff --cached --name-status -M)
 
 is_step() { [[ $1 == deploy/steps/[0-9]*.md ]]; }
 
@@ -35,7 +40,7 @@ done <"$list"
 added_step=false
 needs=()
 edited=()
-for change in "${changes[@]}"; do
+for change in ${changes[@]+"${changes[@]}"}; do
   IFS=$'\t' read -r status path new_path <<<"$change"
   if is_step "$path"; then
     case $status in
@@ -45,7 +50,7 @@ for change in "${changes[@]}"; do
     continue
   fi
   [[ $status == D ]] && continue
-  for pattern in "${patterns[@]}"; do
+  for pattern in ${patterns[@]+"${patterns[@]}"}; do
     # Unquoted on the right, so it's a pattern; inside [[ ]] `*` matches `/` too.
     # shellcheck disable=SC2053
     if [[ $path == $pattern || ${new_path:-} == $pattern ]]; then

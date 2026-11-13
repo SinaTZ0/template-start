@@ -16,6 +16,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ARCHES=(amd64 arm64)
 cd "$ROOT"
 
+# macOS has `shasum`, not `sha256sum`.
+sha256() {
+  if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256; fi
+}
+
 # `<path> <blob id>` for every source file, hashed.
 source_hash() {
   if [[ $1 == index ]]; then
@@ -24,7 +29,7 @@ source_hash() {
     git ls-files -co --exclude-standard -- tools/deploy | sort | while IFS= read -r f; do
       [[ -f $f ]] && printf '%s %s\n' "$f" "$(git hash-object -- "$f")"
     done
-  fi | sha256sum | cut -d' ' -f1
+  fi | sha256 | cut -d' ' -f1
 }
 
 # ------ Check ------

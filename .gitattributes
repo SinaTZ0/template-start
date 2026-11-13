@@ -1,3 +1,6 @@
+# Shell scripts run on the server and in containers, where a CRLF checkout (Windows) breaks the shebang line.
+*.sh text eol=lf
+
 # The deploy tool, built by `pnpm deploy:build` and committed (docs/deployment.md → The Deploy Tool): git never
 # diffs or merges it.
 deploy/bin/*/deploy binary

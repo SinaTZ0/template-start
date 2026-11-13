@@ -1,4 +1,4 @@
-# Git hooks, installed by `pnpm install` (the `prepare` script). Skip once with `git commit --no-verify`.
+# Git hooks, installed by `pnpm install` (the `prepare` script, `scripts/install-hooks.mjs`).
 
 pre-commit:
   parallel: true
@@ -17,6 +17,10 @@ pre-commit:
       run: pnpm exec prettier --write --ignore-unknown {staged_files}
       # Re-stages what Prettier changed, so the commit holds the formatted files.
       stage_fixed: true
+    - name: i18n
+      # A key missing from one locale compiles fine and shows the other language's text (docs/frontend/i18n.md).
+      glob: "messages/*.json"
+      run: node scripts/i18n-check.mjs
     - name: deploy-binary
       # The deploy tool is committed as a binary (docs/deployment.md → The Deploy Tool): a source change needs it rebuilt.
       glob: "tools/deploy/**"

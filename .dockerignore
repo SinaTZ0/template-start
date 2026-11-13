@@ -13,6 +13,12 @@ project.inlang/cache
 src/routes/design_study
 .claude
 .agents
+# Not part of the built app.
+docs
+e2e
+.storybook
+**/*.stories.tsx
+.github
 playwright-report
 test-results
 storybook-static

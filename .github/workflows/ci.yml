@@ -1,0 +1,72 @@
+# Runs what `pnpm check` runs locally, plus the two Go tools' own checks, on every push to `main` and every pull
+# request. The integration tests need the database, so the job starts one and applies the migrations to it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    services:
+      # The same image and credentials as `compose.dev.yaml`, so `.env.example` works as it is.
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d app"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v5
+      # The version in package.json's `packageManager`.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp .env.example .env
+      - run: pnpm db:migrate
+      - run: pnpm check
+      - run: pnpm build
+
+  go:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tool: [error-viewer, deploy]
+    defaults:
+      run:
+        working-directory: tools/${{ matrix.tool }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/${{ matrix.tool }}/go.mod
+          cache-dependency-path: tools/${{ matrix.tool }}/go.sum
+      - run: go vet ./...
+      - run: go test ./...
+
+  # The committed deploy binary must be built from the committed source (`tools/deploy/build.sh`), for a commit made
+  # without the pre-commit hook.
+  deploy-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: bash tools/deploy/build.sh --check

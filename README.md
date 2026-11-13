@@ -45,7 +45,9 @@ linted and formatted before each commit, and commit messages must follow
 | `pnpm test:e2e`                   | Playwright against the production build          |
 | `pnpm storybook`                  | Component previews on port 6006                  |
 | `pnpm db:generate` / `db:migrate` | Record a schema change as a migration; apply it  |
-| `pnpm services`                   | Starts `compose.dev.yaml` and creates the bucket |
+| `pnpm check`                      | typecheck, lint, format check and tests, as CI   |
+| `pnpm services` / `services:down` | Starts `compose.dev.yaml` and creates the bucket |
+| `pnpm db:reset`                   | Empties the dev database and applies migrations  |
 | `pnpm errors`                     | The error viewer on port 8000, with `go run`     |
 
 ## Layout

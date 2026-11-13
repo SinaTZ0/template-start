@@ -9,7 +9,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: "html",
+  // Results in the terminal, and the HTML report on disk without a server that waits for Ctrl+C after a failure
+  // (`pnpm exec playwright show-report` opens it).
+  reporter: [["html", { open: "never" }], ["list"]],
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: "on-first-retry",
