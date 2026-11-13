@@ -25,6 +25,8 @@
   "root_error_details": "An unexpected error occurred. Refresh the page or try again in a moment.",
   "root_not_found_title": "Page not found",
   "root_not_found_details": "The page you're looking for doesn't exist or has moved.",
+  "root_error_retry": "Try again",
+  "root_go_home": "Go to the home page",
   "home_intro": "Replace this page with an introduction to the project. The notes section is a complete example of sign-in, the API and image uploads.",
   "home_go_to_notes": "Go to notes",
   "notes_title": "Notes",

@@ -1,4 +1,4 @@
-import { getLocale, type Locale } from "#/paraglide/runtime";
+import { getLocale, localizeHref, type Locale } from "#/paraglide/runtime";
 
 /*===== Locales =====*/
 // Browser-safe facts about each locale. Adding a language adds a line to each map (docs/frontend/i18n.md).
@@ -20,6 +20,16 @@ export const OG_LOCALE: Record<Locale, string> = {
  * so the server reads this instead (`src/lib/locale.server.ts`).
  */
 export const LOCALE_HEADER = "x-locale";
+
+/**
+ * A plain path (`/notes?tag=a`) as the address to send someone to in the current locale: `/en/notes?tag=a` in English,
+ * unchanged in Persian. Only for `redirect({ href })`: on the server the router writes an `href` into the `Location`
+ * header as it is, without the `rewrite` that gives links and `redirect({ to })` their prefix, so a plain path would
+ * drop an English visitor into Persian. A path that already has its prefix stays as it is.
+ */
+export function localizedPath(path: string): string {
+  return localizeHref(path);
+}
 
 /*===== Dates =====*/
 

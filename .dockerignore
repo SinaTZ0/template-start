@@ -10,6 +10,7 @@ node_modules
 src/paraglide
 project.inlang/cache
 .tmp-claude
+src/routes/design_study
 .claude
 .agents
 playwright-report

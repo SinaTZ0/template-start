@@ -486,17 +486,20 @@ Choose Back up, then database + media, database only, or media only, and the fol
 which every Linux server already has. Once, on the server:
 
 1. Run the backup by hand, the way cron will, to check that it works: `/path/to/app/deploy/deploy.sh backup --db`.
-2. Open your crontab with `crontab -e` and add this line (Set up prints it with your paths filled in):
+2. Open your crontab with `crontab -e` and add these lines (Set up prints them with your paths filled in):
 
    ```bash
    0 3 * * * /path/to/app/deploy/deploy.sh backup --db >>/path/to/app/backups/cron.log 2>&1
+   0 4 * * 5 /path/to/app/deploy/deploy.sh backup --media >>/path/to/app/backups/cron.log 2>&1
    ```
 
 3. Save and close. Cron picks up the change by itself.
 
-`0 3 * * *` is every day at 03:00, in the server's time zone (`date` shows it). Cron has no terminal, so the tool asks
-nothing: it writes to `BACKUP_DIR` and keeps the newest `BACKUP_KEEP`. `--db` keeps the site running; `--all` adds
-media, but stops the image store each night while it's copied. The output goes to `cron.log`. If the nightly backups
+`0 3 * * *` is every day at 03:00 and `0 4 * * 5` is Fridays at 04:00, in the server's time zone (`date` shows it).
+Cron has no terminal, so the tool asks nothing: it writes to `BACKUP_DIR` and keeps the newest `BACKUP_KEEP`. `--db`
+keeps the site running. `--media` stops the image store while it's copied, so images don't load for that time, which
+is why it runs weekly; the bucket holds the only copy of uploaded images, so don't leave it out. The output goes to
+`cron.log`. If the nightly backups
 stop, the Last backup status line turns yellow after 7 days, and `cron.log` shows why. The usual reason is a user who
 can't reach Docker: add the user to the `docker` group, or put the line in root's crontab (`sudo crontab -e`).
 

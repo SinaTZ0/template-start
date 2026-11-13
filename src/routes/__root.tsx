@@ -4,13 +4,16 @@ import type { ErrorComponentProps } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { Provider as JotaiProvider } from "jotai";
 
+import { Button } from "#/components/primitive/button/button";
+import { buttonVariants } from "#/components/primitive/button/button.styles";
 import { DirectionProvider } from "#/components/primitive/direction/direction";
 import { Toaster } from "#/components/primitive/toast/toast";
 import { TooltipProvider } from "#/components/primitive/tooltip/tooltip";
+import { PageMessage } from "#/components/shared/page-message/page-message";
 import { THEME_INIT_SCRIPT } from "#/lib/theme";
 import { orpc } from "#/orpc/client";
 import { m } from "#/paraglide/messages";
-import { getLocale, getTextDirection } from "#/paraglide/runtime";
+import { getLocale, getTextDirection, localizeHref } from "#/paraglide/runtime";
 import type { RouterContext } from "#/router";
 import appCss from "#/styles.css?url";
 
@@ -73,28 +76,40 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 /*===== Errors =====*/
-function ErrorMessage({ message, details, stack }: { message: string; details: string; stack?: string }) {
+// The app's last error screens: what shows when something breaks above the site's layout (its `beforeLoad`, the root
+// itself), so they render without the header and footer and bring their own `<main>` and ways out. Their links are
+// plain anchors, a full page load: a client navigation would keep the layout or root that failed.
+
+function RootError({ error }: ErrorComponentProps) {
   return (
-    <main className="container mx-auto p-4 pt-16">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full overflow-x-auto p-4">
-          <code>{stack}</code>
+    <main>
+      <PageMessage title={m.root_error_title()} details={m.root_error_details()}>
+        <Button size="lg" onClick={() => window.location.reload()}>
+          {m.root_error_retry()}
+        </Button>
+        <a href={localizeHref("/")} className={buttonVariants({ variant: "outline", size: "lg" })}>
+          {m.root_go_home()}
+        </a>
+      </PageMessage>
+      {/* Development only: production errors can carry internals the visitor shouldn't see. */}
+      {import.meta.env.DEV && error instanceof Error && (
+        <pre dir="ltr" className="mx-auto max-w-site overflow-x-auto px-4 pb-20 text-start text-caption sm:px-6">
+          <code>{error.stack ?? error.message}</code>
         </pre>
       )}
     </main>
   );
 }
 
-function RootError({ error }: ErrorComponentProps) {
-  // Details only in development: production errors can carry internals the visitor shouldn't see.
-  if (import.meta.env.DEV && error instanceof Error) {
-    return <ErrorMessage message={m.root_error_title()} details={error.message} stack={error.stack} />;
-  }
-  return <ErrorMessage message={m.root_error_title()} details={m.root_error_details()} />;
-}
-
+/** A 404 from a route with no `notFoundComponent` of its own; pages in the site's layout use `NotFoundPage`. */
 function NotFound() {
-  return <ErrorMessage message={m.root_not_found_title()} details={m.root_not_found_details()} />;
+  return (
+    <main>
+      <PageMessage title={m.root_not_found_title()} details={m.root_not_found_details()}>
+        <a href={localizeHref("/")} className={buttonVariants({ size: "lg" })}>
+          {m.root_go_home()}
+        </a>
+      </PageMessage>
+    </main>
+  );
 }

@@ -17,6 +17,12 @@
 # Paraglide's compiled messages (pnpm i18n:compile, docs/frontend/i18n.md)
 /src/paraglide/
 
+# The route tree, generated from src/routes.ts by `pnpm generate-routes` and the Vite plugin
+/src/routeTree.gen.ts
+
+# Design studies: throwaway route slices, kept out of the repo and off the server (the `design-study` skill)
+/src/routes/design_study/
+
 # TanStack Start and Nitro build output
 /.output/
 /.tanstack/

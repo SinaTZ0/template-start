@@ -48,6 +48,18 @@ export function persianText() {
   return z.string().overwrite(normalizePersianText);
 }
 
+/*===== Digits =====*/
+// People type Latin digits into Persian text («سال 1405»), where the rest of the page has Persian ones. Digits inside
+// a Latin word or code (B2B, IMG_9535) are left as they are.
+const LATIN_NUMBER = /(?<![A-Za-z_0-9])[0-9]+(?![A-Za-z_])/g;
+
+/** `value` with its standalone Latin numbers in Persian digits. */
+export function persianDigits(value: string): string {
+  return value.replace(LATIN_NUMBER, (number) =>
+    number.replace(/[0-9]/g, (digit) => String.fromCharCode(0x06f0 + Number(digit))),
+  );
+}
+
 /*===== Search =====*/
 
 // Compared as normalized, lower-cased text with ZWNJs read as spaces and every digit Latin, so «انتخاب‌واحد»,

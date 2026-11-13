@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { matchesSearch, normalizePersianText, searchWords } from "#/lib/persian-text";
+import { matchesSearch, normalizePersianText, persianDigits, searchWords } from "#/lib/persian-text";
 
 /*===== Persian Text =====*/
 // Text that looks the same must be stored the same, or searches and comparisons miss it. What carries meaning (a ZWNJ
@@ -23,6 +23,12 @@ describe("normalizePersianText", () => {
     const text = "یادداشت‌های من برای ۱۴۰۳";
 
     expect(normalizePersianText(text)).toBe(text);
+  });
+});
+
+describe("persianDigits", () => {
+  it("turns standalone numbers Persian and leaves codes alone", () => {
+    expect(persianDigits("سال 1405، فرم B2B و IMG_9535")).toBe("سال ۱۴۰۵، فرم B2B و IMG_9535");
   });
 });
 

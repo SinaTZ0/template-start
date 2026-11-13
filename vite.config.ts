@@ -29,6 +29,13 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  server: {
+    // Prints the browser's uncaught errors and `console.error` / `console.warn` in the dev server's terminal, where an
+    // agent running it can read them. Left unset, Vite turns it on only when it detects an agent, which adds a plugin,
+    // and plugin names are part of the dependency cache's hash: each dev server started by the other side then
+    // re-optimized every dependency (seconds more to start). Pinned, everyone shares one cache.
+    forwardConsole: true,
+  },
   // `SENTRY_DSN` is the one server variable the browser needs (`src/client.tsx`). Vite reads it from `.env` or the
   // build's environment and inlines it at build time.
   envPrefix: ["VITE_", "SENTRY_DSN"],

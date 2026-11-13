@@ -3,6 +3,9 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/vazirmatn";
 
+/* Tailwind skips gitignored files, and design studies are gitignored (the `design-study` skill). */
+@source "./routes/design_study";
+
 /* Tokens follow docs/frontend/app-identity.md. Names follow shadcn; the one call to action per view is `highlight`, and
    shadcn's `accent` is the quiet wash for hover and selected states. */
 

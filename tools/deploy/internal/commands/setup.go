@@ -138,6 +138,9 @@ func (t *Tool) Setup(args []string) error {
 	ui.Info("  A nightly database backup: add this line with crontab -e")
 	ui.Info("    0 3 * * * %s backup --db >>%s 2>&1", t.P.Path("deploy", "deploy.sh"),
 		filepath.Join(backup.Dir(t.P), "cron.log"))
+	ui.Info("  A weekly media backup, the only copy of uploaded images: add this line too")
+	ui.Info("    0 4 * * 5 %s backup --media >>%s 2>&1", t.P.Path("deploy", "deploy.sh"),
+		filepath.Join(backup.Dir(t.P), "cron.log"))
 	return nil
 }
 

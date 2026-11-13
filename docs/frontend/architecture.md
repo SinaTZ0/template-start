@@ -11,7 +11,7 @@ These are the rules. The steps for building a page are in [frontend-flow.md](../
 ```text
 src/
   routes.ts                 # virtual route config (set in tsr.config.json): maps URLs to route files
-  routeTree.gen.ts          # generated from routes.ts by the Start plugin; never edit
+  routeTree.gen.ts          # generated from routes.ts by the Start plugin; gitignored, never edit
   router.tsx                # getRouter(): the router, its QueryClient and preload defaults
   server.ts                 # server entry: request trace, X-Request-Id, request log, background jobs
   client.tsx                # browser entry: error reporting, hydration

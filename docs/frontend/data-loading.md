@@ -168,12 +168,25 @@ A guard only shapes navigation. It reads the cached viewer, which can be up to `
 browser. The data is protected where it is served: every procedure checks the session and role again
 (`requireUserMiddleware`, `requireRoleMiddleware`).
 
+A tab left open doesn't see its session end elsewhere until the cached viewer goes stale. So the first API call that
+answers `UNAUTHORIZED` refetches the viewer, and if the session is gone, runs the page's guards again
+(`leaveOnRefusal` in `src/router.tsx`), which send the person to sign in and back.
+
+`redirect({ to })` gets the visitor's locale prefix from the router. `redirect({ href })` doesn't on the server, so
+wrap a path given as `href` in `localizedPath` (`src/lib/locale.ts`), as the guards do for `redirectTo` and a role's
+home.
+
 ## Pending and Error States
 
 - A route can set `pendingComponent` for slow loaders; it shows after `pendingMs` (1 s by default), so fast
   navigations don't flash a spinner.
-- A loader error renders the nearest `errorComponent` (the root's by default, `src/routes/__root.tsx`). An oRPC error arrives
-  as `ORPCError`; a page can catch the expected ones (`NOT_FOUND`) and throw `notFound()` instead.
+- A loader error renders the nearest `errorComponent` (the root's by default, `src/routes/__root.tsx`, which offers a
+  reload and a way home). An oRPC error arrives as `ORPCError`.
+- A missing item is a 404, not an error: wrap the loader's read in `orNotFound` (`src/lib/not-found.ts`), which turns
+  the API's `NOT_FOUND` into `notFound()`, and give the route `notFoundComponent: NotFoundPage`
+  (`src/components/shared/not-found-page/`). The page is then drawn between the header and footer with a 404 status, as
+  it is for an address no route answers (the catch-all `src/routes/not_found/`). The component goes on the page route,
+  not the layout: a route's `notFoundComponent` replaces that route's own component.
 - Inside a page, mutation errors go through `describeApiFailure` to the form ([architecture.md](./architecture.md) →
   Forms).
 

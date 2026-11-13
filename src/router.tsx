@@ -1,7 +1,9 @@
-import { QueryClient } from "@tanstack/react-query";
+import { ORPCError } from "@orpc/client";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { type AnyRouter, createRouter, type ParsedLocation } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 
+import { orpc } from "#/orpc/client";
 import { deLocalizeUrl, localizeUrl } from "#/paraglide/runtime";
 
 import { routeTree } from "./routeTree.gen";
@@ -21,13 +23,46 @@ function historyIndex(location: ParsedLocation) {
   return location.state.__TSR_index;
 }
 
+function historyKey(location: ParsedLocation) {
+  // oxlint-disable-next-line no-underscore-dangle -- the router's own name for the history entry
+  return location.state.__TSR_key ?? location.state.key;
+}
+
+/*------ History Pops ------*/
+// A swipe back on iOS is animated by the browser itself, and a view transition on top would play the change twice.
+// The router's `types` callback can't see the `popstate` event, so it's noted here: the entry it landed on (its key; a
+// push or a replace makes a new key, so a stale note never matches a later link) and whether the browser already
+// animated it. A capture listener on `window` runs before the router's own.
+let lastPop: { key: string | undefined; animatedByBrowser: boolean } | null = null;
+
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "popstate",
+    (event) => {
+      // oxlint-disable-next-line no-underscore-dangle -- the router's own name for the history entry
+      const state = event.state as { __TSR_key?: string; key?: string } | null;
+      lastPop = {
+        // oxlint-disable-next-line no-underscore-dangle -- as above
+        key: state?.__TSR_key ?? state?.key,
+        // Chrome and Safari only; elsewhere undefined, which counts as not animated.
+        animatedByBrowser: event.hasUAVisualTransition === true,
+      };
+    },
+    { capture: true },
+  );
+}
+
 /**
- * The view transition types for one navigation: `false` (no animation) when the pathname stays, otherwise `page`
- * plus the direction. `__TSR_index` is the router's position in the history stack, so a lower index means the visitor
- * went back. Equal indexes (a `replace` to another page) and the first navigation get the plain `page` fade.
+ * The view transition types for one navigation: `false` (no animation) when the pathname stays or the browser already
+ * animated a Back or Forward, otherwise `page` plus the direction. `__TSR_index` is the router's position in the
+ * history stack, so a lower index means the visitor went back. Equal indexes (a `replace` to another page) and the
+ * first navigation get the plain `page` fade.
  */
 function pageTransitionTypes({ fromLocation, toLocation, pathChanged }: LocationChangeInfo) {
+  const pop = lastPop;
+  lastPop = null;
   if (!pathChanged) return false;
+  if (pop?.animatedByBrowser && pop.key !== undefined && pop.key === historyKey(toLocation)) return false;
   if (!fromLocation) return ["page"];
 
   const fromIndex = historyIndex(fromLocation);
@@ -69,7 +104,30 @@ export function getRouter() {
         staleTime: 5 * 60_000,
       },
     },
+    queryCache: new QueryCache({ onError: (error) => leaveOnRefusal(error) }),
+    mutationCache: new MutationCache({ onError: (error) => leaveOnRefusal(error) }),
   });
+
+  /*------ Signed Out Elsewhere ------*/
+  // Guards read the viewer through the Query cache, so a tab that is already open doesn't notice at once when the
+  // session ends elsewhere (signed out in another tab, expired, or blocked). The first API call that answers
+  // `UNAUTHORIZED` asks for the viewer again; if the session is really gone, the current page's guards run again and
+  // send the person to sign in, with the page as `redirectTo`. Browser only: on the server the guard has just read
+  // the session itself.
+  let leaving: Promise<void> | null = null;
+  function leaveOnRefusal(error: unknown) {
+    if (typeof window === "undefined" || leaving) return;
+    if (!(error instanceof ORPCError) || error.code !== "UNAUTHORIZED") return;
+
+    leaving = queryClient
+      .fetchQuery(orpc.session.viewer.queryOptions({ staleTime: 0 }))
+      // Still signed in (a refusal for another reason): leave the page as it is, or its loaders would ask again.
+      .then((viewer) => (viewer ? undefined : router.invalidate()))
+      .catch(() => undefined)
+      .finally(() => {
+        leaving = null;
+      });
+  }
 
   const router = createRouter({
     routeTree,

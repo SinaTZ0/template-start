@@ -103,6 +103,8 @@ frame by frame.
 
 ## iOS Swipe-Back
 
-**Test the iOS swipe-back gesture on a real device.** iOS plays its own animation for a swipe back, and the page then
-fades and slides too, which can look like a double animation. If it shows up, skip the fade when the browser already animated,
-which `PopStateEvent.hasUAVisualTransition` reports.
+iOS plays its own animation for a swipe back, and a view transition on top would play the change twice. So a Back or
+Forward the browser already animated gets no transition: a `popstate` listener in `src/router.tsx` notes
+`PopStateEvent.hasUAVisualTransition` (Chrome and Safari; elsewhere the transition runs as usual), and
+`pageTransitionTypes` returns `false` for that entry. **Test the gesture on a real device** after changing the page
+transition: no simulator shows it.

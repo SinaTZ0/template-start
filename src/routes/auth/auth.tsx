@@ -4,15 +4,14 @@ import { z } from "zod";
 
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/primitive/card/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/primitive/tabs/tabs";
+import { localizedPath } from "#/lib/locale";
 import { redirectToParam } from "#/lib/search-params";
 import { pageMeta } from "#/lib/seo";
+import { roleHomePath } from "#/lib/viewer";
 import { orpc } from "#/orpc/client";
 import { m } from "#/paraglide/messages";
 import { SignInForm } from "#/routes/auth/components/sign-in-form";
 import { SignUpForm } from "#/routes/auth/components/sign-up-form";
-
-/** Where people land after signing in when nothing asked for a page. */
-const DEFAULT_REDIRECT = "/notes";
 
 const searchSchema = z.object({
   redirectTo: redirectToParam,
@@ -24,7 +23,8 @@ export const Route = createFileRoute("/_site-layout/auth")({
   beforeLoad: async ({ context, search }) => {
     // Signed-in people have nothing to do here.
     const viewer = await context.queryClient.ensureQueryData(orpc.session.viewer.queryOptions());
-    if (viewer) throw redirect({ href: search.redirectTo ?? DEFAULT_REDIRECT });
+    // `href` skips the router's locale prefix, so it's added here (`localizedPath`).
+    if (viewer) throw redirect({ href: localizedPath(search.redirectTo ?? roleHomePath(viewer.role)) });
   },
   // Sign-in has nothing to find in search results. After `beforeLoad`, whose result `args` carries
   // (docs/frontend/seo.md).
@@ -34,15 +34,16 @@ export const Route = createFileRoute("/_site-layout/auth")({
 
 /*===== Page =====*/
 function AuthPage() {
-  const redirectTo = Route.useSearch({ select: (search) => search.redirectTo ?? DEFAULT_REDIRECT });
+  const redirectTo = Route.useSearch({ select: (search) => search.redirectTo });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   // The cached viewer still says "signed out": refetch it first, so the header updates and the next page's guard sees
-  // the session.
+  // the session. With no page asked for, the fresh viewer's role picks where to land.
   const goOn = async () => {
     await queryClient.invalidateQueries({ queryKey: orpc.session.viewer.key() });
-    await navigate({ href: redirectTo, replace: true });
+    const viewer = await queryClient.fetchQuery(orpc.session.viewer.queryOptions());
+    await navigate({ href: redirectTo ?? roleHomePath(viewer?.role), replace: true });
   };
 
   return (
