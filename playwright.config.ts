@@ -5,6 +5,7 @@ const PORT = 3000;
 /*===== Playwright Config =====*/
 export default defineConfig({
   testDir: "./e2e",
+  globalTeardown: "./e2e/global-teardown.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -21,7 +22,8 @@ export default defineConfig({
   webServer: {
     command: "pnpm build && pnpm start",
     url: `http://localhost:${PORT}`,
-    env: { PORT: String(PORT) },
+    // Better-Auth accepts sign-up only from its own origin, and `.env` names the dev server's.
+    env: { PORT: String(PORT), BETTER_AUTH_URL: `http://localhost:${PORT}` },
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

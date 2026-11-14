@@ -46,6 +46,7 @@ decide. The `notes` route (`src/routes/notes/`) is the worked example.
 5. **Promote**: move a slice component to `components/shared/` (or a hook to `src/hooks/`) once a second route needs it.
 6. **Check**: look at the page at phone and desktop widths, in light and dark, in Persian and English (`/en/…`), with
    the keyboard, and against
-   `WCAG 2.2 AA`. Add a Playwright smoke test if the flow is consequential (forms, critical navigation). Run
+   `WCAG 2.2 AA`. Add a Playwright smoke test if the flow is consequential (forms, critical navigation), shaped like
+   `e2e/notes.spec.ts`. Run
    `pnpm lint` and `pnpm typecheck`. In the network tab, the first load makes no `/rpc` request and a mutation refetches
    only what it changed.

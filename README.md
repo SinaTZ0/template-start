@@ -49,7 +49,7 @@ pnpm errors                   # optional, in a second terminal: error viewer on 
 | `pnpm i18n:compile`                    | Compiles `messages/` into `src/paraglide/`                            |
 | `pnpm format` / `format:check`         | Prettier (sorts Tailwind classes); the check CI runs                  |
 | `pnpm test` / `test:watch`             | Vitest (integration tests need the database)                          |
-| `pnpm test:e2e`                        | Playwright against the production build                               |
+| `pnpm test:e2e`                        | Playwright against the production build (needs the database)          |
 | `pnpm check`                           | typecheck, lint, format check and tests, as CI                        |
 | `pnpm storybook`                       | Component previews on port 6006                                       |
 | `pnpm services` / `services:down`      | Starts `compose.dev.yaml` and creates the bucket; stops it            |
@@ -128,6 +128,8 @@ most of what is left behind; the deploy tool and the docs they can't see.
   seed of its own removes the esbuild step and the `COPY` of its output from the Dockerfile.
 - **Messages:** every `notes_*` and `note_error_*` key, `nav_notes` and `home_go_to_notes`, in each file of
   `messages/`.
-- **Tests:** `e2e/locale.spec.ts` clicks the Notes link; point it at a guarded page of the project.
+- **Tests:** `e2e/notes.spec.ts` walks the note pages after signing up: keep its sign-up and sign-out, and replace
+  the middle with the project's main flow. `e2e/locale.spec.ts` clicks the Notes link; point it at a guarded page of
+  the project.
 - **Docs:** the rule docs name `note` files as their examples. Point them at the project's feature as it replaces
   them, along with the paragraph about `note` in `CLAUDE.md`.

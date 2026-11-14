@@ -1,5 +1,6 @@
-# Runs what `pnpm check` runs locally, plus the two Go tools' own checks, on every push to `main` and every pull
-# request. The integration tests need the database, so the job starts one and applies the migrations to it.
+# Runs what `pnpm check` runs locally, plus the browser tests and the two Go tools' own checks, on every push to `main`
+# and every pull request. The integration and browser tests need the database, so the job starts one and applies the
+# migrations to it.
 name: CI
 
 on:
@@ -44,7 +45,16 @@ jobs:
       - run: cp .env.example .env
       - run: pnpm db:migrate
       - run: pnpm check
-      - run: pnpm build
+      # Builds the app and tests the production server in a real browser, so no separate `pnpm build` step. No test
+      # uploads an image: the job has no storage service.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
 
   go:
     runs-on: ubuntu-latest
