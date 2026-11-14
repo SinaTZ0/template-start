@@ -8,6 +8,7 @@ step links to the doc that holds its rules. Read that doc when you reach the ste
 | [backend/architecture.md](./backend/architecture.md) | Structure, layers, contracts, validation, errors, middleware, auth, database, naming |
 | [backend/logging.md](./backend/logging.md)           | Writing logs, error reporting (error viewer), request timing, slow-request reports   |
 | [backend/media.md](./backend/media.md)               | Image uploads, processing, storage and rendering                                     |
+| [backend/jobs.md](./backend/jobs.md)                 | Background jobs: work after a request, retries, schedules                            |
 | [deployment.md](./deployment.md)                     | Production stack, deploying, migrations in production, health check, backups         |
 | [deploy-tool.md](./deploy-tool.md)                   | The manual of `deploy/deploy.sh`: menu, `.env` check, deploy steps, database browser |
 
@@ -40,7 +41,9 @@ The `note` feature (`src/orpc/note/`) is the worked example. Copy its shape.
 6. **Service**: write the rules and orchestration in `service.ts`. It receives `db` and its inputs through one object
    parameter, parses with `validation.ts`, and returns explicit outcomes instead of throwing. `issuesToErrorData`
    (`src/lib/schema-issues.ts`) turns a failed parse into field messages ([architecture.md](./backend/architecture.md)
-   → Services return outcomes, Explicit dependencies). Image uploads follow [media.md](./backend/media.md).
+   → Services return outcomes, Explicit dependencies). Image uploads follow [media.md](./backend/media.md). Work
+   that is slow, should be retried or runs on a schedule (mail, calls to other services, clean-ups) is a job the
+   service queues in its transaction, declared in the feature's `jobs.server.ts` ([jobs.md](./backend/jobs.md)).
 7. **Mapper**: add `mapper.ts` only if the stored and public shapes differ.
 8. **Procedure**: in `procedure.ts`, start from `base.<feature>.<procedure>` (`implementer.server.ts`), attach the
    middleware it needs (`requireUserMiddleware` or `requireRoleMiddleware`, then `provideDbMiddleware`), call the

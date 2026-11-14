@@ -20,7 +20,6 @@ import {
   findMediaById,
   findOrphanedMediaIds,
   insertMedia,
-  markMediaDetached,
 } from "#/orpc/media/repository";
 
 const log = createLogger("media");
@@ -177,25 +176,18 @@ export async function attachMedia({
 }
 
 /*===== Release =====*/
-/**
- * Lets go of a media its entity no longer uses: the entity was deleted, or its image replaced. Call it with the
- * transaction that changes the entity, then `discardMedia` once that transaction has committed.
- */
-export async function releaseMedia({ db, mediaId }: { db: Database; mediaId: string }): Promise<void> {
-  if (!isMediaId(mediaId)) return;
-  await markMediaDetached({ db, id: mediaId });
-}
+// `releaseMedia` is in `jobs.server.ts`, beside the job it queues: it lets go of a media its entity no longer uses.
 
 /**
- * Deletes a released media right away rather than waiting for the cleanup. A failure is logged, not thrown: the entity
- * is already saved without it, and the media is unattached, so the cleanup deletes it on a later run.
+ * Deletes a media that was released, unless something attached it again since. Run by the `media.discard` job.
+ *
+ * @throws When the bucket or the database fails, so the job is retried.
  */
-export async function discardMedia({ db, mediaId }: { db: Database; mediaId: string }): Promise<void> {
-  try {
-    await deleteMedia({ db, mediaId });
-  } catch (error) {
-    log.error({ err: error, mediaId }, "could not delete a released media; the cleanup will retry");
-  }
+export async function deleteReleasedMedia({ db, mediaId }: { db: Database; mediaId: string }): Promise<void> {
+  if (!isMediaId(mediaId)) return;
+  const record = await findMediaById({ db, id: mediaId });
+  if (!record || record.attachedAt) return;
+  await deleteMedia({ db, mediaId });
 }
 
 /*===== Delete =====*/
@@ -227,7 +219,7 @@ const ORPHAN_MAX_BATCHES = 50;
 
 /**
  * Deletes the uploads that were never attached (forms that were never saved) and are older than
- * `ORPHANED_MEDIA_AGE_MS`, a batch at a time until none are left. Run on a schedule (`cleanup.server.ts`).
+ * `ORPHANED_MEDIA_AGE_MS`, a batch at a time until none are left. Run every hour by the `media.cleanup` job.
  *
  * A media that fails to delete is logged and skipped, so one broken row can't block the rest. It stays unattached and
  * is retried on the next run.

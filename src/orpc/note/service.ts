@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import type { Database } from "#/db/client.server";
 import { issuesToErrorData } from "#/lib/schema-issues";
-import { attachMedia, discardMedia, releaseMedia } from "#/orpc/media/service";
+import { releaseMedia } from "#/orpc/media/jobs.server";
+import { attachMedia } from "#/orpc/media/service";
 import { findMediaById } from "#/orpc/media/repository";
 import { NOTE_PAGE_SIZE } from "#/orpc/note/constants";
 import type { Note, NotePage, NoteStats } from "#/orpc/note/contract";
@@ -127,8 +128,8 @@ type EditNoteResult = SaveNoteResult | { kind: "not-found" };
  * Validates and stores a change to one of the owner's notes. `input` is the whole note as it should be: the image it
  * already has stays, a different one is attached in its place, and none removes it.
  *
- * An image the note stops using is released in the same transaction as the change, and its files are deleted after
- * that commits, as in `removeNote`. The new image is attached before the old one is released, so a refused image
+ * An image the note stops using is released in the same transaction as the change, which also queues the job that
+ * deletes its files, as in `removeNote`. The new image is attached before the old one is released, so a refused image
  * leaves the note as it was.
  *
  * @returns `not-found` for an unknown ID or another user's note, `invalid` with per-field messages when the input
@@ -150,8 +151,7 @@ export async function editNote({
   if (!parsed.success) return { kind: "invalid", fields: issuesToErrorData(parsed.error.issues).fields };
   const { title, body, imageMediaId } = parsed.data;
 
-  let replacedMediaId: string | null = null;
-  const result = await db.transaction(async (tx): Promise<EditNoteResult> => {
+  return db.transaction(async (tx): Promise<EditNoteResult> => {
     // Locked: two edits swapping the image at once would both release the old one and each attach their own, and the
     // one that lost the update would stay attached to nothing.
     const owned = await lockOwnedNote({ db: tx, id, ownerId });
@@ -165,10 +165,7 @@ export async function editNote({
           return { kind: "invalid", fields: { imageMediaId: m.note_error_image_unusable() } };
         }
       }
-      if (owned.imageMediaId) {
-        await releaseMedia({ db: tx, mediaId: owned.imageMediaId });
-        replacedMediaId = owned.imageMediaId;
-      }
+      if (owned.imageMediaId) await releaseMedia({ db: tx, mediaId: owned.imageMediaId });
     }
 
     /*------ Row ------*/
@@ -176,19 +173,15 @@ export async function editNote({
     const image = imageMediaId ? ((await findMediaById({ db: tx, id: imageMediaId })) ?? null) : null;
     return { kind: "success", note: toPublicNote({ note: record, image }) };
   });
-
-  // Only after a commit that released it: a refused image returns before the release.
-  if (result.kind === "success" && replacedMediaId) await discardMedia({ db, mediaId: replacedMediaId });
-  return result;
 }
 
 /*===== Remove =====*/
 type RemoveNoteResult = { kind: "ok" } | { kind: "not-found" };
 
 /**
- * Deletes one of the owner's notes, then its image. The note's row and the image's release are one transaction, so the
- * image is never left attached to nothing. Its files are deleted after that commits; if the bucket fails, the image is
- * unattached and the cleanup deletes it later (docs/backend/media.md).
+ * Deletes one of the owner's notes and lets go of its image. The note's row, the image's release and the job that
+ * deletes the image's files are one transaction, so the image is never left attached to nothing, and its files go
+ * shortly after the commit (docs/backend/media.md).
  *
  * @returns `not-found` for an unknown ID or another user's note.
  */
@@ -210,10 +203,7 @@ export async function removeNote({
     if (owned.imageMediaId) await releaseMedia({ db: tx, mediaId: owned.imageMediaId });
     return owned;
   });
-  if (!record) return { kind: "not-found" };
-
-  if (record.imageMediaId) await discardMedia({ db, mediaId: record.imageMediaId });
-  return { kind: "ok" };
+  return record ? { kind: "ok" } : { kind: "not-found" };
 }
 
 /*===== Stats =====*/

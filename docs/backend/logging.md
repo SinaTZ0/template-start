@@ -49,14 +49,14 @@ log.error({ err, mediaId }, "could not clean up the variants");
 
 `src/lib/error-reporting.server.ts` sets up the server SDK; `src/client.tsx` sets up the browser's.
 
-| Source                                                    | How it reaches the error viewer                              |
-| --------------------------------------------------------- | ------------------------------------------------------------ |
-| Unexpected procedure failures (global oRPC middleware)    | `log.error({ err, errorId })`, tagged with the `errorId`     |
-| Failures of the request handler itself (`src/server.ts`)  | `log.error({ err })`                                         |
-| Better-Auth errors, failed health checks, cleanup errors… | Any other `log.error({ err })`                               |
-| Crashes (uncaught exceptions, unhandled rejections)       | The SDK's own handlers                                       |
-| Browser errors                                            | The SDK's handlers, plus `onCaughtError` for boundary errors |
-| Slow requests                                             | A warning from the request instrumentation (below)           |
+| Source                                                   | How it reaches the error viewer                              |
+| -------------------------------------------------------- | ------------------------------------------------------------ |
+| Unexpected procedure failures (global oRPC middleware)   | `log.error({ err, errorId })`, tagged with the `errorId`     |
+| Failures of the request handler itself (`src/server.ts`) | `log.error({ err })`                                         |
+| Better-Auth errors, failed health checks, failed jobs…   | Any other `log.error({ err })`                               |
+| Crashes (uncaught exceptions, unhandled rejections)      | The SDK's own handlers                                       |
+| Browser errors                                           | The SDK's handlers, plus `onCaughtError` for boundary errors |
+| Slow requests                                            | A warning from the request instrumentation (below)           |
 
 **Repeats are throttled.** Every server report reaches the error viewer from one address, and the viewer's answer to
 a burst past its limit makes the SDK stop sending everything for a while. So during an incident the app sends only the

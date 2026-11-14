@@ -1,3 +1,5 @@
+import { setTimeout } from "node:timers/promises";
+
 import { Client } from "pg";
 
 import { E2E_EMAIL_DOMAIN } from "./accounts";
@@ -21,7 +23,17 @@ export default async function globalTeardown() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
-    await client.query(`delete from "user" where email like $1`, [`e2e-%@${E2E_EMAIL_DOMAIN}`]);
+    const accounts = `e2e-%@${E2E_EMAIL_DOMAIN}`;
+    // A deleted note's image is deleted by a queued job a moment later (docs/backend/jobs.md), and an account that
+    // still has media can't be deleted. Wait for the job; a row that's still there after that is removed here.
+    const ofAccounts = `uploaded_by in (select id from "user" where email like $1)`;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const left = await client.query(`select 1 from media where ${ofAccounts} limit 1`, [accounts]);
+      if (left.rowCount === 0) break;
+      await setTimeout(500);
+    }
+    await client.query(`delete from media where ${ofAccounts}`, [accounts]);
+    await client.query(`delete from "user" where email like $1`, [accounts]);
   } finally {
     await client.end();
   }

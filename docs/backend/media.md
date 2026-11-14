@@ -74,16 +74,18 @@ One `media` table records every upload (`src/db/schema.ts`). Entities point to i
    two entities never share an image (deleting one would take the other's). An entity whose image didn't change
    doesn't attach it again. An upload can only be attached within 24 hours (`MEDIA_ATTACH_WINDOW_MS`); after that the
    form shows the image as unusable and the user picks it again.
-4. When an entity is deleted or its image replaced, the service calls `releaseMedia` in the same transaction, which
-   clears `attachedAt`, then `discardMedia` once it has committed, which deletes the files and the row (bucket first).
-   If the bucket fails, `discardMedia` logs it and the media stays unattached, so the cleanup below deletes it later.
-   `note` shows both: `removeNote` for a deleted entity, `editNote` for a replaced image, which attaches the new one
-   before it releases the old (`src/orpc/note/service.ts`).
-5. **Cleanup:** uploads whose form was never saved are orphans. `startMediaCleanup` (`src/orpc/media/cleanup.server.ts`),
-   started from the server entry (`src/server.ts`), runs `deleteOrphanedMedia` hourly in the app's process. It deletes media still
-   unattached 25 hours after upload (`ORPHANED_MEDIA_AGE_MS`), in batches of 200 until none are left, through `deleteMedia`. The extra hour
-   past the attach window means a save and the cleanup can never race. The `attached_at, created_at` index serves the
-   scan.
+4. When an entity is deleted or its image replaced, the service calls `releaseMedia`
+   (`src/orpc/media/jobs.server.ts`) in the same transaction. It clears `attachedAt` and queues the `media.discard`
+   job in that transaction, so the request doesn't wait on the bucket. The job deletes the files and the row (bucket
+   first) a moment after the commit, and is retried when the bucket fails ([jobs.md](./jobs.md)). It leaves a media
+   alone that was attached again in the meantime. `note` shows both cases: `removeNote` for a deleted entity,
+   `editNote` for a replaced image, which attaches the new one before it releases the old
+   (`src/orpc/note/service.ts`).
+5. **Cleanup:** uploads whose form was never saved are orphans. The `media.cleanup` job
+   (`src/orpc/media/jobs.server.ts`) runs `deleteOrphanedMedia` every hour. It deletes media still unattached 25
+   hours after upload (`ORPHANED_MEDIA_AGE_MS`), in batches of 200 until none are left, through `deleteMedia`. The
+   extra hour past the attach window means a save and the cleanup can never race. The `attached_at, created_at`
+   index serves the scan. It also catches a released media whose `media.discard` job ran out of tries.
 
 ### Deleting a user
 

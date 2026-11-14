@@ -28,6 +28,7 @@ src/orpc/
     mapper.ts               # only if stored and public shapes differ
     model.ts                # internal (non-public) data shapes
     constants.ts            # browser-safe values shared with the UI
+    jobs.server.ts          # only if it has background jobs (jobs.md); each is listed in src/jobs.server.ts
     *.server.ts             # feature-private server helpers (processing, cookies, HTTP details)
     integration.test.ts     # optional, for consequential behavior
 ```

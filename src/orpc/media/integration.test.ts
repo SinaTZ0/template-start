@@ -6,7 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "#/db/client.server";
 import { media, user } from "#/db/schema";
 import { findOrphanedMediaIds } from "#/orpc/media/repository";
-import { attachMedia, MEDIA_ATTACH_WINDOW_MS, ORPHANED_MEDIA_AGE_MS } from "#/orpc/media/service";
+import { releaseMedia } from "#/orpc/media/jobs.server";
+import { attachMedia, deleteReleasedMedia, MEDIA_ATTACH_WINDOW_MS, ORPHANED_MEDIA_AGE_MS } from "#/orpc/media/service";
 
 /*===== Orphaned Media =====*/
 // Runs against the real database (`DATABASE_URL`, after `pnpm db:migrate`). Only rows and the scan are tested: the
@@ -71,5 +72,19 @@ describe("orphaned media", () => {
   it("refuses to attach an upload a second time, so two entities never share it", async () => {
     const userId = owner;
     expect(await attachMedia({ db, mediaId: ids.fresh, kind: "image", userId, now })).toEqual({ kind: "invalid" });
+  });
+
+  it("releases a media only if the entity's change commits, and never deletes one that is attached", async () => {
+    // `fresh` was attached above. A change that fails takes the release, and the queued deletion, back with it.
+    const failedChange = db.transaction(async (tx) => {
+      await releaseMedia({ db: tx, mediaId: ids.fresh });
+      throw new Error("the entity's write failed");
+    });
+    await expect(failedChange).rejects.toThrow("the entity's write failed");
+
+    // What the job runs: a deletion queued for a media that is attached (again) leaves it alone.
+    await deleteReleasedMedia({ db, mediaId: ids.fresh });
+    const [row] = await db.select().from(media).where(eq(media.id, ids.fresh));
+    expect(row?.attachedAt).toBeInstanceOf(Date);
   });
 });

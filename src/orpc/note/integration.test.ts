@@ -81,7 +81,7 @@ describe("notes", () => {
     const second = await addNote({ db, ownerId: owner, input: { title: "دوم", imageMediaId: ownersImage } });
     expect(second).toMatchObject({ kind: "invalid", fields: { imageMediaId: expect.any(String) } });
 
-    // The bucket delete may fail where no store runs; either way the image must not stay attached to nothing.
+    // The files are deleted by a queued job, which no test runs; the image must not stay attached to nothing.
     expect(await removeNote({ db, ownerId: owner, id: first.note.id })).toEqual({ kind: "ok" });
     const [left] = await db.select().from(media).where(eq(media.id, ownersImage));
     expect(left?.attachedAt ?? null).toBeNull();
@@ -120,7 +120,7 @@ describe("notes", () => {
 
     const swapped = await editNote({ db, ownerId: owner, id, input: { title: "عکس تازه", imageMediaId: secondImage } });
     expect(swapped).toMatchObject({ kind: "success", note: { image: { id: secondImage } } });
-    // Deleted, or left unattached for the cleanup where no store runs.
+    // Released, with its deletion queued.
     expect(await attachedAt(firstImage)).toBeNull();
     expect(await attachedAt(secondImage)).not.toBeNull();
   });
