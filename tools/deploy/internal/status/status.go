@@ -20,6 +20,7 @@ import (
 	"deploy/internal/certs"
 	"deploy/internal/envfile"
 	"deploy/internal/gitrepo"
+	"deploy/internal/offsite"
 	"deploy/internal/pgweb"
 	"deploy/internal/ports"
 	"deploy/internal/project"
@@ -77,6 +78,12 @@ func Lines(p *project.Project, s *stack.Stack, env *envfile.Settings) []string {
 		func() *Line { return Ports(s) },
 		func() *Line { return SSL(p) },
 		func() *Line { return Backup(p) },
+		func() *Line {
+			if !p.IsSetUp() {
+				return nil
+			}
+			return Offsite(p)
+		},
 		func() *Line {
 			if !p.IsSetUp() {
 				return nil
@@ -328,6 +335,32 @@ func Backup(p *project.Project) *Line {
 		return &Line{Yellow, "Last backup", text}
 	}
 	return &Line{Green, "Last backup", text}
+}
+
+// Offsite is when a backup last reached the off-site bucket (package offsite): nil while off-site backups are off,
+// yellow once the copy is older than BackupMaxAge, red when the settings are half filled in. It reads the time the
+// last upload left on this server, not the bucket.
+func Offsite(p *project.Project) *Line {
+	const label = "Off-site"
+	config, err := offsite.Load(p.EnvFile())
+	if err != nil {
+		return &Line{Red, label, err.Error() + "  (deploy/deploy.sh offsite)"}
+	}
+	if config == nil {
+		return nil
+	}
+	when := offsite.Last(offsite.StateFile(p.Root))
+	if when.IsZero() {
+		return &Line{Yellow, label, "nothing copied to " + config.Bucket + " yet  (deploy/deploy.sh offsite)"}
+	}
+	text := fmt.Sprintf("%s  (%s, bucket %s)", when.Local().Format(stamp), Ago(when), config.Bucket)
+	if config.Password == "" {
+		text += ", without .env"
+	}
+	if time.Since(when) > BackupMaxAge(p) {
+		return &Line{Yellow, label, text}
+	}
+	return &Line{Green, label, text}
 }
 
 // BackupMaxAge is how old the newest backup may be: two days with the nightly schedule on, which is one missed night

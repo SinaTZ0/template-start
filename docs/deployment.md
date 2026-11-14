@@ -384,15 +384,33 @@ and sends an all-clear when it's over. Test the chat with `deploy/deploy.sh chec
 shows only in `cron.log` and the status lines. The check runs on the server, so it can't report a server that's off:
 that needs a monitor outside it.
 
-The backups stay on the server: copy them off it too (another machine, or object storage), or losing the server loses
-them with it.
+**Off-site copies.** The backups above are on the server's own disk, so losing the server loses them with it.
+Choose Off-site backups (`deploy/deploy.sh offsite`) to have every backup copied to an S3-compatible bucket somewhere
+else: Backblaze B2, Cloudflare R2, Wasabi, AWS S3, or MinIO on another machine. Create a private bucket there, and
+keys that may read, write and delete in it. The tool asks for the endpoint, the bucket and the keys, writes, lists,
+reads and deletes a test file, and only then saves them to `.env` (`BACKUP_S3_*`). From then on:
 
-**Restore.** Choose Restore, pick a backup, and type the domain to confirm. A database restore first dumps the current
+- Each Back up, by hand or from the schedule, uploads what it made under `<DOMAIN>/` in the bucket, and removes all but
+  the newest `BACKUP_S3_KEEP` (30) of each kind there. Several projects can share a bucket.
+- A copy of `.env` goes along as `<DOMAIN>/env.age`, encrypted with `BACKUP_ENV_PASSWORD`. `.env` holds what nothing
+  else does (the database password, the keys sessions are signed with), and after a lost server that password is the
+  only way to read the copy: keep it in a password manager, not only on the server. The tool can generate it, and
+  shows it once. `age -d env.age` reads the file on any machine with [age](https://age-encryption.org).
+- The dumps and archives are uploaded as they are, not encrypted, so the bucket must stay private.
+- An upload that fails doesn't undo the backup: the file is still on the server, the command fails, and from cron the
+  chat is told. The Off-site status line shows when a backup last reached the bucket, and the hourly check reports
+  it once that's older than two days (a week without a schedule).
+
+The dumps taken before an Update, a restore or the database browser stay on the server only.
+
+**Restore.** Choose Restore, pick a backup, and type the domain to confirm. With off-site backups on, the list also
+has the backups only the bucket still holds, marked "off-site"; picking one downloads it into `BACKUP_DIR` first. A database restore first dumps the current
 database (`-pre-restore`), stops the app, loads the dump into a new, empty database, gives that one the live
 database's name and starts the app again. The result is exactly what the dump holds: a table added after the dump was
 taken is gone, with its line in the migration history, so the next deploy creates it again. A restore that fails
 leaves the database as it was. While the dump loads, both copies are on the disk. A media restore offers to back up the current media first, then replaces the volume's
-contents. Without a terminal: `deploy/deploy.sh restore <file> --confirm <domain>`.
+contents. Without a terminal: `deploy/deploy.sh restore <file> --confirm <domain>`, where `<file>` is a path, or the
+name of a backup in `BACKUP_DIR` or in the bucket.
 
 By hand:
 
@@ -416,6 +434,7 @@ docker compose -f compose.prod.yaml start app
 - Set the site's name and description (the `site_name` and `site_description` messages in every locale file) and its
   link-preview image (`siteImage()` in `src/lib/site.ts`), and check `/sitemap.xml` lists every public page ([seo.md](./frontend/seo.md)).
 - Turn the schedule on (`deploy/deploy.sh schedule on`), set a chat for its alerts and test it
-  (`deploy/deploy.sh check --test`), and keep a copy of the backups off the server (Backups above).
+  (`deploy/deploy.sh check --test`), and turn on off-site backups (`deploy/deploy.sh offsite`), with the password
+  of `.env`'s copy kept somewhere that isn't the server (Backups above).
 - Go through [future-hardening-and-features.md](./future-hardening-and-features.md) (shared rate limits behind IPv6
   or a CDN, the CSP) and fix each item or note why it doesn't apply.

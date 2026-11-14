@@ -122,8 +122,8 @@ func (t *Tool) scheduleOff(crontab string) error {
 // checkState holds the problems the last check found, so the hourly check only speaks when they change.
 func (t *Tool) checkState() string { return runlog.Dir(t.P.Root) + "/check.state" }
 
-// Check is the hourly job: it looks for trouble nobody is watching for (the app down, no recent backup, a disk
-// nearly full, your own certificate about to expire) and sends it to the chat when it differs from what the last
+// Check is the hourly job: it looks for trouble nobody is watching for (the app down, no recent backup or off-site
+// copy, a disk nearly full, your own certificate about to expire) and sends it to the chat when it differs from what the last
 // check found, and an all-clear once it's gone. `--test` sends a test message. It exits 1 while there's a problem.
 func (t *Tool) Check(args []string) error {
 	if err := t.requireSetUp(); err != nil {
@@ -151,9 +151,14 @@ func (t *Tool) Check(args []string) error {
 	}{
 		{status.App(t.P, t.S), true},
 		{status.Backup(t.P), false},
+		{status.Offsite(t.P), false},
 		{status.Disk(t.P), true},
 		{status.SSL(t.P), false},
 	} {
+		// A line that doesn't apply to this server (off-site backups that are off).
+		if c.line == nil {
+			continue
+		}
 		if c.line.Color == status.Red || (c.line.Color == status.Yellow && !c.redOnly) {
 			problems = append(problems, c.line.Label+": "+c.line.Text)
 		}

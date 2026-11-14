@@ -79,7 +79,7 @@ hash=$(cd "$ROOT" && source_hash worktree)
 for arch in "${targets[@]}"; do
   out="$ROOT/deploy/bin/linux-$arch"
   mkdir -p "$out"
-  # Static (no cgo), without the build folder's paths or VCS stamps, symbols stripped: about 9 MB.
+  # Static (no cgo), without the build folder's paths or VCS stamps, symbols stripped: about 11 MB.
   CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$out/deploy" .
   printf '%s\n' "$hash" >"$out/SOURCE_HASH"
   echo "✓ deploy/bin/linux-$arch/deploy ($(du -h "$out/deploy" | cut -f1))"

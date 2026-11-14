@@ -30,6 +30,9 @@ var items = []item{
 	{"env", "Settings", "check, edit .env, apply", func(t *commands.Tool) error { return t.Settings(nil) }},
 	{"backup", "Back up", "database and/or media", func(t *commands.Tool) error { return t.Backup(nil) }},
 	{"restore", "Restore", "from a backup file", func(t *commands.Tool) error { return t.Restore(nil) }},
+	{"offsite", "Off-site backups", "copy every backup to an S3-compatible bucket", func(t *commands.Tool) error {
+		return t.Offsite(nil)
+	}},
 	{"schedule", "Schedule", "nightly backups and hourly checks, by cron", func(t *commands.Tool) error { return t.Schedule(nil) }},
 	{"cert", "SSL certificate", "automatic or your own files", func(t *commands.Tool) error { return t.Cert(nil) }},
 	{"status", "Status", "containers, health, disk", func(t *commands.Tool) error { return t.Status(nil) }},

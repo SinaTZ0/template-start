@@ -20,8 +20,26 @@ import (
 	"deploy/internal/ui"
 )
 
+const stampLayout = "20060102-150405"
+
 // Stamp is the time part of a backup's name.
-func Stamp() string { return time.Now().Format("20060102-150405") }
+func Stamp() string { return time.Now().Format(stampLayout) }
+
+// StampOf is the time part of a backup's name (`db-20261114-030000-pre-update.dump` → `20261114-030000`), which
+// sorts as text. Anything else comes back as it is.
+func StampOf(name string) string {
+	rest := strings.TrimPrefix(strings.TrimPrefix(name, "db-"), "media-")
+	if len(rest) >= len(stampLayout) {
+		return rest[:len(stampLayout)]
+	}
+	return name
+}
+
+// MadeAt is when a backup was made, by its name; false when the name doesn't say.
+func MadeAt(name string) (time.Time, bool) {
+	when, err := time.ParseInLocation(stampLayout, StampOf(name), time.Local)
+	return when, err == nil
+}
 
 // Dir is BACKUP_DIR as an absolute path; a relative one is relative to the project folder.
 func Dir(p *project.Project) string {
@@ -245,16 +263,16 @@ func psql(s *stack.Stack, stderr io.Writer, statements ...string) error {
 
 // Media copies the image store's volume into dir as media-<stamp>.tar.gz. The store is stopped while it's copied, so
 // the copy is consistent: images don't load for that time. The archive streams to this side, so it belongs to this
-// user, not root.
-func Media(s *stack.Stack, dir, stamp string) error {
+// user, not root. It returns the archive's path.
+func Media(s *stack.Stack, dir, stamp string) (string, error) {
 	id := s.ContainerID("seaweedfs")
 	if id == "" {
-		return ui.Fail("There's no image store container to back up.")
+		return "", ui.Fail("There's no image store container to back up.")
 	}
 	path := filepath.Join(dir, "media-"+stamp+".tar.gz")
 	ui.Step("Stopping the image store (images don't load until it's back)")
 	if err := s.Run("stop", "seaweedfs"); err != nil {
-		return err
+		return "", err
 	}
 	copyErr := writeTo(path, func(w io.Writer) error {
 		return ui.Spin("Copying the media", func(stderr io.Writer) error {
@@ -265,13 +283,13 @@ func Media(s *stack.Stack, dir, stamp string) error {
 	})
 	interrupt.Reset()
 	if err := s.Run("start", "seaweedfs"); err != nil {
-		return err
+		return "", err
 	}
 	if copyErr != nil {
-		return ui.Fail("Copying the media failed (see above). The image store is running again.")
+		return "", ui.Fail("Copying the media failed (see above). The image store is running again.")
 	}
 	ui.OK("Media → %s (%s)", path, sizeOf(path))
-	return nil
+	return path, nil
 }
 
 // RestoreMedia replaces the image store's volume with an archive, after offering a backup of the current one.
@@ -285,7 +303,7 @@ func RestoreMedia(s *stack.Stack, file, dir string) error {
 		return err
 	}
 	if ok {
-		if err := Media(s, dir, Stamp()+"-pre-restore"); err != nil {
+		if _, err := Media(s, dir, Stamp()+"-pre-restore"); err != nil {
 			return err
 		}
 	}

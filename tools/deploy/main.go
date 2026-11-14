@@ -64,6 +64,7 @@ func main() {
 		"seed":     t.Seed,
 		"steps":    t.Steps,
 		"pgweb":    t.Pgweb,
+		"offsite":  t.Offsite,
 		"schedule": t.Schedule,
 		"check":    t.Check,
 	}[command]

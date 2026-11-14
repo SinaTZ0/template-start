@@ -22,9 +22,13 @@ With no command, a menu with the stack's status under it.
                                 or vi, apply it; --check only reports, and exits 1 when something is missing
   apply                         check .env, then rebuild and restart the stack with it
   backup [--all|--db|--media] [--dir <folder>]
-                                without a terminal, --db is the default; --dir is remembered in .env
+                                without a terminal, --db is the default; --dir is remembered in .env; with
+                                off-site backups on, what it made is copied to the bucket
   restore [<file> --confirm <domain>]
-                                restore a db-… or media-… backup; without a terminal, both are needed
+                                restore a db-… or media-… backup: a file, or a name in the backups' folder or
+                                the off-site bucket; without a terminal, both are needed
+  offsite [test|list]           off-site backups, in an S3-compatible bucket (BACKUP_S3_* in .env): on a terminal,
+                                set them up, change them or turn them off; test tries the bucket, list lists it
   schedule [on|off]             cron's jobs for this server: a database backup every night, a media backup
                                 every Friday and a check every hour; without an argument it shows them
   check [--test]                what the hourly job runs: tells the chat (ERROR_VIEWER_NOTIFY_URL) when the app

@@ -15,14 +15,15 @@ lines, the `.env` check, deploy steps and the database browser.
   4) Settings          check, edit .env, apply
   5) Back up           database and/or media
   6) Restore           from a backup file
-  7) Schedule          nightly backups and hourly checks, by cron
-  8) SSL certificate   automatic or your own files
-  9) Status            containers, health, disk
- 10) Logs              pick a service, follow
- 11) Make admin        promote an account by email
- 12) Seed              sample content from the seeds
- 13) Deploy steps      list them, run the pending ones
- 14) Database browser  browse and edit the database, for a set time
+  7) Off-site backups  copy every backup to an S3-compatible bucket
+  8) Schedule          nightly backups and hourly checks, by cron
+  9) SSL certificate   automatic or your own files
+ 10) Status            containers, health, disk
+ 11) Logs              pick a service, follow
+ 12) Make admin        promote an account by email
+ 13) Seed              sample content from the seeds
+ 14) Deploy steps      list them, run the pending ones
+ 15) Database browser  browse and edit the database, for a set time
   0) Quit
 
   ● Project      up to date  (381286c)
@@ -43,7 +44,9 @@ branch. **App** is the version the app container runs and its health, yellow whe
 stack uses it (Settings below). **Steps** says whether every deploy step ran: yellow when some wait for the next
 deploy, red when one stopped partway (Deploy Steps below). **Site** and **Errors** request `/healthz` from outside,
 through Caddy. **Ports** says whether Caddy holds 80 and 443, or what else does. **Last backup** is when the newest backup was
-made, yellow once it's older than two days with a schedule, a week without. **Schedule** says whether cron runs the
+made, yellow once it's older than two days with a schedule, a week without. **Off-site** appears once off-site
+backups are set up: when a backup last reached the bucket, yellow by the same ages, red when its settings are half
+filled in (Off-site Backups below). **Schedule** says whether cron runs the
 backups and the hourly check (Schedule and Alerts below). **Disk** is the fullest of the disks holding the checkout,
 the backups and Docker's data: yellow from 80% used, red from 90%. **pgweb** appears only while the
 database browser is open, with the time it has left (Database Browser below). Before setup, only Set up is available;
@@ -112,7 +115,7 @@ with no checkout yet (deployment.md → First Deploy). It's part of the source, 
 
 The build runs `go vet` and the tool's tests first, and writes `SOURCE_HASH` next to each binary. A pre-commit hook
 fails a commit that changes `tools/deploy/` without the matching binary, for every architecture that's committed. Every
-rebuild adds a full copy of the binary (about 9 MB) to git history, so rebuild only when the source changes. On a
+rebuild adds a full copy of the binary (about 11 MB) to git history, so rebuild only when the source changes. On a
 server whose architecture has no binary yet, `deploy/deploy.sh` says which `--arch` to build.
 
 ## Settings (.env)
@@ -184,9 +187,9 @@ that changed the jobs, the Schedule line turns yellow ("out of date") until `sch
 before the tool kept a schedule has the two backup lines pasted by hand: the line says so, and `schedule on` names
 them, to remove with `crontab -e` so the backups don't run twice.
 
-`check` is the hourly job. It reads four status lines (App, Last backup, Disk, SSL) and counts as a problem: the app
-not running or unhealthy, no backup or one that's too old, a disk 90% full, and your own certificate missing, expired
-or within 30 days of it. It keeps what it found in `deploy/logs/check.state` and sends the chat a message only when
+`check` is the hourly job. It reads five status lines (App, Last backup, Off-site, Disk, SSL) and counts as a
+problem: the app not running or unhealthy, no backup or one that's too old, an off-site copy that's too old, a disk
+90% full, and your own certificate missing, expired or within 30 days of it. It keeps what it found in `deploy/logs/check.state` and sends the chat a message only when
 that changes, then an all-clear when nothing is left. It exits 1 while there's a problem, and keeps no log file of
 its own. A message that couldn't be sent is tried again the next hour.
 
@@ -194,6 +197,37 @@ Any other command that fails without a terminal, which is how cron runs them, se
 log file to the same chat; so does a job that couldn't start because another action held the lock. The chat is the
 error viewer's (`ERROR_VIEWER_NOTIFY_URL`, and `ERROR_VIEWER_NOTIFY_CHAT_ID` for a Telegram-style bot), read from
 `.env`, so it works with the viewer stopped. `deploy/deploy.sh check --test` sends a test message.
+
+## Off-site Backups
+
+Off-site backups (`deploy/deploy.sh offsite`) copy every backup to an S3-compatible bucket, with an encrypted copy of
+`.env` ([deployment.md](./deployment.md) → Backups). The action shows where the copies go and offers:
+
+| Choice   | What it does                                                                                       |
+| -------- | -------------------------------------------------------------------------------------------------- |
+| Set up   | Asks for the endpoint, bucket, region and keys, tries the bucket, then saves them to `.env`.       |
+| Test     | Writes, lists, reads and deletes a small file in the bucket. Also `deploy/deploy.sh offsite test`. |
+| Copy now | Uploads the newest database dump and media archive on the server, and `.env`.                      |
+| List     | Lists the backups in the bucket, newest first. Also `deploy/deploy.sh offsite list`.               |
+| Change   | Set up again, with the current values filled in. Enter at the secret key keeps the one in `.env`.  |
+| Turn off | Empties `BACKUP_S3_ENDPOINT`. The other settings and what's in the bucket stay.                    |
+
+The test deletes on purpose: keys that can only write would upload every night, never remove an old backup, and fail
+on the day of a restore.
+
+Objects are named `<DOMAIN>/db-<time>.dump`, `<DOMAIN>/media-<time>.tar.gz` and `<DOMAIN>/env.age`. Large archives go
+up in parts, so their size isn't limited by one request. After the uploads the tool removes all but the newest
+`BACKUP_S3_KEEP` of each kind, going by the time in their names. It records the time of the last upload that worked
+in `deploy/logs/offsite.state`; the Off-site status line and the hourly check read that file, not the bucket, so
+neither waits on the network.
+
+`.env`'s copy is encrypted with `BACKUP_ENV_PASSWORD` in [age](https://age-encryption.org)'s password format and
+written over the last one at each backup. The password is at least 12 characters, without spaces, quotes, `$`, `#`
+or backslashes, since it's kept in `.env`. Changing it changes the next copy; the one in the bucket keeps the old
+password until then. Without a password, `.env` stays out of the bucket and the status line says "without .env".
+
+The S3 client is [minio-go](https://github.com/minio/minio-go). The region defaults to `us-east-1`, which stores
+other than AWS accept; set `BACKUP_S3_REGION` when the provider names one.
 
 ## Deploy Steps
 

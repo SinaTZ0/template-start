@@ -151,6 +151,7 @@ func (t *Tool) Setup(args []string) error {
 	} else {
 		ui.Info("  Later: deploy/deploy.sh schedule on")
 	}
+	ui.Info("  The backups are on this server's disk only. For copies somewhere else: deploy/deploy.sh offsite")
 	return nil
 }
 
