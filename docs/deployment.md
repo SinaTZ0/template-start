@@ -323,11 +323,50 @@ their own address.
 If a production request arrives without the header, the app lets it through without a limit rather than putting every
 visitor in one bucket. It reports the problem by changes of state, not per request:
 
-| Log line (`module: "rate-limit"`) | Level | When | Job | What it does |
-| ----------------- | ---------------- | --------------------------------------------------------- |
-| Every night 03:00 | `backup --db` | A database dump. The site keeps running. |
-| Fridays 04:00 | `backup --media` | The image store's volume. Images don't load meanwhile. |
-| Every hour | `check` | Looks for trouble nobody is watching for (Being told). |
+| Log line (`module: "rate-limit"`)                | Level | When                                                                         |
+| ------------------------------------------------ | ----- | ---------------------------------------------------------------------------- |
+| `client address missing: rate limiting is off …` | error | The first such request. Also sent to the error viewer.                       |
+| `client address still missing …`                 | warn  | Every 5 minutes while it lasts, with `requests` counted since the last line. |
+| `client address visible again …`                 | info  | The first request with the header after an error was logged.                 |
+
+After fixing the proxy, open any page through it and look for the `visible again` line. Another error or warning
+means it isn't fixed. Errors are limited to one per 5 minutes: if addresses go missing again within 5 minutes of the
+last error, the new error is logged once those 5 minutes have passed. The Docker healthcheck calls `/healthz` directly
+with no header, which is fine: `/healthz` isn't limited.
+
+## Health Check
+
+`GET /healthz` (`src/routes/healthz/`) answers 200 when the app can query Postgres and 503 otherwise, with a 2-second
+limit. Docker polls it every 10 seconds; point an uptime monitor at it too. Storage isn't part of the check: an S3
+problem only breaks uploads, and a restart wouldn't fix it. Healthy probes are left out of the app's request log.
+
+## Logs
+
+```bash
+docker compose -f compose.prod.yaml logs -f app      # one JSON object per line (docs/backend/logging.md)
+```
+
+Errors and slow requests are easier to read in the error viewer (Error Tracking above); the logs keep every request. Docker
+rotates every service's log at 10 MB, keeping five files.
+
+## Backups
+
+Choose Back up, then database + media, database only, or media only, and the folder (remembered in `.env` as
+`BACKUP_DIR`; `./backups` by default, gitignored). Each run keeps the newest `BACKUP_KEEP` (14) of each kind.
+
+- **Database:** `db-<time>.dump`, from `pg_dump -Fc`. The site keeps running.
+- **Media:** `media-<time>.tar.gz`, the `seaweedfs` volume. The image store is stopped while it's copied, so the copy
+  is consistent; images don't load for that time.
+
+**Nightly backups.** Each run of the tool makes one backup and exits; cron, which every Linux server already has,
+runs it on a schedule. `deploy/deploy.sh schedule on` (the Schedule action; Set up offers it) writes these jobs into
+your crontab, in the server's time zone (`date` shows it), and `schedule off` removes them:
+
+| When              | Job              | What it does                                           |
+| ----------------- | ---------------- | ------------------------------------------------------ |
+| Every night 03:00 | `backup --db`    | A database dump. The site keeps running.               |
+| Fridays 04:00     | `backup --media` | The image store's volume. Images don't load meanwhile. |
+| Every hour        | `check`          | Looks for trouble nobody is watching for (Being told). |
 
 The media backup stops the image store while it copies, which is why it's weekly; the store holds the only copy of
 uploaded images, so the job matters as much as the nightly one.
