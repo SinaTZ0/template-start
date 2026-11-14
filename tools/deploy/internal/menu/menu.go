@@ -25,6 +25,9 @@ type item struct {
 
 var items = []item{
 	{"setup", "Set up", "clone, create .env, first build", func(t *commands.Tool) error { return t.Setup(nil) }},
+	{"recover", "Recover", "set up from the off-site backups of a lost or old server", func(t *commands.Tool) error {
+		return t.Recover(nil)
+	}},
 	{"update", "Update", "show what's new, back up, pull, rebuild, swap in the new app", func(t *commands.Tool) error { return t.Update(nil) }},
 	{"rollback", "Roll back", "run an earlier version of the app", func(t *commands.Tool) error { return t.Rollback(nil) }},
 	{"env", "Settings", "check, edit .env, apply", func(t *commands.Tool) error { return t.Settings(nil) }},
@@ -48,9 +51,12 @@ var items = []item{
 	}},
 }
 
-// available: Set up is for a new server only; everything else needs it done.
+// forNewServer are the two ways to start a server: from nothing, or from the off-site backups.
+func forNewServer(it item) bool { return it.key == "setup" || it.key == "recover" }
+
+// available: Set up and Recover are for a new server only; everything else needs one of them done.
 func available(t *commands.Tool, it item) bool {
-	if it.key == "setup" {
+	if forNewServer(it) {
 		return !t.P.IsSetUp()
 	}
 	return t.P.IsSetUp()
@@ -80,7 +86,7 @@ func Run(t *commands.Tool) error {
 			continue
 		}
 		if !available(t, *it) {
-			if it.key == "setup" {
+			if forNewServer(*it) {
 				ui.Warn("Not available: this server is already set up.")
 			} else {
 				ui.Warn("Not available: set up first.")
@@ -88,8 +94,8 @@ func Run(t *commands.Tool) error {
 			ui.Pause()
 			continue
 		}
-		// Without a checkout, Set up clones and hands over to the clone's own tool, which replaces this one.
-		if it.key == "setup" && !t.P.IsCheckout() {
+		// Without a checkout, Set up and Recover clone and hand over to the clone's own tool, which replaces this one.
+		if forNewServer(*it) && !t.P.IsCheckout() {
 			return it.run(t)
 		}
 
@@ -173,7 +179,7 @@ func pick(t *commands.Tool, clear bool) (*item, bool, error) {
 		switch {
 		case available(t, it):
 			fmt.Fprintf(ui.Out, " %2d) %-17s %s\n", i+1, it.label, ui.Dim(it.hint))
-		case it.key == "setup":
+		case forNewServer(it):
 			fmt.Fprintln(ui.Out, ui.Dim(fmt.Sprintf(" %2d) %-17s (already set up)", i+1, it.label)))
 		default:
 			fmt.Fprintln(ui.Out, ui.Dim(fmt.Sprintf(" %2d) %-17s (set up first)", i+1, it.label)))

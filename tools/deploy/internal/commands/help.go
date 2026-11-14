@@ -15,6 +15,8 @@ func Help(w io.Writer) {
 With no command, a menu with the stack's status under it.
 
   setup                         clone (when run outside a checkout), create .env, first build
+  recover                       set up a new server from the off-site backups instead: fetch .env (encrypted)
+                                and the newest database and media backups from the bucket, load them, build
   update [--yes]                show the new commits and the deploy steps they bring, check the disk has room,
                                 ask (not with --yes, or without a terminal), then back up the database, git
                                 pull and apply with the pulled tool

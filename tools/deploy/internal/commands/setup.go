@@ -23,7 +23,7 @@ func (t *Tool) Setup(args []string) error {
 		return err
 	}
 	if !t.P.IsCheckout() {
-		return t.cloneAndContinue()
+		return t.cloneAndContinue("setup")
 	}
 	if _, err := os.Stat(t.P.EnvFile()); err == nil {
 		return ui.Fail("This server is already set up (.env exists). Use Update instead.")
@@ -135,8 +135,16 @@ func (t *Tool) Setup(args []string) error {
 	ui.Info("")
 	ui.Info("  The first admin: sign up on the site, then choose Make admin (or: deploy/deploy.sh admin <email>).")
 
-	/*------ Schedule ------*/
-	// A server nobody scheduled has no backups at all, so it's offered here rather than left to the manual.
+	if err := t.offerSchedule(); err != nil {
+		return err
+	}
+	ui.Info("  The backups are on this server's disk only. For copies somewhere else: deploy/deploy.sh offsite")
+	return nil
+}
+
+// offerSchedule ends Set up and Recover: cron's jobs belong to the server, so a new one has none. A server nobody
+// scheduled has no backups at all, so it's offered here rather than left to the manual.
+func (t *Tool) offerSchedule() error {
 	ui.Step("Backups by themselves")
 	ui.Info("Cron can back up the database every night and the media every Friday, and check the server every hour.")
 	scheduled, err := ui.Confirm("Schedule them now?", true)
@@ -144,20 +152,20 @@ func (t *Tool) Setup(args []string) error {
 		return err
 	}
 	if scheduled {
-		// Set up is done either way: a server without cron gets the reason, and `schedule on` for later.
+		// The server is set up either way: one without cron gets the reason, and `schedule on` for later.
 		if err := t.Schedule([]string{"on"}); err != nil {
 			ui.PrintError(err)
 		}
 	} else {
 		ui.Info("  Later: deploy/deploy.sh schedule on")
 	}
-	ui.Info("  The backups are on this server's disk only. For copies somewhere else: deploy/deploy.sh offsite")
 	return nil
 }
 
 // cloneAndContinue clones the project, for the tool run on its own outside a checkout, then hands over to the clone's
-// own tool. A repository this server can't read (a private one) gets a deploy key first.
-func (t *Tool) cloneAndContinue() error {
+// own tool with command (setup or recover). A repository this server can't read (a private one) gets a deploy key
+// first.
+func (t *Tool) cloneAndContinue(command string) error {
 	ui.Info("There's no project here yet, so it's cloned first.")
 	url, err := ui.Ask("Git URL of the repository", t.Repository, "")
 	if err != nil {
@@ -191,5 +199,5 @@ func (t *Tool) cloneAndContinue() error {
 	if _, err := os.Stat(filepath.Join(target, "deploy", "deploy.sh")); err != nil {
 		return ui.Fail("The repository has no deploy/deploy.sh.")
 	}
-	return execTool(target, "setup")
+	return execTool(target, command)
 }

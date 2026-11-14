@@ -10,21 +10,22 @@ lines, the `.env` check, deploy steps and the database browser.
 
 ```text
   1) Set up            clone, create .env, first build
-  2) Update            show what's new, back up, pull, rebuild, swap in the new app
-  3) Roll back         run an earlier version of the app
-  4) Settings          check, edit .env, apply
-  5) Back up           database and/or media
-  6) Restore           from a backup file
-  7) Test a backup     restore the newest database backup into a test database
-  8) Off-site backups  copy every backup to an S3-compatible bucket
-  9) Schedule          nightly backups and hourly checks, by cron
- 10) SSL certificate   automatic or your own files
- 11) Status            containers, health, disk
- 12) Logs              pick a service, follow
- 13) Make admin        promote an account by email
- 14) Seed              sample content from the seeds
- 15) Deploy steps      list them, run the pending ones
- 16) Database browser  browse and edit the database, for a set time
+  2) Recover           set up from the off-site backups of a lost or old server
+  3) Update            show what's new, back up, pull, rebuild, swap in the new app
+  4) Roll back         run an earlier version of the app
+  5) Settings          check, edit .env, apply
+  6) Back up           database and/or media
+  7) Restore           from a backup file
+  8) Test a backup     restore the newest database backup into a test database
+  9) Off-site backups  copy every backup to an S3-compatible bucket
+ 10) Schedule          nightly backups and hourly checks, by cron
+ 11) SSL certificate   automatic or your own files
+ 12) Status            containers, health, disk
+ 13) Logs              pick a service, follow
+ 14) Make admin        promote an account by email
+ 15) Seed              sample content from the seeds
+ 16) Deploy steps      list them, run the pending ones
+ 17) Database browser  browse and edit the database, for a set time
   0) Quit
 
   ● Project      up to date  (381286c)
@@ -52,8 +53,8 @@ backups are set up: when a backup last reached the bucket, yellow by the same ag
 filled in (Off-site Backups below). **Schedule** says whether cron runs the
 backups and the hourly check (Schedule and Alerts below). **Disk** is the fullest of the disks holding the checkout,
 the backups and Docker's data: yellow from 80% used, red from 90%. **pgweb** appears only while the
-database browser is open, with the time it has left (Database Browser below). Before setup, only Set up is available;
-after it, everything else.
+database browser is open, with the time it has left (Database Browser below). Before setup, only Set up and Recover are
+available; after it, everything else.
 
 While the menu waits, its status is checked again and redrawn in place when you attach to its tmux window (Closing the
 SSH connection below), every 5 minutes, and when you press `r`; under the box is when it was last checked. In the
@@ -250,6 +251,34 @@ password until then. Without a password, `.env` stays out of the bucket and the 
 
 The S3 client is [minio-go](https://github.com/minio/minio-go). The region defaults to `us-east-1`, which stores
 other than AWS accept; set `BACKUP_S3_REGION` when the provider names one.
+
+## Recovering a Server
+
+Recover (`deploy/deploy.sh recover`) sets up a new server from the off-site backups instead of from nothing
+([deployment.md](./deployment.md) → Moving to a New Server). It needs a terminal, and a server whose database is
+empty. In order:
+
+1. Outside a checkout it clones the repository, as Set up does, deploy key included.
+2. It asks for the bucket (endpoint, bucket, region, keys) and lists the sites in it, which are the bucket's top
+   folders. With one site it takes that one; with several it asks.
+3. It asks for the password of `.env`'s copy until one opens it.
+4. It shows the newest database dump and media archive in the bucket and asks to go ahead. Nothing on the server has
+   changed up to here.
+5. It writes `.env`, runs the settings check on it, and downloads both backups into `BACKUP_DIR`. When the old
+   server's `BACKUP_DIR` can't be made on this one, it asks for another folder. When the old server used its own
+   certificate, it asks for the files again or switches to Let's Encrypt: `certs/` is in no backup.
+6. It starts only the database, loads the dump into it, starts the image store and loads the archive.
+7. It builds and starts the stack. Migrations newer than the dump run, then the deploy steps the old server hadn't
+   run: the ledger came back with the database.
+8. It offers the schedule, which is cron's and so belongs to each server.
+
+A Recover that stops part-way is run again with `deploy/deploy.sh recover`. It uses the `.env` it already wrote
+without asking for the bucket again, and skips a backup that's already downloaded. Once the database holds data it
+refuses to load over it and names what's left: `deploy/deploy.sh apply` for the build, and
+`deploy/deploy.sh restore <media-….tar.gz>` for the media.
+
+When the bucket has no copy of `.env` (it was left out when off-site backups were set up), put your own copy of the
+old server's `.env` in the checkout and run `deploy/deploy.sh recover`: it reads the bucket's settings from that file.
 
 ## Deploy Steps
 

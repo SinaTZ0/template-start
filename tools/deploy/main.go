@@ -51,6 +51,7 @@ func main() {
 	run := map[string]func([]string) error{
 		"menu":     func([]string) error { return menu.Run(t) },
 		"setup":    t.Setup,
+		"recover":  t.Recover,
 		"update":   t.Update,
 		"rollback": t.Rollback,
 		"env":      t.Settings,

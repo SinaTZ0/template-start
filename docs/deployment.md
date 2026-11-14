@@ -55,6 +55,8 @@ the stack and waits for it to turn healthy. It prints the error viewer's passwor
 the end; it's also in `.env`. Keep a copy of `.env` off the server: without its secrets, a database backup is all
 that's left.
 
+To set up from the backups of an earlier server instead, choose Recover (Moving to a New Server below).
+
 Once `.env` exists, Set up is locked. If the first build fails, fix the cause and choose Settings → Apply
 (`deploy/deploy.sh apply`).
 
@@ -420,7 +422,8 @@ reads and deletes a test file, and only then saves them to `.env` (`BACKUP_S3_*`
   chat is told. The Off-site status line shows when a backup last reached the bucket, and the hourly check reports
   it once that's older than two days (a week without a schedule).
 
-The dumps taken before an Update, a restore or the database browser stay on the server only.
+The dumps taken before an Update, a restore or the database browser stay on the server only. A whole server
+comes back from the bucket with Recover (Moving to a New Server below).
 
 **Restore.** Choose Restore, pick a backup, and type the domain to confirm. With off-site backups on, the list also
 has the backups only the bucket still holds, marked "off-site"; picking one downloads it into `BACKUP_DIR` first. A database restore first dumps the current
@@ -442,6 +445,47 @@ docker compose -f compose.prod.yaml exec -T db psql -U app -d postgres \
 docker compose -f compose.prod.yaml exec -T db pg_restore -U app -d app --no-owner < backup.dump
 docker compose -f compose.prod.yaml start app
 ```
+
+## Moving to a New Server
+
+With off-site backups on (Backups above), a server can be rebuilt from the bucket: after a lost server, or to move
+the site to another one. The new server needs what a first deploy needs (First Deploy above), plus three things
+from outside it: the bucket's endpoint and keys, and the password of `.env`'s copy (`BACKUP_ENV_PASSWORD`).
+
+```bash
+git clone <repo> app && cd app
+deploy/deploy.sh          # choose Recover (deploy/deploy.sh recover)
+```
+
+Recover asks for the bucket and the password, shows the newest database dump and media archive it found, and after
+a yes writes `.env`, loads both, and builds and starts the stack ([deploy-tool.md](./deploy-tool.md) → Recovering a
+Server). The site comes back as it was when those backups were made:
+
+- **The secrets are the old ones**, so accounts keep working and nobody is signed out.
+- **What was written after the backups is gone.** With the nightly schedule that's up to a day of the database and
+  up to a week of uploaded images.
+- **The error viewer starts empty.** Its reports aren't backed up.
+- **Certificates are new.** Caddy gets them from Let's Encrypt once the DNS records point at the new server; your
+  own certificate files have to be copied over, and Recover asks for their folder.
+- **The schedule is new.** Cron's jobs belong to a server; Recover offers them at the end.
+
+**A planned move.** While the old server still runs, lose nothing by taking the backups last:
+
+1. On the old server, stop the app so nothing is written any more:
+   `docker compose -f compose.prod.yaml stop app`.
+2. Still there: `deploy/deploy.sh backup --all`, which copies a fresh dump, archive and `.env` to the bucket.
+3. On the new server: Recover.
+4. Point the DNS records of both domains at the new server.
+5. On the old server: `deploy/deploy.sh schedule off` and `docker compose -f compose.prod.yaml down`. Two servers
+   with the same domain upload into the same folder of the bucket, and the old one's backups would push the new
+   one's out.
+
+**Without a copy of `.env` in the bucket**, the old server's secrets have to come from your own copy of `.env`: put
+it in the new checkout, then run `deploy/deploy.sh recover`. Without any copy, the database can still be restored
+into a server set up from nothing (Set up, then Restore both backups), with new secrets: everyone is signed out.
+
+Recover is worth trying once before it's needed, on a spare server or a virtual machine: it's the only test of the
+whole way back.
 
 ## Before Going Live
 

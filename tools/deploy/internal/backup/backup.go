@@ -208,22 +208,7 @@ func RestoreDB(s *stack.Stack, file, dir string) error {
 	}
 	defer in.Close()
 	restoreErr := ui.Spin("Restoring "+filepath.Base(file), func(stderr io.Writer) error {
-		// Left behind only by a restore that was killed part-way.
-		if err := psql(s, stderr, dropDB(restoreDB), dropDB(replacedDB), "CREATE DATABASE "+restoreDB); err != nil {
-			return err
-		}
-		cmd := s.Command(nil, "exec", "-T", "db", "pg_restore", "-U", "app", "-d", restoreDB, "--no-owner",
-			"--single-transaction")
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = in, stderr, stderr
-		if err := cmd.Run(); err != nil {
-			return err
-		}
-		// A database can't be renamed while anyone is connected to it (the database browser, a forgotten psql). One
-		// statement list is one transaction: both names change, or neither.
-		return psql(s, stderr,
-			"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '"+liveDB+"' AND pid <> pg_backend_pid(); "+
-				"ALTER DATABASE "+liveDB+" RENAME TO "+replacedDB+"; "+
-				"ALTER DATABASE "+restoreDB+" RENAME TO "+liveDB)
+		return swapIn(s, in, stderr)
 	})
 	// Cleaned up and started again even after Ctrl-C: a stopped app is worse than a restore given up on.
 	interrupt.Reset()
@@ -239,6 +224,60 @@ func RestoreDB(s *stack.Stack, file, dir string) error {
 		return s.WaitHealthy("app", 180*time.Second)
 	}); err != nil {
 		ui.Warn("The app didn't turn healthy. Its logs: deploy/deploy.sh logs app")
+	}
+	ui.OK("Database restored from %s", filepath.Base(file))
+	return nil
+}
+
+// swapIn loads a dump into a new, empty database and gives it the live one's name. Nothing may be writing to the live
+// database meanwhile.
+func swapIn(s *stack.Stack, dump io.Reader, stderr io.Writer) error {
+	// Left behind only by a restore that was killed part-way.
+	if err := psql(s, stderr, dropDB(restoreDB), dropDB(replacedDB), "CREATE DATABASE "+restoreDB); err != nil {
+		return err
+	}
+	cmd := s.Command(nil, "exec", "-T", "db", "pg_restore", "-U", "app", "-d", restoreDB, "--no-owner",
+		"--single-transaction")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = dump, stderr, stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	// A database can't be renamed while anyone is connected to it (the database browser, a forgotten psql). One
+	// statement list is one transaction: both names change, or neither.
+	return psql(s, stderr,
+		"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '"+liveDB+"' AND pid <> pg_backend_pid(); "+
+			"ALTER DATABASE "+liveDB+" RENAME TO "+replacedDB+"; "+
+			"ALTER DATABASE "+restoreDB+" RENAME TO "+liveDB)
+}
+
+// HasTables reports whether the live database holds any table: a server's first deploy creates them, so one without
+// is a database nothing ran on yet.
+func HasTables(s *stack.Stack) (bool, error) {
+	var stderr strings.Builder
+	count, err := query(s, &stderr, liveDB, "SELECT count(*) FROM pg_tables "+
+		"WHERE schemaname NOT IN ('pg_catalog', 'information_schema')")
+	if err != nil {
+		return false, fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return count != "0", nil
+}
+
+// LoadDB loads a dump into the database of a server that has no app yet (Recover): the same swap as RestoreDB,
+// without the dump of what's there (nothing is) and without an app to stop and start.
+func LoadDB(s *stack.Stack, file string) error {
+	in, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	err = ui.Spin("Restoring "+filepath.Base(file), func(stderr io.Writer) error { return swapIn(s, in, stderr) })
+	interrupt.Reset()
+	_ = psql(s, io.Discard, dropDB(restoreDB), dropDB(replacedDB))
+	if err == interrupt.ErrInterrupted {
+		return err
+	}
+	if err != nil {
+		return ui.Fail("%s didn't restore (see above). The database is as it was: empty.", filepath.Base(file))
 	}
 	ui.OK("Database restored from %s", filepath.Base(file))
 	return nil
@@ -403,6 +442,16 @@ func RestoreMedia(s *stack.Stack, file, dir string) error {
 		if _, err := Media(s, dir, Stamp()+"-pre-restore"); err != nil {
 			return err
 		}
+	}
+	return LoadMedia(s, file)
+}
+
+// LoadMedia replaces the image store's volume with an archive, without asking for a backup of what's there. The
+// store's container has to exist; it's stopped while the archive loads.
+func LoadMedia(s *stack.Stack, file string) error {
+	id := s.ContainerID("seaweedfs")
+	if id == "" {
+		return ui.Fail("There's no image store container to restore into.")
 	}
 	ui.Step("Stopping the image store")
 	if err := s.Run("stop", "seaweedfs"); err != nil {

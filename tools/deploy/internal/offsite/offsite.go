@@ -203,6 +203,27 @@ func (o Object) IsMedia() bool {
 	return strings.HasPrefix(o.Name, "media-") && strings.HasSuffix(o.Name, ".tar.gz")
 }
 
+// Sites lists the sites that keep backups in the bucket: its top-level folders, which are their domains. Recover
+// offers them, so the domain of a lost server doesn't have to be typed from memory.
+func (c *Config) Sites(ctx context.Context) ([]string, error) {
+	client, err := c.client()
+	if err != nil {
+		return nil, err
+	}
+	var sites []string
+	// Not recursive: the store answers with the folders themselves, as keys ending in a slash.
+	for object := range client.ListObjects(ctx, c.Bucket, minio.ListObjectsOptions{}) {
+		if object.Err != nil {
+			return nil, explain(object.Err)
+		}
+		if site, ok := strings.CutSuffix(object.Key, "/"); ok && site != "" {
+			sites = append(sites, site)
+		}
+	}
+	slices.Sort(sites)
+	return sites, nil
+}
+
 // Upload copies a backup file into the bucket under its own name. Large archives go up in parts.
 func (c *Config) Upload(ctx context.Context, path string) error {
 	client, err := c.client()
@@ -355,6 +376,9 @@ func (c *Config) UploadEnv(ctx context.Context, env string) error {
 	return explain(err)
 }
 
+// ErrNoEnv is FetchEnv's error for a site whose .env was left out of the bucket.
+var ErrNoEnv = errors.New("there's no copy of .env in the bucket")
+
 // FetchEnv downloads the encrypted .env and decrypts it with password.
 func (c *Config) FetchEnv(ctx context.Context, password string) ([]byte, error) {
 	client, err := c.client()
@@ -368,6 +392,10 @@ func (c *Config) FetchEnv(ctx context.Context, password string) ([]byte, error) 
 	defer object.Close()
 	encrypted, err := io.ReadAll(object)
 	if err != nil {
+		// The client asks the store only on the first read, so a missing object shows here.
+		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+			return nil, ErrNoEnv
+		}
 		return nil, explain(err)
 	}
 	return Decrypt(encrypted, password)
