@@ -1,6 +1,6 @@
 # Runs what `pnpm check` runs locally, plus the browser tests and the two Go tools' own checks, on every push to `main`
-# and every pull request. The integration and browser tests need the database, so the job starts one and applies the
-# migrations to it.
+# and every pull request. The integration and browser tests need the database and the image store, so the job starts
+# both and applies the migrations.
 name: CI
 
 on:
@@ -18,21 +18,6 @@ permissions:
 jobs:
   app:
     runs-on: ubuntu-latest
-    services:
-      # The same image and credentials as `compose.dev.yaml`, so `.env.example` works as it is.
-      db:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: app
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d app"
-          --health-interval 2s
-          --health-timeout 5s
-          --health-retries 30
     steps:
       - uses: actions/checkout@v5
       # The version in package.json's `packageManager`.
@@ -43,10 +28,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: cp .env.example .env
+      # The database and the image store of `compose.dev.yaml`, with the media bucket created: what `.env.example`
+      # points at, so CI tests against the same services as a development machine.
+      - run: pnpm services
       - run: pnpm db:migrate
       - run: pnpm check
-      # Builds the app and tests the production server in a real browser, so no separate `pnpm build` step. No test
-      # uploads an image: the job has no storage service.
+      # Builds the app and tests the production server in a real browser, so no separate `pnpm build` step.
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v4

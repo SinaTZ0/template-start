@@ -49,7 +49,7 @@ pnpm errors                   # optional, in a second terminal: error viewer on 
 | `pnpm i18n:compile`                    | Compiles `messages/` into `src/paraglide/`                            |
 | `pnpm format` / `format:check`         | Prettier (sorts Tailwind classes); the check CI runs                  |
 | `pnpm test` / `test:watch`             | Vitest (integration tests need the database)                          |
-| `pnpm test:e2e`                        | Playwright against the production build (needs the database)          |
+| `pnpm test:e2e`                        | Playwright against the production build (needs `pnpm services`)       |
 | `pnpm check`                           | typecheck, lint, format check and tests, as CI                        |
 | `pnpm storybook`                       | Component previews on port 6006                                       |
 | `pnpm services` / `services:down`      | Starts `compose.dev.yaml` and creates the bucket; stops it            |
