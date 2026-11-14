@@ -205,7 +205,19 @@ slash, and an npm mirror must also answer corepack's lookup of pnpm itself (`/pn
 ## Updating
 
 Choose Update (`deploy/deploy.sh update`). It stops if files on the server were changed (`git pull` could clash with
-them), dumps the database first (`db-<time>-pre-update.dump`: a migration can't be undone by going back a commit),
+them). Then it fetches and shows what would arrive, before anything is changed:
+
+- the new commits (the newest 15, and how many more), and a warning when they hold a database migration, which a
+  roll back of the app doesn't undo;
+- the deploy steps that would run after the build: the ones the commits add and the ones this server still owes
+  (Deploy Steps below);
+- whether there's room: under 2 GB free on Docker's disk, or less than twice the newest dump free in the backups'
+  folder, it lists what takes the space (Docker's build cache and unused images, the backups) and offers to clear
+  Docker's leftovers. A build that runs out of disk halfway is harder to read than this.
+
+On a terminal it then asks "Update now?"; `update --yes` skips the question, and without a terminal (cron, CI) there
+is none, though too little space still stops it. If the repository refuses the server, it says so and, for a private
+repository, prints the deploy key to add again (First Deploy above). After the question it dumps the database (`db-<time>-pre-update.dump`: a migration can't be undone by going back a commit),
 pulls, then hands over to the pulled copy of the tool, which checks `.env` (Settings below), rebuilds, replaces the
 app without downtime (below) and removes the stack's old images (only its own). The pulled copy, because its settings
 registry knows the variables the new commits added: they're added to `.env` and filled in or asked for before the build. Without
@@ -366,6 +378,7 @@ your crontab, in the server's time zone (`date` shows it), and `schedule off` re
 | ----------------- | ---------------- | ------------------------------------------------------ |
 | Every night 03:00 | `backup --db`    | A database dump. The site keeps running.               |
 | Fridays 04:00     | `backup --media` | The image store's volume. Images don't load meanwhile. |
+| Sundays 03:30     | `verify`         | Restores the newest dump into a test database.         |
 | Every hour        | `check`          | Looks for trouble nobody is watching for (Being told). |
 
 The media backup stops the image store while it copies, which is why it's weekly; the store holds the only copy of
@@ -376,6 +389,12 @@ jobs' output goes to `cron.log` in the backups' folder. The Schedule status line
 scheduled, and Last backup turns yellow when the newest backup is older than two days (a week without a schedule).
 The usual reason for a job that fails is a user who can't reach Docker: add the user to the `docker` group, or run
 `schedule on` as root.
+
+**Tested backups.** A backup that has never been restored is a guess. Test a backup (`deploy/deploy.sh verify`)
+loads the newest database dump into a database of its own, `app_verify`, counts the tables and rows that arrived, and
+drops it again; the live database isn't touched and the site keeps running. The schedule runs it every Sunday, half
+an hour after that night's dump, and a dump that doesn't restore fails the job, which tells the chat. The Last backup
+line says when a restore was last tested ([deploy-tool.md](./deploy-tool.md) → Testing a Backup).
 
 **Being told.** With a chat set in `.env` (`ERROR_VIEWER_NOTIFY_URL`, Error Tracking above), the tool sends it a
 message when a scheduled job fails, and when the hourly check finds the app down, no recent backup, a disk 90% full

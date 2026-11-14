@@ -25,11 +25,14 @@ type item struct {
 
 var items = []item{
 	{"setup", "Set up", "clone, create .env, first build", func(t *commands.Tool) error { return t.Setup(nil) }},
-	{"update", "Update", "back up, pull, rebuild, swap in the new app", func(t *commands.Tool) error { return t.Update(nil) }},
+	{"update", "Update", "show what's new, back up, pull, rebuild, swap in the new app", func(t *commands.Tool) error { return t.Update(nil) }},
 	{"rollback", "Roll back", "run an earlier version of the app", func(t *commands.Tool) error { return t.Rollback(nil) }},
 	{"env", "Settings", "check, edit .env, apply", func(t *commands.Tool) error { return t.Settings(nil) }},
 	{"backup", "Back up", "database and/or media", func(t *commands.Tool) error { return t.Backup(nil) }},
 	{"restore", "Restore", "from a backup file", func(t *commands.Tool) error { return t.Restore(nil) }},
+	{"verify", "Test a backup", "restore the newest database backup into a test database", func(t *commands.Tool) error {
+		return t.Verify(nil)
+	}},
 	{"offsite", "Off-site backups", "copy every backup to an S3-compatible bucket", func(t *commands.Tool) error {
 		return t.Offsite(nil)
 	}},

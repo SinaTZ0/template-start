@@ -20,6 +20,9 @@ const Dir = "deploy/steps"
 // keeps them in the order they were written; the ledger doesn't depend on it.
 var namePattern = regexp.MustCompile(`^\d{8}-\d{4}-[a-z0-9]+(-[a-z0-9]+)*$`)
 
+// IsName reports whether name is a step's name.
+func IsName(name string) bool { return namePattern.MatchString(name) }
+
 // Step is one step file.
 type Step struct {
 	Name     string

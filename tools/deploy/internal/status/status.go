@@ -120,7 +120,8 @@ func Lines(p *project.Project, s *stack.Stack, env *envfile.Settings) []string {
 
 /*===== The Lines =====*/
 
-// Project compares the checked-out commit with its upstream.
+// Project compares the checked-out commit with its upstream. A remote that turns the server away (gitrepo.Refused)
+// is told apart from one that can't be reached.
 func Project(p *project.Project) *Line {
 	if !p.IsCheckout() {
 		return &Line{Red, "Project", "not set up"}
@@ -131,7 +132,11 @@ func Project(p *project.Project) *Line {
 		return &Line{Yellow, "Project", fmt.Sprintf("local changes  (%s)", head)}
 	case !gitrepo.HasUpstream(p.Root):
 		return &Line{Yellow, "Project", fmt.Sprintf("%s  (no upstream branch)", head)}
-	case gitrepo.Fetch(p.Root, 8*time.Second) != nil:
+	}
+	if err := gitrepo.Fetch(p.Root, 8*time.Second); gitrepo.Refused(err) {
+		// Red: until the server can read the repository again, no update reaches it.
+		return &Line{Red, "Project", fmt.Sprintf("%s  (the remote refused this server: was its deploy key removed?)", head)}
+	} else if err != nil {
 		return &Line{Yellow, "Project", fmt.Sprintf("%s  (couldn't reach the remote)", head)}
 	}
 	behind, upstream := gitrepo.Behind(p.Root)
@@ -323,7 +328,8 @@ func SSL(p *project.Project) *Line {
 	return &Line{Green, "SSL", text}
 }
 
-// Backup is when the newest backup ran: yellow once it's older than BackupMaxAge.
+// Backup is when the newest backup ran: yellow once it's older than BackupMaxAge. It also says when a backup last
+// restored as a test (the verify command), once one did.
 func Backup(p *project.Project) *Line {
 	files := backup.List(backup.Dir(p))
 	if len(files) == 0 {
@@ -331,6 +337,9 @@ func Backup(p *project.Project) *Line {
 	}
 	when := files[0].Modified
 	text := fmt.Sprintf("%s  (%s)", when.Format(stamp), Ago(when))
+	if tested := backup.LastVerified(p.Root); !tested.IsZero() {
+		text += ", restore tested " + Ago(tested)
+	}
 	if time.Since(when) > BackupMaxAge(p) {
 		return &Line{Yellow, "Last backup", text}
 	}
@@ -390,7 +399,7 @@ func Schedule(p *project.Project) *Line {
 	case schedule.On(crontab, p.Root) && !schedule.Current(crontab, p.Root, schedule.LogFile(backup.Dir(p))):
 		return &Line{Yellow, "Schedule", "out of date" + how}
 	case schedule.On(crontab, p.Root):
-		return &Line{Green, "Schedule", "nightly database, weekly media, hourly check"}
+		return &Line{Green, "Schedule", "nightly database, weekly media and restore test, hourly check"}
 	case len(schedule.HandWritten(crontab, p.Root)) > 0:
 		return &Line{Yellow, "Schedule", "your own crontab lines, no hourly check" + how}
 	}
@@ -402,7 +411,7 @@ func Schedule(p *project.Project) *Line {
 func Disk(p *project.Project) *Line {
 	var worst *diskUse
 	seen := map[syscall.Fsid]bool{}
-	for _, path := range []string{p.Root, backup.Dir(p), "/var/lib/docker"} {
+	for _, path := range []string{p.Root, backup.Dir(p), DockerDir} {
 		var fs syscall.Statfs_t
 		if syscall.Statfs(path, &fs) != nil || fs.Blocks == 0 || seen[fs.Fsid] {
 			continue
@@ -433,6 +442,18 @@ func Disk(p *project.Project) *Line {
 		return &Line{Yellow, "Disk", text}
 	}
 	return &Line{Green, "Disk", text}
+}
+
+// DockerDir is where Docker keeps images, build cache and volumes, unless the server moved it.
+const DockerDir = "/var/lib/docker"
+
+// Free is the space an ordinary user can still fill on the disk that holds path; false when it can't be told.
+func Free(path string) (int64, bool) {
+	var fs syscall.Statfs_t
+	if syscall.Statfs(path, &fs) != nil || fs.Blocks == 0 {
+		return 0, false
+	}
+	return int64(uint64(fs.Bavail) * uint64(fs.Bsize)), true
 }
 
 type diskUse struct {

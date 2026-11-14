@@ -10,20 +10,21 @@ lines, the `.env` check, deploy steps and the database browser.
 
 ```text
   1) Set up            clone, create .env, first build
-  2) Update            back up, pull, rebuild, swap in the new app
+  2) Update            show what's new, back up, pull, rebuild, swap in the new app
   3) Roll back         run an earlier version of the app
   4) Settings          check, edit .env, apply
   5) Back up           database and/or media
   6) Restore           from a backup file
-  7) Off-site backups  copy every backup to an S3-compatible bucket
-  8) Schedule          nightly backups and hourly checks, by cron
-  9) SSL certificate   automatic or your own files
- 10) Status            containers, health, disk
- 11) Logs              pick a service, follow
- 12) Make admin        promote an account by email
- 13) Seed              sample content from the seeds
- 14) Deploy steps      list them, run the pending ones
- 15) Database browser  browse and edit the database, for a set time
+  7) Test a backup     restore the newest database backup into a test database
+  8) Off-site backups  copy every backup to an S3-compatible bucket
+  9) Schedule          nightly backups and hourly checks, by cron
+ 10) SSL certificate   automatic or your own files
+ 11) Status            containers, health, disk
+ 12) Logs              pick a service, follow
+ 13) Make admin        promote an account by email
+ 14) Seed              sample content from the seeds
+ 15) Deploy steps      list them, run the pending ones
+ 16) Database browser  browse and edit the database, for a set time
   0) Quit
 
   ● Project      up to date  (381286c)
@@ -39,12 +40,14 @@ lines, the `.env` check, deploy steps and the database browser.
 
 Green is fine, yellow needs attention (commits to pull, an edit to apply, a certificate under 30 days, a backup older
 than a week, an open database browser), red is missing or broken. **Project** compares the checkout with its upstream
-branch. **App** is the version the app container runs and its health, yellow when it isn't the checkout's
+branch; it's red when the repository turns the server away, which on a private repository means its deploy key was
+removed. **App** is the version the app container runs and its health, yellow when it isn't the checkout's
 ([deployment.md](./deployment.md) → Rolling Back). **Settings** says whether `.env` is complete and whether the running
 stack uses it (Settings below). **Steps** says whether every deploy step ran: yellow when some wait for the next
 deploy, red when one stopped partway (Deploy Steps below). **Site** and **Errors** request `/healthz` from outside,
 through Caddy. **Ports** says whether Caddy holds 80 and 443, or what else does. **Last backup** is when the newest backup was
-made, yellow once it's older than two days with a schedule, a week without. **Off-site** appears once off-site
+made, yellow once it's older than two days with a schedule, a week without; once a backup has been restored as a
+test (Test a backup), it says how long ago. **Off-site** appears once off-site
 backups are set up: when a backup last reached the bucket, yellow by the same ages, red when its settings are half
 filled in (Off-site Backups below). **Schedule** says whether cron runs the
 backups and the hourly check (Schedule and Alerts below). **Disk** is the fullest of the disks holding the checkout,
@@ -170,13 +173,15 @@ A new variable goes in the tool's settings registry: [deployment.md](./deploymen
 ## Schedule and Alerts
 
 Schedule (`deploy/deploy.sh schedule on`) writes the server's cron jobs: a database backup every night at 03:00, a
-media backup on Fridays at 04:00 and a check every hour ([deployment.md](./deployment.md) → Backups). They're a block
+media backup on Fridays at 04:00, a restore test of the newest database backup on Sundays at 03:30 and a check every
+hour ([deployment.md](./deployment.md) → Backups). They're a block
 in the crontab of the user who ran it, between two marker lines that name the checkout:
 
 ```text
 # >>> deploy /home/app/app (deploy/deploy.sh schedule)
 0 3 * * * /home/app/app/deploy/deploy.sh backup --db >>/home/app/app/backups/cron.log 2>&1
 0 4 * * 5 /home/app/app/deploy/deploy.sh backup --media >>/home/app/app/backups/cron.log 2>&1
+30 3 * * 0 /home/app/app/deploy/deploy.sh verify >>/home/app/app/backups/cron.log 2>&1
 17 * * * * /home/app/app/deploy/deploy.sh check >>/home/app/app/backups/cron.log 2>&1
 # <<< deploy /home/app/app
 ```
@@ -197,6 +202,23 @@ Any other command that fails without a terminal, which is how cron runs them, se
 log file to the same chat; so does a job that couldn't start because another action held the lock. The chat is the
 error viewer's (`ERROR_VIEWER_NOTIFY_URL`, and `ERROR_VIEWER_NOTIFY_CHAT_ID` for a Telegram-style bot), read from
 `.env`, so it works with the viewer stopped. `deploy/deploy.sh check --test` sends a test message.
+
+## Testing a Backup
+
+Test a backup (`deploy/deploy.sh verify`) proves that a database backup restores, which a file's size and date
+don't. It takes the newest `db-*.dump` in the backups' folder, or the one named (`verify <file>`: a path, a name in
+that folder, or a name in the off-site bucket, downloaded first), and:
+
+1. creates an empty database `app_verify` next to the live one,
+2. loads the dump into it with `pg_restore`, in one transaction,
+3. counts the tables that arrived and the rows in each,
+4. drops `app_verify` again, also after a failure or Ctrl-C.
+
+The live database and the app aren't touched, and the site keeps running; while it runs, a second copy of the data
+is on the database's disk. A dump that doesn't load, or loads without a single table, fails the command: from the
+schedule, which runs it every Sunday, that reaches the chat like any failed job. What passed is kept in
+`deploy/logs/verify.state` for the Last backup line. It tests the database only: a media archive is a plain
+`tar.gz`, which `tar tzf` reads.
 
 ## Off-site Backups
 

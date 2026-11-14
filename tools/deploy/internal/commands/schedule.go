@@ -16,7 +16,7 @@ import (
 /*===== Schedule =====*/
 
 // Schedule turns the tool's cron jobs on or off (package schedule): the nightly database backup, the weekly media
-// backup and the hourly check. Without an argument it shows what's scheduled and, on a terminal, offers to change it.
+// backup and restore test, and the hourly check. Without an argument it shows what's scheduled and, on a terminal, offers to change it.
 func (t *Tool) Schedule(args []string) error {
 	if err := t.requireSetUp(); err != nil {
 		return err
@@ -56,7 +56,7 @@ func (t *Tool) Schedule(args []string) error {
 		label string
 		run   func() error
 	}
-	actions := []action{{"Turn on      back up every night, check every hour", turnOn}}
+	actions := []action{{"Turn on      back up every night, test a restore every week, check every hour", turnOn}}
 	if on {
 		actions = []action{
 			{"Write again  the same jobs, as this version of the tool writes them", turnOn},

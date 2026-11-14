@@ -15,7 +15,9 @@ func Help(w io.Writer) {
 With no command, a menu with the stack's status under it.
 
   setup                         clone (when run outside a checkout), create .env, first build
-  update                        back up the database, git pull, then apply with the pulled tool
+  update [--yes]                show the new commits and the deploy steps they bring, check the disk has room,
+                                ask (not with --yes, or without a terminal), then back up the database, git
+                                pull and apply with the pulled tool
   rollback [<version>]          run an earlier image of the app (the newest %d are kept); without a
                                 terminal, the version is needed
   env [--check]                 check .env (fill in what can be generated, ask for the rest), edit it in nano
@@ -27,10 +29,13 @@ With no command, a menu with the stack's status under it.
   restore [<file> --confirm <domain>]
                                 restore a db-… or media-… backup: a file, or a name in the backups' folder or
                                 the off-site bucket; without a terminal, both are needed
+  verify [<file>]               test that a database backup restores: loads the newest one (or the one named)
+                                into a database of its own, counts its tables and rows, and drops it again
   offsite [test|list]           off-site backups, in an S3-compatible bucket (BACKUP_S3_* in .env): on a terminal,
                                 set them up, change them or turn them off; test tries the bucket, list lists it
   schedule [on|off]             cron's jobs for this server: a database backup every night, a media backup
-                                every Friday and a check every hour; without an argument it shows them
+                                every Friday, a restore test every Sunday and a check every hour; without an
+                                argument it shows them
   check [--test]                what the hourly job runs: tells the chat (ERROR_VIEWER_NOTIFY_URL) when the app
                                 is down, the backups stopped, a disk is nearly full or your own certificate
                                 runs out, and exits 1 while it's so; --test sends a test message

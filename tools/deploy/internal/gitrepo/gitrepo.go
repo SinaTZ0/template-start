@@ -3,8 +3,11 @@ package gitrepo
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -63,15 +66,62 @@ func HasUpstream(root string) bool {
 }
 
 // Fetch fetches the upstream with a timeout, never prompting for credentials, so an unreachable or private remote
-// can't hang the menu.
+// can't hang the menu. The error is git's own message.
 func Fetch(root string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(interrupt.Context(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "fetch", "-q")
 	// GIT_SSH_COMMAND replaces the checkout's own ssh command, which names its deploy key: build on that one.
 	ssh, _ := output(root, "config", "core.sshCommand")
 	cmd.Env = quietEnv(ssh, "-o ConnectTimeout=5")
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	switch {
+	case err == nil:
+		return nil
+	case ctx.Err() != nil:
+		return fmt.Errorf("no answer within %s", timeout)
+	}
+	// Without git's general advice after the blank line ("Please make sure you have the correct access rights…").
+	message, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n\n")
+	return errors.New(message)
+}
+
+// Refused reports whether a failed Fetch reached the git host and was turned away, which on a server means its
+// access was taken back (the deploy key removed, the repository made private), not that the network is down.
+func Refused(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	for _, sign := range []string{"Permission denied", "Repository not found", "Authentication failed",
+		"could not read Username", "terminal prompts disabled"} {
+		if strings.Contains(message, sign) {
+			return true
+		}
+	}
+	return false
+}
+
+// Incoming lists the upstream's commits the checkout doesn't have, newest first, one line each. Call it after Fetch.
+func Incoming(root string) []string {
+	out, _ := output(root, "log", "--oneline", "HEAD..@{u}")
+	if out == "" {
+		return nil
+	}
+	return strings.Split(out, "\n")
+}
+
+// IncomingFiles lists the files under paths that the upstream's commits change (added only, with onlyAdded).
+func IncomingFiles(root string, onlyAdded bool, paths ...string) []string {
+	args := []string{"diff", "--name-only"}
+	if onlyAdded {
+		args = append(args, "--diff-filter=A")
+	}
+	out, _ := output(root, append(append(args, "HEAD...@{u}", "--"), paths...)...)
+	if out == "" {
+		return nil
+	}
+	return strings.Split(out, "\n")
 }
 
 // quietEnv is the environment for a git command that must fail instead of asking: no username prompt, no ssh
@@ -105,6 +155,18 @@ func Clone(url, target, sshCommand string) error {
 }
 
 /*===== Remote Access =====*/
+
+var identityFile = regexp.MustCompile(`-i '([^']+_deploy_ed25519)'`)
+
+// DeployKey is the private key file the checkout's own ssh command names (Clone's sshCommand), empty when it has
+// none.
+func DeployKey(root string) string {
+	ssh, _ := output(root, "config", "core.sshCommand")
+	if match := identityFile.FindStringSubmatch(ssh); match != nil {
+		return match[1]
+	}
+	return ""
+}
 
 // CanRead reports whether git can read the remote at url without asking for anything, and git's own message when it
 // can't. sshCommand is the ssh to use ("" for plain ssh).

@@ -182,6 +182,8 @@ const (
 	liveDB     = "app"
 	restoreDB  = "app_restore"
 	replacedDB = "app_replaced"
+	// verifyDB is where Verify loads a dump to see that it restores; dropped again right after.
+	verifyDB = "app_verify"
 )
 
 // RestoreDB replaces the database with a dump. A dump of the current one is taken first, and the app is stopped while
@@ -257,6 +259,101 @@ func psql(s *stack.Stack, stderr io.Writer, statements ...string) error {
 	cmd := s.Command(nil, args...)
 	cmd.Stdout, cmd.Stderr = io.Discard, stderr
 	return cmd.Run()
+}
+
+// query runs one statement against a database and returns what it printed: one line per row, columns separated by
+// `|`.
+func query(s *stack.Stack, stderr io.Writer, database, statement string) (string, error) {
+	cmd := s.Command(nil, "exec", "-T", "db", "psql", "-U", "app", "-d", database, "-At", "-v", "ON_ERROR_STOP=1", "-c",
+		statement)
+	var out strings.Builder
+	cmd.Stdout, cmd.Stderr = &out, stderr
+	err := cmd.Run()
+	return strings.TrimSpace(out.String()), err
+}
+
+/*===== Verify =====*/
+
+// Verified is what a dump held when it was restored as a test.
+type Verified struct {
+	Tables int
+	Rows   int64
+}
+
+// Verify proves that a dump restores: it loads it into a database of its own next to the live one, counts the tables
+// and rows that arrived, and drops it again. The live database and the app aren't touched. A dump that doesn't load,
+// or loads without a single table, is an error: that's the backup that would have failed on the day it was needed.
+func Verify(s *stack.Stack, file string) (Verified, error) {
+	var found Verified
+	if s.State("db") != "healthy" {
+		return found, ui.Fail("The database isn't running, so there's nowhere to test the backup.")
+	}
+	in, err := os.Open(file)
+	if err != nil {
+		return found, err
+	}
+	defer in.Close()
+	err = ui.Spin("Restoring "+filepath.Base(file)+" into a test database", func(stderr io.Writer) error {
+		// Left behind only by a test that was killed part-way.
+		if err := psql(s, stderr, dropDB(verifyDB), "CREATE DATABASE "+verifyDB); err != nil {
+			return err
+		}
+		cmd := s.Command(nil, "exec", "-T", "db", "pg_restore", "-U", "app", "-d", verifyDB, "--no-owner",
+			"--single-transaction")
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = in, stderr, stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+		// The names come back quoted by Postgres, ready to be counted: the planner's row estimates are all zero in a
+		// database that was never analysed, so each table is counted for real.
+		tables, err := query(s, stderr, verifyDB, "SELECT format('%I.%I', schemaname, tablename) FROM pg_tables "+
+			"WHERE schemaname NOT IN ('pg_catalog', 'information_schema')")
+		if err != nil || tables == "" {
+			return err
+		}
+		names := strings.Split(tables, "\n")
+		counts := make([]string, len(names))
+		for i, name := range names {
+			counts[i] = "(SELECT count(*) FROM " + name + ")"
+		}
+		rows, err := query(s, stderr, verifyDB, "SELECT "+strings.Join(counts, " + "))
+		if err != nil {
+			return err
+		}
+		found.Tables = len(names)
+		found.Rows, err = strconv.ParseInt(rows, 10, 64)
+		return err
+	})
+	// Dropped even after Ctrl-C: a forgotten copy of the database takes its size in disk space.
+	interrupt.Reset()
+	_ = psql(s, io.Discard, dropDB(verifyDB))
+	if err == interrupt.ErrInterrupted {
+		return found, err
+	}
+	if err != nil {
+		return found, ui.Fail("%s doesn't restore (see above). The live database wasn't touched.", filepath.Base(file))
+	}
+	if found.Tables == 0 {
+		return found, ui.Fail("%s restores, but it holds no tables. The live database wasn't touched.",
+			filepath.Base(file))
+	}
+	return found, nil
+}
+
+// verifiedFile is where a checkout keeps when a backup last restored as a test, and which one.
+func verifiedFile(root string) string { return filepath.Join(root, "deploy", "logs", "verify.state") }
+
+// MarkVerified records that the backup called name just restored as a test.
+func MarkVerified(root, name string) {
+	_ = os.MkdirAll(filepath.Dir(verifiedFile(root)), 0o755)
+	_ = os.WriteFile(verifiedFile(root), []byte(time.Now().UTC().Format(time.RFC3339)+" "+name+"\n"), 0o600)
+}
+
+// LastVerified is when a backup last restored as a test; the zero time when none did.
+func LastVerified(root string) time.Time {
+	content, _ := os.ReadFile(verifiedFile(root))
+	when, _ := time.Parse(time.RFC3339, strings.SplitN(strings.TrimSpace(string(content)), " ", 2)[0])
+	return when
 }
 
 /*===== Media =====*/

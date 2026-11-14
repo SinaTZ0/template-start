@@ -19,10 +19,12 @@ type Job struct {
 }
 
 // Jobs are the tool's cron jobs. The media backup stops the image store while it copies, so it runs weekly, on
-// Friday; the check runs off the hour, when fewer other jobs do.
+// Friday; the restore test runs half an hour after a night's dump, which it then tests; the check runs off the hour,
+// when fewer other jobs do.
 var Jobs = []Job{
 	{"0 3 * * *", "backup --db", "database backup, every night at 03:00"},
 	{"0 4 * * 5", "backup --media", "media backup, Fridays at 04:00"},
+	{"30 3 * * 0", "verify", "restore test of the newest database backup, Sundays at 03:30"},
 	{"17 * * * *", "check", "health check, every hour"},
 }
 

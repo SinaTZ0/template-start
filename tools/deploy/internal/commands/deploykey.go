@@ -104,6 +104,17 @@ func deployKey(name string) (path, public string, err error) {
 	return path, strings.TrimSpace(string(line)), nil
 }
 
+// deployKeyPublic is the public line of the deploy key the checkout reads its repository with, empty when it uses
+// none (a public repository, or access set up by hand).
+func deployKeyPublic(root string) string {
+	key := gitrepo.DeployKey(root)
+	if key == "" {
+		return ""
+	}
+	line, _ := os.ReadFile(key + ".pub")
+	return strings.TrimSpace(string(line))
+}
+
 // deployKeysPage says where a repository's deploy keys are added: the page itself on GitHub, where to look elsewhere.
 func deployKeysPage(sshURL string) string {
 	if path, ok := strings.CutPrefix(sshURL, "git@github.com:"); ok {
