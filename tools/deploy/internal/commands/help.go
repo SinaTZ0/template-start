@@ -25,6 +25,11 @@ With no command, a menu with the stack's status under it.
                                 without a terminal, --db is the default; --dir is remembered in .env
   restore [<file> --confirm <domain>]
                                 restore a db-… or media-… backup; without a terminal, both are needed
+  schedule [on|off]             cron's jobs for this server: a database backup every night, a media backup
+                                every Friday and a check every hour; without an argument it shows them
+  check [--test]                what the hourly job runs: tells the chat (ERROR_VIEWER_NOTIFY_URL) when the app
+                                is down, the backups stopped, a disk is nearly full or your own certificate
+                                runs out, and exits 1 while it's so; --test sends a test message
   cert [auto|<folder>]          switch to Let's Encrypt, or install your own certificate from a folder
   status                        containers, disk, backups and the status lines
   logs [<service>]              follow a service's logs: %s

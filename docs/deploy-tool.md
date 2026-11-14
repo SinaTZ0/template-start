@@ -15,13 +15,14 @@ lines, the `.env` check, deploy steps and the database browser.
   4) Settings          check, edit .env, apply
   5) Back up           database and/or media
   6) Restore           from a backup file
-  7) SSL certificate   automatic or your own files
-  8) Status            containers, health, disk
-  9) Logs              pick a service, follow
- 10) Make admin        promote an account by email
- 11) Seed              sample content from the seeds
- 12) Deploy steps      list them, run the pending ones
- 13) Database browser  browse and edit the database, for a set time
+  7) Schedule          nightly backups and hourly checks, by cron
+  8) SSL certificate   automatic or your own files
+  9) Status            containers, health, disk
+ 10) Logs              pick a service, follow
+ 11) Make admin        promote an account by email
+ 12) Seed              sample content from the seeds
+ 13) Deploy steps      list them, run the pending ones
+ 14) Database browser  browse and edit the database, for a set time
   0) Quit
 
   ● Project      up to date  (381286c)
@@ -41,7 +42,10 @@ branch. **App** is the version the app container runs and its health, yellow whe
 ([deployment.md](./deployment.md) → Rolling Back). **Settings** says whether `.env` is complete and whether the running
 stack uses it (Settings below). **Steps** says whether every deploy step ran: yellow when some wait for the next
 deploy, red when one stopped partway (Deploy Steps below). **Site** and **Errors** request `/healthz` from outside,
-through Caddy. **Ports** says whether Caddy holds 80 and 443, or what else does. **pgweb** appears only while the
+through Caddy. **Ports** says whether Caddy holds 80 and 443, or what else does. **Last backup** is when the newest backup was
+made, yellow once it's older than two days with a schedule, a week without. **Schedule** says whether cron runs the
+backups and the hourly check (Schedule and Alerts below). **Disk** is the fullest of the disks holding the checkout,
+the backups and Docker's data: yellow from 80% used, red from 90%. **pgweb** appears only while the
 database browser is open, with the time it has left (Database Browser below). Before setup, only Set up is available;
 after it, everything else.
 
@@ -81,15 +85,15 @@ Apply runs again.
 included, writes all it prints, its commands' output included, to `deploy/logs/<date>-<time>-<action>.log`: plain
 text, each line with its time, readable only by the server account that ran it. An Update's build and swap, which the
 pulled tool runs, go in the Update's file. A failure names its file under the error; `less deploy/logs/<file>` shows
-it, and `scp` copies it off the server. The newest 100 are kept. Status and Logs only look, so they keep none, and the
+it, and `scp` copies it off the server. The newest 100 are kept. Status, Logs and the hourly Check keep none, and the
 database browser's password is shown on screen but never written to a log. While an action logs, the commands it runs
 print to the log and the terminal through a pipe, so Docker and git show plain lines instead of their redrawn
 progress.
 
 **One action at a time.** An action that changes something holds a lock on the checkout (`deploy/logs/.lock`) until
 it ends, so cron's backup can't start in the middle of an Update, and a second terminal can't restore while the first
-one deploys. The second action stops at once and names the first: run it again when that one is done. Status, Logs
-and `env --check` only look, so they run beside anything, and an open menu holds the lock only while one of its
+one deploys. The second action stops at once and names the first: run it again when that one is done. Status, Logs,
+Check and `env --check` only look, so they run beside anything, and an open menu holds the lock only while one of its
 actions runs. The lock ends with the process, so a tool that crashed or was killed leaves nothing to clean up.
 
 **How it's built.** The tool is a Go program in `tools/deploy/` (one package per area: settings, `.env`, the stack,
@@ -159,6 +163,37 @@ bundle.
 or invalid and exits 1 if anything is.
 
 A new variable goes in the tool's settings registry: [deployment.md](./deployment.md) → Adding a Variable.
+
+## Schedule and Alerts
+
+Schedule (`deploy/deploy.sh schedule on`) writes the server's cron jobs: a database backup every night at 03:00, a
+media backup on Fridays at 04:00 and a check every hour ([deployment.md](./deployment.md) → Backups). They're a block
+in the crontab of the user who ran it, between two marker lines that name the checkout:
+
+```text
+# >>> deploy /home/app/app (deploy/deploy.sh schedule)
+0 3 * * * /home/app/app/deploy/deploy.sh backup --db >>/home/app/app/backups/cron.log 2>&1
+0 4 * * 5 /home/app/app/deploy/deploy.sh backup --media >>/home/app/app/backups/cron.log 2>&1
+17 * * * * /home/app/app/deploy/deploy.sh check >>/home/app/app/backups/cron.log 2>&1
+# <<< deploy /home/app/app
+```
+
+The tool only ever changes that block, so the rest of the crontab is yours, and `schedule on` twice is the same as
+once. Don't edit inside the block: the next `schedule on` writes it again. `schedule off` removes it. After an update
+that changed the jobs, the Schedule line turns yellow ("out of date") until `schedule on` runs again. A server set up
+before the tool kept a schedule has the two backup lines pasted by hand: the line says so, and `schedule on` names
+them, to remove with `crontab -e` so the backups don't run twice.
+
+`check` is the hourly job. It reads four status lines (App, Last backup, Disk, SSL) and counts as a problem: the app
+not running or unhealthy, no backup or one that's too old, a disk 90% full, and your own certificate missing, expired
+or within 30 days of it. It keeps what it found in `deploy/logs/check.state` and sends the chat a message only when
+that changes, then an all-clear when nothing is left. It exits 1 while there's a problem, and keeps no log file of
+its own. A message that couldn't be sent is tried again the next hour.
+
+Any other command that fails without a terminal, which is how cron runs them, sends its failure and the name of its
+log file to the same chat; so does a job that couldn't start because another action held the lock. The chat is the
+error viewer's (`ERROR_VIEWER_NOTIFY_URL`, and `ERROR_VIEWER_NOTIFY_CHAT_ID` for a Telegram-style bot), read from
+`.env`, so it works with the viewer stopped. `deploy/deploy.sh check --test` sends a test message.
 
 ## Deploy Steps
 

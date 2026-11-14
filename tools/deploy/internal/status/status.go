@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"deploy/internal/backup"
@@ -22,6 +23,7 @@ import (
 	"deploy/internal/pgweb"
 	"deploy/internal/ports"
 	"deploy/internal/project"
+	"deploy/internal/schedule"
 	"deploy/internal/settings"
 	"deploy/internal/stack"
 	"deploy/internal/steps"
@@ -75,6 +77,18 @@ func Lines(p *project.Project, s *stack.Stack, env *envfile.Settings) []string {
 		func() *Line { return Ports(s) },
 		func() *Line { return SSL(p) },
 		func() *Line { return Backup(p) },
+		func() *Line {
+			if !p.IsSetUp() {
+				return nil
+			}
+			return Schedule(p)
+		},
+		func() *Line {
+			if !p.IsSetUp() {
+				return nil
+			}
+			return Disk(p)
+		},
 		func() *Line {
 			if !p.IsSetUp() {
 				return nil
@@ -302,7 +316,7 @@ func SSL(p *project.Project) *Line {
 	return &Line{Green, "SSL", text}
 }
 
-// Backup is when the newest backup ran: yellow after a week.
+// Backup is when the newest backup ran: yellow once it's older than BackupMaxAge.
 func Backup(p *project.Project) *Line {
 	files := backup.List(backup.Dir(p))
 	if len(files) == 0 {
@@ -310,10 +324,88 @@ func Backup(p *project.Project) *Line {
 	}
 	when := files[0].Modified
 	text := fmt.Sprintf("%s  (%s)", when.Format(stamp), Ago(when))
-	if time.Since(when) > 7*24*time.Hour {
+	if time.Since(when) > BackupMaxAge(p) {
 		return &Line{Yellow, "Last backup", text}
 	}
 	return &Line{Green, "Last backup", text}
+}
+
+// BackupMaxAge is how old the newest backup may be: two days with the nightly schedule on, which is one missed night
+// and some slack; a week when backups are made by hand.
+func BackupMaxAge(p *project.Project) time.Duration {
+	if schedule.Available() {
+		crontab, err := schedule.Read()
+		if err == nil && (schedule.On(crontab, p.Root) || len(schedule.HandWritten(crontab, p.Root)) > 0) {
+			return 48 * time.Hour
+		}
+	}
+	return 7 * 24 * time.Hour
+}
+
+// Schedule says whether cron runs the backups and the hourly check: yellow when it doesn't, or when the crontab's
+// lines are older than this version of the tool.
+func Schedule(p *project.Project) *Line {
+	const how = "  (deploy/deploy.sh schedule on)"
+	if !schedule.Available() {
+		return &Line{Yellow, "Schedule", "off: cron isn't installed"}
+	}
+	crontab, err := schedule.Read()
+	if err != nil {
+		return &Line{Yellow, "Schedule", "unknown (can't read the crontab)"}
+	}
+	switch {
+	case schedule.On(crontab, p.Root) && !schedule.Current(crontab, p.Root, schedule.LogFile(backup.Dir(p))):
+		return &Line{Yellow, "Schedule", "out of date" + how}
+	case schedule.On(crontab, p.Root):
+		return &Line{Green, "Schedule", "nightly database, weekly media, hourly check"}
+	case len(schedule.HandWritten(crontab, p.Root)) > 0:
+		return &Line{Yellow, "Schedule", "your own crontab lines, no hourly check" + how}
+	}
+	return &Line{Yellow, "Schedule", "off: no backups run by themselves" + how}
+}
+
+// Disk is the fullest of the disks the server's data is on (the checkout, the backups, Docker's): yellow from 80%
+// used, red from 90%, where a build or a database dump can fail halfway.
+func Disk(p *project.Project) *Line {
+	var worst *diskUse
+	seen := map[syscall.Fsid]bool{}
+	for _, path := range []string{p.Root, backup.Dir(p), "/var/lib/docker"} {
+		var fs syscall.Statfs_t
+		if syscall.Statfs(path, &fs) != nil || fs.Blocks == 0 || seen[fs.Fsid] {
+			continue
+		}
+		seen[fs.Fsid] = true
+		// Used as `df` counts it: of the space an ordinary user can fill, leaving out root's reserve.
+		used := uint64(fs.Blocks) - uint64(fs.Bfree)
+		use := diskUse{
+			path:    path,
+			percent: int((used*100 + used + uint64(fs.Bavail) - 1) / (used + uint64(fs.Bavail))),
+			free:    int64(uint64(fs.Bavail) * uint64(fs.Bsize)),
+		}
+		if worst == nil || use.percent > worst.percent {
+			worst = &use
+		}
+	}
+	if worst == nil {
+		return &Line{Dim, "Disk", "unknown"}
+	}
+	text := fmt.Sprintf("%d%% used  (%s free)", worst.percent, backup.Size(worst.free))
+	if worst.path != p.Root {
+		text += "  on " + worst.path
+	}
+	switch {
+	case worst.percent >= 90:
+		return &Line{Red, "Disk", text}
+	case worst.percent >= 80:
+		return &Line{Yellow, "Disk", text}
+	}
+	return &Line{Green, "Disk", text}
+}
+
+type diskUse struct {
+	path    string
+	percent int
+	free    int64
 }
 
 // Pgweb shows an open database browser, with the time it has left.

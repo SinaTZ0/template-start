@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"deploy/internal/backup"
 	"deploy/internal/certs"
 	"deploy/internal/envfile"
 	"deploy/internal/gitrepo"
@@ -135,12 +134,23 @@ func (t *Tool) Setup(args []string) error {
 		envfile.Get(env, "ERROR_VIEWER_ADMIN_PASSWORD"))
 	ui.Info("")
 	ui.Info("  The first admin: sign up on the site, then choose Make admin (or: deploy/deploy.sh admin <email>).")
-	ui.Info("  A nightly database backup: add this line with crontab -e")
-	ui.Info("    0 3 * * * %s backup --db >>%s 2>&1", t.P.Path("deploy", "deploy.sh"),
-		filepath.Join(backup.Dir(t.P), "cron.log"))
-	ui.Info("  A weekly media backup, the only copy of uploaded images: add this line too")
-	ui.Info("    0 4 * * 5 %s backup --media >>%s 2>&1", t.P.Path("deploy", "deploy.sh"),
-		filepath.Join(backup.Dir(t.P), "cron.log"))
+
+	/*------ Schedule ------*/
+	// A server nobody scheduled has no backups at all, so it's offered here rather than left to the manual.
+	ui.Step("Backups by themselves")
+	ui.Info("Cron can back up the database every night and the media every Friday, and check the server every hour.")
+	scheduled, err := ui.Confirm("Schedule them now?", true)
+	if err != nil {
+		return err
+	}
+	if scheduled {
+		// Set up is done either way: a server without cron gets the reason, and `schedule on` for later.
+		if err := t.Schedule([]string{"on"}); err != nil {
+			ui.PrintError(err)
+		}
+	} else {
+		ui.Info("  Later: deploy/deploy.sh schedule on")
+	}
 	return nil
 }
 

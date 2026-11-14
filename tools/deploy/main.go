@@ -64,6 +64,8 @@ func main() {
 		"seed":     t.Seed,
 		"steps":    t.Steps,
 		"pgweb":    t.Pgweb,
+		"schedule": t.Schedule,
+		"check":    t.Check,
 	}[command]
 	if run == nil {
 		commands.Help(ui.Err)
@@ -75,12 +77,22 @@ func main() {
 	if command != "menu" {
 		var err error
 		if release, err = t.Lock(command, args); err != nil {
+			// Cron's backup that found an Update running didn't back up: worth knowing, like any failure.
+			t.AlertFailure(command, args, err, "")
 			os.Exit(exitCode(err))
 		}
 		log = t.OpenLog(command, args)
 	}
 	err := run(args)
 	code := exitCode(err)
+	// `check` sends what it finds itself, and a usage error or Ctrl-C has someone at the keyboard.
+	if code == 1 && command != "check" && command != "menu" {
+		logRel := ""
+		if log != nil {
+			logRel = log.Rel
+		}
+		t.AlertFailure(command, args, err, logRel)
+	}
 	log.Close(err)
 	release()
 	os.Exit(code)

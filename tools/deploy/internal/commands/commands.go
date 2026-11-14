@@ -43,18 +43,20 @@ func New(p *project.Project, repository string) *Tool {
 
 // OpenLog starts the log file of a command (runlog), for the ones that change something, and only in a checkout:
 // Set up before the clone has nowhere to keep it, and hands over to the clone's tool, which keeps its own. Status
-// and Logs only look. Nil when there's none; Close on nil does nothing.
+// and Logs only look, and the hourly Check would push every other log out of the folder. Nil when there's none;
+// Close on nil does nothing.
 func (t *Tool) OpenLog(command string, args []string) *runlog.Log {
-	if command == "status" || command == "logs" || !t.P.IsCheckout() {
+	if command == "status" || command == "logs" || command == "check" || !t.P.IsCheckout() {
 		return nil
 	}
 	return runlog.Open(t.P.Root, command, args)
 }
 
 // Lock takes the checkout's lock (package lock) for a command that changes something, and returns what releases it.
-// Status, Logs and `env --check` only look, and may run beside anything. Outside a checkout there's nothing to lock.
+// Status, Logs, Check and `env --check` only look, and may run beside anything. Outside a checkout there's nothing to lock.
 func (t *Tool) Lock(command string, args []string) (release func(), err error) {
-	onlyLooks := command == "status" || command == "logs" || (command == "env" && len(args) == 1 && args[0] == "--check")
+	onlyLooks := command == "status" || command == "logs" || command == "check" ||
+		(command == "env" && len(args) == 1 && args[0] == "--check")
 	if onlyLooks || !t.P.IsCheckout() {
 		return func() {}, nil
 	}

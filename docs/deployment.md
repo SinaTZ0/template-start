@@ -323,61 +323,27 @@ their own address.
 If a production request arrives without the header, the app lets it through without a limit rather than putting every
 visitor in one bucket. It reports the problem by changes of state, not per request:
 
-| Log line (`module: "rate-limit"`)                | Level | When                                                                         |
-| ------------------------------------------------ | ----- | ---------------------------------------------------------------------------- |
-| `client address missing: rate limiting is off …` | error | The first such request. Also sent to the error viewer.                       |
-| `client address still missing …`                 | warn  | Every 5 minutes while it lasts, with `requests` counted since the last line. |
-| `client address visible again …`                 | info  | The first request with the header after an error was logged.                 |
+| Log line (`module: "rate-limit"`) | Level | When | Job | What it does |
+| ----------------- | ---------------- | --------------------------------------------------------- |
+| Every night 03:00 | `backup --db` | A database dump. The site keeps running. |
+| Fridays 04:00 | `backup --media` | The image store's volume. Images don't load meanwhile. |
+| Every hour | `check` | Looks for trouble nobody is watching for (Being told). |
 
-After fixing the proxy, open any page through it and look for the `visible again` line. Another error or warning
-means it isn't fixed. Errors are limited to one per 5 minutes: if addresses go missing again within 5 minutes of the
-last error, the new error is logged once those 5 minutes have passed. The Docker healthcheck calls `/healthz` directly
-with no header, which is fine: `/healthz` isn't limited.
+The media backup stops the image store while it copies, which is why it's weekly; the store holds the only copy of
+uploaded images, so the job matters as much as the nightly one.
 
-## Health Check
+Cron has no terminal, so the tool asks nothing: it writes to `BACKUP_DIR` and keeps the newest `BACKUP_KEEP`. The
+jobs' output goes to `cron.log` in the backups' folder. The Schedule status line is yellow while nothing is
+scheduled, and Last backup turns yellow when the newest backup is older than two days (a week without a schedule).
+The usual reason for a job that fails is a user who can't reach Docker: add the user to the `docker` group, or run
+`schedule on` as root.
 
-`GET /healthz` (`src/routes/healthz/`) answers 200 when the app can query Postgres and 503 otherwise, with a 2-second
-limit. Docker polls it every 10 seconds; point an uptime monitor at it too. Storage isn't part of the check: an S3
-problem only breaks uploads, and a restart wouldn't fix it. Healthy probes are left out of the app's request log.
-
-## Logs
-
-```bash
-docker compose -f compose.prod.yaml logs -f app      # one JSON object per line (docs/backend/logging.md)
-```
-
-Errors and slow requests are easier to read in the error viewer (Error Tracking above); the logs keep every request. Docker
-rotates every service's log at 10 MB, keeping five files.
-
-## Backups
-
-Choose Back up, then database + media, database only, or media only, and the folder (remembered in `.env` as
-`BACKUP_DIR`; `./backups` by default, gitignored). Each run keeps the newest `BACKUP_KEEP` (14) of each kind.
-
-- **Database:** `db-<time>.dump`, from `pg_dump -Fc`. The site keeps running.
-- **Media:** `media-<time>.tar.gz`, the `seaweedfs` volume. The image store is stopped while it's copied, so the copy
-  is consistent; images don't load for that time.
-
-**Nightly backups.** Each run of the tool makes one backup and exits. To get one every night, schedule it with cron,
-which every Linux server already has. Once, on the server:
-
-1. Run the backup by hand, the way cron will, to check that it works: `/path/to/app/deploy/deploy.sh backup --db`.
-2. Open your crontab with `crontab -e` and add these lines (Set up prints them with your paths filled in):
-
-   ```bash
-   0 3 * * * /path/to/app/deploy/deploy.sh backup --db >>/path/to/app/backups/cron.log 2>&1
-   0 4 * * 5 /path/to/app/deploy/deploy.sh backup --media >>/path/to/app/backups/cron.log 2>&1
-   ```
-
-3. Save and close. Cron picks up the change by itself.
-
-`0 3 * * *` is every day at 03:00 and `0 4 * * 5` is Fridays at 04:00, in the server's time zone (`date` shows it).
-Cron has no terminal, so the tool asks nothing: it writes to `BACKUP_DIR` and keeps the newest `BACKUP_KEEP`. `--db`
-keeps the site running. `--media` stops the image store while it's copied, so images don't load for that time, which
-is why it runs weekly; the bucket holds the only copy of uploaded images, so don't leave it out. The output goes to
-`cron.log`. If the nightly backups
-stop, the Last backup status line turns yellow after 7 days, and `cron.log` shows why. The usual reason is a user who
-can't reach Docker: add the user to the `docker` group, or put the line in root's crontab (`sudo crontab -e`).
+**Being told.** With a chat set in `.env` (`ERROR_VIEWER_NOTIFY_URL`, Error Tracking above), the tool sends it a
+message when a scheduled job fails, and when the hourly check finds the app down, no recent backup, a disk 90% full
+or your own certificate within 30 days of running out. The check speaks when what it finds changes, not every hour,
+and sends an all-clear when it's over. Test the chat with `deploy/deploy.sh check --test`. Without a chat, the same
+shows only in `cron.log` and the status lines. The check runs on the server, so it can't report a server that's off:
+that needs a monitor outside it.
 
 The backups stay on the server: copy them off it too (another machine, or object storage), or losing the server loses
 them with it.
@@ -410,6 +376,7 @@ docker compose -f compose.prod.yaml start app
   [future-hardening-and-features.md](./future-hardening-and-features.md).
 - Set the site's name and description (the `site_name` and `site_description` messages in every locale file) and its
   link-preview image (`siteImage()` in `src/lib/site.ts`), and check `/sitemap.xml` lists every public page ([seo.md](./frontend/seo.md)).
-- Schedule the nightly backup and a copy off the server (Backups above).
+- Turn the schedule on (`deploy/deploy.sh schedule on`), set a chat for its alerts and test it
+  (`deploy/deploy.sh check --test`), and keep a copy of the backups off the server (Backups above).
 - Go through [future-hardening-and-features.md](./future-hardening-and-features.md) (shared rate limits behind IPv6
   or a CDN, the CSP) and fix each item or note why it doesn't apply.
