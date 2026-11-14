@@ -58,8 +58,29 @@ that's left.
 Once `.env` exists, Set up is locked. If the first build fails, fix the cause and choose Settings → Apply
 (`deploy/deploy.sh apply`).
 
-The binary (`deploy/bin/linux-amd64/deploy`) can also run on its own, downloaded before the repository: then Set up
-clones the repository first and continues with the clone's own tool.
+**Without cloning first, and private repositories.** The binary can run on its own, before the repository is on the
+server. Copy it there from your machine and run it:
+
+```bash
+scp deploy/bin/linux-amd64/deploy <server>:deploy
+ssh -t <server> ./deploy     # choose Set up
+```
+
+Set up then clones the repository first and continues with the clone's own tool; the copied binary can be deleted
+afterwards. It offers the project's own repository, the URL in `tools/deploy/repository.txt`, which is built into the
+binary. When the server can't read the repository, because it's private, Set up gives the server a deploy key:
+
+1. It makes an SSH key for the project in `~/.ssh/<repository>_deploy_ed25519` and prints the public half.
+2. You add that line to the repository as a deploy key without write access (on GitHub: Settings → Deploy keys; the
+   tool prints the page's address).
+3. It checks that git can read the repository with the key, then clones over SSH and records the key in the clone's
+   git config (`core.sshCommand`), so Update and the status line keep using it.
+
+A deploy key reads one repository, can't push and belongs to no account, so a server that leaks it gives away less
+than one holding an access token. It has no passphrase, because Update runs git with nobody there to type one: it's
+protected by the server's file permissions only. The first connection records the git host's key in `known_hosts`
+without asking; compare it with the host's published fingerprints if the network between them isn't trusted. To end
+the server's access, delete the key on the repository.
 
 **By hand.** Copy `.env.production.example` to `.env`, fill in the domains, `SENTRY_DSN` and every secret
 (`openssl rand -hex 32`), then:

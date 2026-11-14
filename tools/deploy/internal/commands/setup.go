@@ -145,10 +145,10 @@ func (t *Tool) Setup(args []string) error {
 }
 
 // cloneAndContinue clones the project, for the tool run on its own outside a checkout, then hands over to the clone's
-// own tool.
+// own tool. A repository this server can't read (a private one) gets a deploy key first.
 func (t *Tool) cloneAndContinue() error {
 	ui.Info("There's no project here yet, so it's cloned first.")
-	url, err := ui.Ask("Git URL of the repository", "", "")
+	url, err := ui.Ask("Git URL of the repository", t.Repository, "")
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,17 @@ func (t *Tool) cloneAndContinue() error {
 	if _, err := os.Stat(target); err == nil {
 		return ui.Fail("%s already exists. Run %s/deploy/deploy.sh, or pick another folder.", target, target)
 	}
-	if err := gitrepo.Clone(url, target); err != nil {
+
+	/*------ Access ------*/
+	sshCommand := ""
+	if ok, reason := gitrepo.CanRead(url, ""); !ok {
+		if url, sshCommand, err = t.deployKeyAccess(url, reason); err != nil {
+			return err
+		}
+	}
+
+	/*------ Clone ------*/
+	if err := gitrepo.Clone(url, target, sshCommand); err != nil {
 		return err
 	}
 	if _, err := os.Stat(filepath.Join(target, "deploy", "deploy.sh")); err != nil {

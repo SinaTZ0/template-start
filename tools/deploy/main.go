@@ -9,9 +9,11 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"deploy/internal/commands"
 	"deploy/internal/interrupt"
@@ -22,10 +24,16 @@ import (
 	"deploy/internal/ui"
 )
 
+// The project's repository, which Set up clones when the binary runs on a server that has no checkout yet. A file in
+// the source, not a build flag, so the pre-commit hook asks for a rebuild when a new project changes it.
+//
+//go:embed repository.txt
+var repository string
+
 func main() {
 	interrupt.Listen()
 	p := project.Find()
-	t := commands.New(p)
+	t := commands.New(p, strings.TrimSpace(repository))
 
 	command, args := "menu", []string(nil)
 	if len(os.Args) > 1 {

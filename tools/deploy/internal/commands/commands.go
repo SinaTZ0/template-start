@@ -23,14 +23,17 @@ type Tool struct {
 	P   *project.Project
 	S   *stack.Stack
 	Env *envfile.Settings
+	// Repository is the project's git URL as built into the binary (tools/deploy/repository.txt), empty when unset.
+	Repository string
 }
 
-// New returns the commands for a checkout.
-func New(p *project.Project) *Tool {
+// New returns the commands for a checkout. repository is the git URL Set up clones outside one.
+func New(p *project.Project, repository string) *Tool {
 	s := stack.New(p.Root)
 	return &Tool{
-		P: p,
-		S: s,
+		P:          p,
+		S:          s,
+		Repository: repository,
 		Env: &envfile.Settings{
 			Env: p.EnvFile(), Example: p.ExampleFile(), Applied: p.AppliedFile(), Dir: p.Root,
 			PgdataExists: s.PgdataExists,

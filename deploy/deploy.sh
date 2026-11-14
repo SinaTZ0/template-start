@@ -18,6 +18,8 @@ if [[ ! -x $bin ]]; then
   else
     echo "✗ The deploy tool comes with the repository. Clone it, then run it from there:" >&2
     echo "    git clone <repository> app && app/deploy/deploy.sh" >&2
+    echo "  For a private repository, copy the binary alone (deploy/bin/linux-<arch>/deploy) and run it: Set up gives" >&2
+    echo "  the server a deploy key and clones." >&2
   fi
   exit 1
 fi

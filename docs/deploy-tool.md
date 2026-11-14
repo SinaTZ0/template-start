@@ -103,6 +103,9 @@ pnpm deploy:build                # amd64; --arch arm64 for an ARM server, --arch
 git add tools/deploy deploy/bin
 ```
 
+`tools/deploy/repository.txt` holds the project's git URL, which the binary offers when Set up runs on a server
+with no checkout yet (deployment.md → First Deploy). It's part of the source, so changing it needs a rebuild too.
+
 The build runs `go vet` and the tool's tests first, and writes `SOURCE_HASH` next to each binary. A pre-commit hook
 fails a commit that changes `tools/deploy/` without the matching binary, for every architecture that's committed. Every
 rebuild adds a full copy of the binary (about 9 MB) to git history, so rebuild only when the source changes. On a
