@@ -24,6 +24,9 @@ func TestValidate(t *testing.T) {
 		// The Dockerfile adds the `/` itself; with a second one, the URLs it builds would have `//`.
 		{"NPM_REGISTRY", "https://registry.npmmirror.com/", Ask},
 		{"NPM_REGISTRY", "", ""},
+		// The app puts its own name in front of the address.
+		{"MAIL_FROM", "My App <app@mail.test>", Ask},
+		{"MAIL_FROM", "app@mail.test", ""},
 		{"SOMETHING_ELSE", "1", Warn},
 	}
 	for _, tc := range cases {

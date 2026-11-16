@@ -1,28 +1,23 @@
 import { expect, test, type Locator } from "@playwright/test";
 import sharp from "sharp";
 
-import { E2E_EMAIL_DOMAIN } from "./accounts";
+import { newTestEmail, signUpAndConfirm } from "./accounts";
 
 /*===== Notes =====*/
-// The one flow that crosses everything the template wires together: the captcha and sign-up, the session, a guarded
-// page, an image upload to the store, a form that creates and edits, a delete, and sign-out. In Persian, the language
-// every project keeps. Needs the image store as well as the database (`pnpm services`).
+// The one flow that crosses everything the template wires together: the captcha and sign-up, the confirmation email,
+// the session, a guarded page, an image upload to the store, a form that creates and edits, a delete, and sign-out. In
+// Persian, the language every project keeps. Needs the image store and Mailpit as well as the database
+// (`pnpm services`).
 test("a new account creates a note with an image, edits and deletes it, then signs out", async ({ page }) => {
   const title = `یادداشت ${Date.now()}`;
   const editedTitle = `${title} ویرایش‌شده`;
   const notes = page.getByRole("region", { name: "یادداشت‌های شما" });
 
   /*------ Sign Up ------*/
-  await page.goto("/auth");
-  await page.getByRole("tab", { name: "ثبت‌نام" }).click();
-  // Both tabs have an email and a password field; only the open one is a `tabpanel`.
-  const signUp = page.getByRole("tabpanel");
-  await signUp.getByLabel("نام").fill("آزمون");
-  await signUp.getByLabel("ایمیل").fill(`e2e-${Date.now()}-${test.info().workerIndex}@${E2E_EMAIL_DOMAIN}`);
-  await signUp.getByLabel("رمز عبور").fill("a-long-test-password");
-  // The real captcha runs: the browser solves the proof of work before the account is created.
-  await signUp.getByRole("button", { name: "ساخت حساب" }).click();
-  await expect(page).toHaveURL(/\/notes$/, { timeout: 30_000 });
+  const email = newTestEmail(test.info().workerIndex);
+  await signUpAndConfirm({ page, email, password: "a-long-test-password" });
+  await page.getByRole("link", { name: "ادامه" }).click();
+  await expect(page).toHaveURL(/\/notes$/);
 
   /*------ Create ------*/
   await page.getByLabel("عنوان").fill(title);

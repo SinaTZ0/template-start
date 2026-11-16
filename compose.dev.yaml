@@ -1,4 +1,5 @@
-# Development services only: Postgres and SeaweedFS (S3-compatible image storage, docs/backend/media.md). The app runs
+# Development services only: Postgres, SeaweedFS (S3-compatible image storage, docs/backend/media.md) and Mailpit (the
+# mailbox every email goes to, docs/backend/mail.md). The app runs
 # on the host with `pnpm dev`, and the error viewer (tools/error-viewer, docs/backend/logging.md) with `pnpm errors`.
 # Start with `pnpm services`, which also creates the media bucket (`deploy/init-storage.mjs`); the values match
 # `.env.example`.
@@ -36,6 +37,20 @@ services:
       - "127.0.0.1:8333:8333"
     volumes:
       - seaweedfs:/data
+
+  # Accepts every email the app sends, without login, and delivers none: read them at http://localhost:8025. The browser
+  # tests read sign-up and reset links from its API (`e2e/mailbox.ts`). Emails are kept in memory, so a restart clears
+  # them.
+  mailpit:
+    image: axllent/mailpit:v1.33
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
 volumes:
   pgdata:

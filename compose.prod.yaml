@@ -83,6 +83,12 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
       MEDIA_PUBLIC_URL: /media
+      # The mailbox the app sends its email from (docs/backend/mail.md).
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST in .env}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM in .env}
       # Seconds the server gives open requests to finish after SIGTERM, before it closes them (srvx; 5 by default,
       # which cuts a slow upload off on every deploy). Kept under `stop_grace_period`, after which Docker kills it.
       SERVER_SHUTDOWN_TIMEOUT: 25

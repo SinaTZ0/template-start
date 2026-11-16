@@ -53,6 +53,13 @@
       }
     },
     {
+      "files": ["src/mail/templates/**"],
+      "rules": {
+        "shadcn/no-inline-styles": "off",
+        "shadcn/no-raw-colors": "off"
+      }
+    },
+    {
       "files": ["src/lib/utils.ts"],
       "rules": {
         "no-restricted-imports": "off"

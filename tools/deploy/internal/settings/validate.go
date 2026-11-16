@@ -43,6 +43,7 @@ var (
 	bucketName  = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
 	httpURL     = regexp.MustCompile(`^https?://[^/]+`)
 	dsnShape    = regexp.MustCompile(`^https?://[^/@]+@[^/]+/[0-9]+$`)
+	mailAddress = regexp.MustCompile(`^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$`)
 	// Compose expands `$` and treats quotes, `#` and spaces specially, so a stack value with them isn't what it looks
 	// like.
 	unsafeChars = regexp.MustCompile("[[:space:]$\"'`#\\\\]")
@@ -132,8 +133,11 @@ func (c Checker) Validate(key, value string, inExample bool) []Problem {
 		}
 
 	case kind == "required":
-		if value == "" {
+		switch {
+		case value == "":
 			return p(Ask, Missing, "not set")
+		case key == "MAIL_FROM" && !mailAddress.MatchString(value):
+			return p(Ask, Invalid, "isn't an email address like myapp@gmail.com (just the address: the app adds its name)")
 		}
 
 	case kind == "url":

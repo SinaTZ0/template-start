@@ -489,7 +489,8 @@ whole way back.
 
 ## Before Going Live
 
-- Turn on email verification and password reset once the project can send email (`src/lib/auth.server.ts`).
+- Set the mailbox the app sends from (`SMTP_*` and `MAIL_FROM` in `.env`; the deploy tool asks for them) and sign up
+  once on the live site to see the confirmation email arrive, in the inbox rather than spam ([mail.md](./backend/mail.md)).
 - Add a Content-Security-Policy in the app (the inline theme script in `__root.tsx` needs a nonce or hash). Its
   `connect-src` must allow `https://<ERRORS_DOMAIN>`, or browser errors can't be reported. Caddy sets the other
   security headers. The directives it needs are in

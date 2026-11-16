@@ -159,6 +159,11 @@ return { id: result.id };
 
 - Better-Auth (`src/lib/auth.server.ts`) owns sign-up, sign-in and sessions at `/api/auth/*`. The sign-up captcha
   (Altcha) is a `before` hook there; the browser gets its challenge from `captcha.createChallenge`.
+- An account is used once its address is confirmed: sign-up sends a link instead of signing in, and a sign-in before
+  confirming sends a fresh one. Sign-up answers an address that already has an account like a new one (the owner gets
+  an email instead), and a reset request answers the same for every address, so neither tells who has an account. A
+  password reset signs the account out everywhere. The emails go through `mail.send` ([mail.md](./mail.md)); the pages
+  their links land on are `/verify-email` and `/reset-password`, and `/forgot-password` asks for a reset.
 - A public procedure that writes (a contact form, a comment, a signup for news) takes a solved challenge too, so
   scripts can't fill its tables. Its input has `captcha: z.string()`, its contract declares `captchaErrors`, and the
   procedure applies `captchaMiddleware` right after its own rate limit, so a flood is turned away before any

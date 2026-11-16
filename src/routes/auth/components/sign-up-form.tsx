@@ -10,13 +10,18 @@ import { FormAlert } from "#/components/shared/form-alert/form-alert";
 import { authClient } from "#/lib/auth-client";
 import { ALTCHA_HEADER } from "#/lib/auth-constants";
 import { m } from "#/paraglide/messages";
-import { describeAuthError } from "#/routes/auth/auth-errors";
+import { describeAuthError } from "#/lib/auth-errors";
 import { useCaptcha } from "#/hooks/use-captcha";
-import { PASSWORD_MIN_LENGTH, signUpSchema, type SignUpValues } from "#/routes/auth/schema";
+import { PASSWORD_MIN_LENGTH } from "#/lib/auth-form-fields";
+import { signUpSchema, type SignUpValues } from "#/routes/auth/schema";
 
 /*===== Sign Up Form =====*/
-/** Creates an account and signs in. A proof-of-work captcha is solved in the background while submitting. */
-export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
+/**
+ * Creates an account, which sends its confirmation link: `onSuccess` gets the address it went to. An address that
+ * already has an account gets the same answer (and an email saying so), so the form can't tell anyone who has one. A
+ * proof-of-work captcha is solved in the background while submitting.
+ */
+export function SignUpForm({ onSuccess }: { onSuccess: (email: string) => void }) {
   const [formError, setFormError] = useState<string>();
   const { widgetRef, solve } = useCaptcha();
   const form = useForm<SignUpValues>({
@@ -35,7 +40,7 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
     /*------ Account ------*/
     const { error } = await authClient.signUp.email(values, { headers: { [ALTCHA_HEADER]: payload } });
     if (error) return setFormError(describeAuthError(error));
-    onSuccess();
+    onSuccess(values.email);
   });
 
   return (

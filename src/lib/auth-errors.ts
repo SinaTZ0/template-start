@@ -14,7 +14,7 @@ type AuthErrorLike = { code?: string | undefined; status: number };
 /**
  * Translates a Better-Auth client error into a message, in the page's locale, that says what to do next. Better-Auth
  * answers with codes, not text the page could show. Unknown errors become a general message, so the person always sees
- * something actionable.
+ * something actionable. Used by every auth form (`/auth`, `/forgot-password`, `/reset-password`).
  */
 export function describeAuthError(error: AuthErrorLike): string {
   switch (error.code) {
@@ -25,6 +25,9 @@ export function describeAuthError(error: AuthErrorLike): string {
       return m.auth_error_user_exists();
     case "PASSWORD_TOO_SHORT":
       return m.auth_error_password_too_short();
+    // A sign-in before the address is confirmed. The server has just sent a new link (`sendOnSignIn`).
+    case "EMAIL_NOT_VERIFIED":
+      return m.auth_error_email_not_verified();
     case CAPTCHA_FAILED_CODE:
       return m.auth_error_captcha_failed();
     case ACCOUNT_BLOCKED_CODE:

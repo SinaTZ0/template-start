@@ -9,6 +9,7 @@ step links to the doc that holds its rules. Read that doc when you reach the ste
 | [backend/logging.md](./backend/logging.md)           | Writing logs, error reporting (error viewer), request timing, slow-request reports   |
 | [backend/media.md](./backend/media.md)               | Image uploads, processing, storage and rendering                                     |
 | [backend/jobs.md](./backend/jobs.md)                 | Background jobs: work after a request, retries, schedules                            |
+| [backend/mail.md](./backend/mail.md)                 | Sending email through the app's mailbox (SMTP), templates, the `mail.send` job       |
 | [deployment.md](./deployment.md)                     | Production stack, deploying, migrations in production, health check, backups         |
 | [deploy-tool.md](./deploy-tool.md)                   | The manual of `deploy/deploy.sh`: menu, `.env` check, deploy steps, database browser |
 
@@ -43,7 +44,8 @@ The `note` feature (`src/orpc/note/`) is the worked example. Copy its shape.
    (`src/lib/schema-issues.ts`) turns a failed parse into field messages ([architecture.md](./backend/architecture.md)
    → Services return outcomes, Explicit dependencies). Image uploads follow [media.md](./backend/media.md). Work
    that is slow, should be retried or runs on a schedule (mail, calls to other services, clean-ups) is a job the
-   service queues in its transaction, declared in the feature's `jobs.server.ts` ([jobs.md](./backend/jobs.md)).
+   service queues in its transaction, declared in the feature's `jobs.server.ts` ([jobs.md](./backend/jobs.md)). An
+   email is a template and a `queueMail` call ([mail.md](./backend/mail.md) → Adding an Email).
 7. **Mapper**: add `mapper.ts` only if the stored and public shapes differ.
 8. **Procedure**: in `procedure.ts`, start from `base.<feature>.<procedure>` (`implementer.server.ts`), attach the
    middleware it needs (`requireUserMiddleware` or `requireRoleMiddleware`, then `provideDbMiddleware`), call the

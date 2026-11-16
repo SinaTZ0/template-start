@@ -77,6 +77,13 @@ var Registry = []Setting{
 	{"S3_SECRET_KEY", "secret:32", Stack},
 	{"S3_ADMIN_ACCESS_KEY", "secret:16", Stack},
 	{"S3_ADMIN_SECRET_KEY", "secret:32", Stack},
+	// The mailbox the app sends from. No login is a mail server that accepts the app's address (rare), so only the
+	// host and the sender are asked for.
+	{"SMTP_HOST", "required", Stack},
+	{"SMTP_PORT", "int", Stack},
+	{"SMTP_USER", "optional", Stack},
+	{"SMTP_PASSWORD", "optional", Stack},
+	{"MAIL_FROM", "required", Stack},
 	// Overrides `compose.prod.yaml` reads but the example leaves out; Compose has a default for each.
 	{"LOG_SLOW_REQUEST_MS", "int", Stack},
 	{"LOG_SLOW_QUERY_MS", "int", Stack},

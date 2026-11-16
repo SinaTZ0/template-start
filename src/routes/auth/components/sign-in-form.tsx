@@ -1,15 +1,17 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "#/components/primitive/button/button";
+import { buttonVariants } from "#/components/primitive/button/button.styles";
 import { Field, FieldError, FieldGroup, FieldLabel } from "#/components/primitive/field/field";
 import { Input } from "#/components/primitive/input/input";
 import { Spinner } from "#/components/primitive/spinner/spinner";
 import { FormAlert } from "#/components/shared/form-alert/form-alert";
 import { authClient } from "#/lib/auth-client";
 import { m } from "#/paraglide/messages";
-import { describeAuthError } from "#/routes/auth/auth-errors";
+import { describeAuthError } from "#/lib/auth-errors";
 import { signInSchema, type SignInValues } from "#/routes/auth/schema";
 
 /*===== Sign In Form =====*/
@@ -63,6 +65,9 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
           {isSubmitting && <Spinner data-icon="inline-start" />}
           {m.auth_sign_in_submit()}
         </Button>
+        <Link to="/forgot-password" className={buttonVariants({ variant: "link", size: "sm" })}>
+          {m.auth_forgot_password_link()}
+        </Link>
       </FieldGroup>
     </form>
   );

@@ -36,6 +36,9 @@ export const routes = rootRoute("__root.tsx", [
   layout("site_layout/site-layout.tsx", [
     index("home/home.tsx"),
     route("/auth", "auth/auth.tsx"),
+    route("/forgot-password", "forgot_password/forgot-password.tsx"),
+    route("/reset-password", "reset_password/reset-password.tsx"),
+    route("/verify-email", "verify_email/verify-email.tsx"),
     layout("notes_layout/notes-layout.tsx", [
       route("/notes", "notes/notes.tsx"),
       route("/notes/$noteId", "notes_noteId/notes-note-id.tsx"),

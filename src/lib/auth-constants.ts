@@ -16,3 +16,7 @@ export const ACCOUNT_BLOCKED_CODE = "ACCOUNT_BLOCKED";
 /** Error codes returned by the sign-up and update-user hook for a display name that is empty or too long. */
 export const NAME_REQUIRED_CODE = "NAME_REQUIRED";
 export const NAME_TOO_LONG_CODE = "NAME_TOO_LONG";
+
+/** How long the links in the emails work, in hours. The auth server sets them; the emails say them. */
+export const VERIFY_EMAIL_LINK_HOURS = 24;
+export const RESET_PASSWORD_LINK_HOURS = 1;

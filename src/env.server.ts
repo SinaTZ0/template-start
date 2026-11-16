@@ -43,6 +43,17 @@ const envSchema = z.object({
   // Where browsers read images: a full URL (dev, straight from SeaweedFS) or a path behind a proxy (`/media`). No
   // trailing slash.
   MEDIA_PUBLIC_URL: z.union([z.url(), z.string().regex(/^\/\S*$/, "Must be a URL or a path starting with /")]),
+  // The mailbox the app sends its email from, over SMTP (Mailpit in development; docs/backend/mail.md). Port 465 is TLS
+  // from the first byte; any other port starts plain and upgrades with STARTTLS, which the transport insists on.
+  SMTP_HOST: z.string().min(1),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  // Both empty for a server without login (Mailpit). A provider's login is the mailbox address and, for Gmail and
+  // Yahoo, an app password, never the account's own password.
+  SMTP_USER: z.string().default(""),
+  SMTP_PASSWORD: z.string().default(""),
+  // The address every email is sent from. Just the address: the sender's name is the app's, in the email's language.
+  // Gmail and most mailboxes only send as their own address (or an alias verified with them).
+  MAIL_FROM: z.email(),
 });
 
 /*===== Validation =====*/

@@ -12,7 +12,8 @@ buys three things:
   once however many app processes run.
 
 The code is `src/lib/jobs.server.ts`. The two jobs of the media feature are the worked examples
-(`src/orpc/media/jobs.server.ts`): `media.discard`, queued by a request, and `media.cleanup`, on a schedule.
+(`src/orpc/media/jobs.server.ts`): `media.discard`, queued by a request, and `media.cleanup`, on a schedule. Every
+email goes through one more, `mail.send` ([mail.md](./mail.md)).
 
 ## Declaring a Job
 

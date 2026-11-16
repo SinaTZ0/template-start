@@ -4,7 +4,8 @@ A starting point for full-stack [TanStack Start](https://tanstack.com/start) app
 English as a second language.
 
 - **Backend:** contract-first [oRPC](https://orpc.dev) v2, Drizzle + Postgres, Better-Auth (email + password, Altcha
-  captcha on sign-up), image uploads processed with sharp into S3-compatible storage, pino logging, and error tracking
+  captcha on sign-up, email confirmation and password reset), email through one regular mailbox over SMTP with React
+  Email templates, image uploads processed with sharp into S3-compatible storage, pino logging, and error tracking
   with a small self-hosted error viewer (`tools/error-viewer`, Go + SQLite).
 - **Frontend:** flat route slices, shadcn components rebuilt as `primitive/`s on Base UI, Tailwind v4 tokens with
   light/dark themes, TanStack Query as the one data cache (filled by route loaders, preloaded on hover), typed search
@@ -21,7 +22,7 @@ Requirements: Node 26, pnpm, Docker (for the dev services), Go 1.26+ (for the er
 ```bash
 pnpm install                  # in a git repository (`git init` first), so the git hooks are installed
 cp .env.example .env          # then set BETTER_AUTH_SECRET and ALTCHA_HMAC_KEY
-pnpm services                 # Postgres on 5432, SeaweedFS (S3) on 8333, media bucket
+pnpm services                 # Postgres on 5432, SeaweedFS (S3) on 8333, media bucket, Mailpit on 8025
 pnpm db:migrate               # create the tables
 pnpm db:seed                  # optional: the admin from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
 pnpm db:seed:notes            # optional: sample notes for that admin
@@ -30,8 +31,9 @@ pnpm errors                   # optional, in a second terminal: error viewer on 
 ```
 
 - **Secrets.** Generate each of the two with `openssl rand -base64 32`.
-- **Signing in.** Sign up at `/auth`, or sign in as the seeded admin with `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`
-  from `.env`.
+- **Signing in.** Sign up at `/auth` and open the confirmation link from the email in Mailpit
+  (http://localhost:8025, where every email the app sends in development lands), or sign in as the seeded admin with
+  `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` from `.env`.
 - **Error viewer.** The app reports to it only when `.env` has `SENTRY_DSN=http://developmentkey@localhost:8000/1`
   (restart `pnpm dev` after setting it). The viewer's password is `admin`.
 - **Git hooks.** `pnpm install` installs them: staged files are linted and formatted before each commit, and commit
@@ -129,7 +131,7 @@ most of what is left behind; the deploy tool and the docs they can't see.
   seed of its own removes the esbuild step and the `COPY` of its output from the Dockerfile.
 - **Messages:** every `notes_*` and `note_error_*` key, `nav_notes` and `home_go_to_notes`, in each file of
   `messages/`.
-- **Tests:** `e2e/notes.spec.ts` walks the note pages after signing up: keep its sign-up and sign-out, and replace
+- **Tests:** `e2e/notes.spec.ts` walks the note pages after signing up (`signUpAndConfirm`): keep its sign-up and sign-out, and replace
   the middle with the project's main flow. `e2e/locale.spec.ts` clicks the Notes link; point it at a guarded page of
   the project.
 - **Docs:** the rule docs name `note` files as their examples. Point them at the project's feature as it replaces
