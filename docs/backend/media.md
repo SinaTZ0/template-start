@@ -9,8 +9,9 @@ upload:  browser ──multipart──▶ TanStack Start (oRPC media.upload) ─
 serve:   browser ──GET <MEDIA_PUBLIC_URL>/…──▶ (production: Caddy) ──▶ bucket (read-only, files only)
 ```
 
-- **Any S3-compatible store.** Development uses SeaweedFS from `compose.dev.yaml`. The code only speaks the S3 API
-  (`@aws-sdk/client-s3`, `src/lib/storage.server.ts`), so the store can change without code changes.
+- **Any S3-compatible store.** Development uses SeaweedFS from `compose.dev.yaml`. The code only speaks the S3 API,
+  through the `Storage` service (`src/server/storage.server.ts`, on `@aws-sdk/client-s3`), so the store can change
+  without code changes. A bucket that fails is a defect: a request reports it, a job retries it.
 - **The app writes.** Uploads go through the server, which checks, converts and resizes the image, then puts every
   variant into the bucket. Users never write to the bucket directly.
 - **Browsers read** straight from the bucket in development, and through a read-only proxy path (`/media`) in
@@ -40,11 +41,13 @@ bytes), shown blurred while the real image loads.
 
 ## Processing Rules
 
-All processing uses [sharp](https://sharp.pixelplumbing.com/) (`processing.server.ts`).
+All processing uses [sharp](https://sharp.pixelplumbing.com/) (`processing.server.ts`). `MediaService.upload` runs it
+as a `media.processImage` span, since resizing and encoding is CPU work no other span covers.
 
 1. **Limits:** at most **10 MB** per file and **40 megapixels**. Larger files are rejected before decoding.
 2. **Check the real type** with sharp, never the file name or `Content-Type`. Accept `jpeg`, `png` and `webp`; reject
-   everything else (HEIC included) with a message in the request's language.
+   everything else (HEIC included). A rejection is an `ImageRejected` error with its reason, which the procedure turns
+   into a message under the file field, in the request's language (`IMAGE_REJECTION_TEXT`).
 3. **Rotate** by the EXIF orientation, then **drop all metadata**: phone photos carry GPS location.
 4. **Convert to sRGB** and **flatten transparency** onto `FLATTEN_BACKGROUND`, except avatars.
 5. **Encode WebP** at quality 80 (`thumb`: 72), `effort: 4`.
@@ -56,43 +59,51 @@ All processing uses [sharp](https://sharp.pixelplumbing.com/) (`processing.serve
 ```
 
 `mediaId` is a fresh UUID per upload, so a URL never changes content and is cached forever
-(`Cache-Control: public, max-age=31536000, immutable`). URLs are built from `MEDIA_PUBLIC_URL`.
+(`Cache-Control: public, max-age=31536000, immutable`). URLs are built from `MEDIA_PUBLIC_URL`
+(`AppConfig.mediaPublicUrl`) by `toPublicMedia` (`src/orpc/media/mapper.ts`).
 
 ## Database and Upload Flow
 
 One `media` table records every upload (`src/db/schema.ts`). Entities point to it with a nullable foreign key
 (`on delete set null`), e.g. `note.imageMediaId`.
 
-1. The form uploads the file as soon as it's picked, through `media.upload` (`kind` + `File`). Only signed-in users,
-   and only the kinds their role may upload. A user may have 30 uploads waiting to be attached
-   (`MAX_UNATTACHED_MEDIA_PER_USER`); past that, uploads are refused until forms are saved or the cleanup has run.
-2. The server writes every variant, then inserts the row, and returns its ID, URLs and placeholder. If a write fails
-   halfway, the variants already written are deleted, so a row only exists when all its variants do.
-3. Saving the form sends the media ID. The entity's service calls `attachMedia` in the transaction that writes the
-   entity. It checks the kind and the uploader and claims the upload by setting `attachedAt`; if the entity's write
-   fails, the claim rolls back with it. A media belongs to one entity: one that is already attached is refused, so
-   two entities never share an image (deleting one would take the other's). An entity whose image didn't change
-   doesn't attach it again. An upload can only be attached within 24 hours (`MEDIA_ATTACH_WINDOW_MS`); after that the
-   form shows the image as unusable and the user picks it again.
-4. When an entity is deleted or its image replaced, the service calls `releaseMedia`
-   (`src/orpc/media/jobs.server.ts`) in the same transaction. It clears `attachedAt` and queues the `media.discard`
-   job in that transaction, so the request doesn't wait on the bucket. The job deletes the files and the row (bucket
-   first) a moment after the commit, and is retried when the bucket fails ([jobs.md](./jobs.md)). It leaves a media
-   alone that was attached again in the meantime. `note` shows both cases: `removeNote` for a deleted entity,
-   `editNote` for a replaced image, which attaches the new one before it releases the old
+1. The form uploads the file as soon as it's picked, through `media.upload` (`kind` + `File`), which calls
+   `MediaService.upload`. Only signed-in users, at most 20 uploads a minute per address (`UPLOAD_RATE_LIMIT`), and
+   only the kinds their role may upload (`MediaKindNotAllowed`, answered `FORBIDDEN`). A user may have 30 uploads
+   waiting to be attached (`MAX_UNATTACHED_MEDIA_PER_USER`); past that, uploads are refused (`TooManyWaitingUploads`)
+   until forms are saved or the cleanup has run.
+2. The server writes every variant, then inserts the row, and returns its ID, URLs and placeholder. If a write or the
+   insert fails, every variant key is deleted, so a row only exists when all its variants do. A failure of that
+   clean-up is logged as an error and doesn't hide the original one.
+3. Saving the form sends the media ID. The entity's service calls `MediaService.attach` in the transaction that
+   writes the entity. It checks the kind and the uploader and claims the upload by setting `attachedAt`; if the
+   entity's write fails, the claim rolls back with it. A media belongs to one entity: one that is already attached is
+   refused, so two entities never share an image (deleting one would take the other's). An entity whose image didn't
+   change doesn't attach it again. An upload can only be attached within 24 hours (`MEDIA_ATTACH_WINDOW_MS`); after
+   that the form shows the image as unusable and the user picks it again. Every refusal is one error,
+   `MediaUnusable`, so a form can't probe which reason it was.
+4. When an entity is deleted or its image replaced, the service calls `MediaService.release` in the same transaction.
+   It clears `attachedAt` and queues the `media.discard` job (`DiscardMedia` in `src/orpc/media/jobs.server.ts`) in
+   that transaction, so the request doesn't wait on the bucket. The job deletes the files and the row (bucket first)
+   a moment after the commit, and is retried when the bucket fails ([jobs.md](./jobs.md)). It leaves a media alone
+   that was attached again in the meantime. `note` shows both cases: `NoteService.remove` for a deleted entity,
+   `NoteService.edit` for a replaced image, which attaches the new one before it releases the old
    (`src/orpc/note/service.ts`).
-5. **Cleanup:** uploads whose form was never saved are orphans. The `media.cleanup` job
-   (`src/orpc/media/jobs.server.ts`) runs `deleteOrphanedMedia` every hour. It deletes media still unattached 25
-   hours after upload (`ORPHANED_MEDIA_AGE_MS`), in batches of 200 until none are left, through `deleteMedia`. The
-   extra hour past the attach window means a save and the cleanup can never race. The `attached_at, created_at`
-   index serves the scan. It also catches a released media whose `media.discard` job ran out of tries.
+5. **Cleanup:** uploads whose form was never saved are orphans. The `media.cleanup` job (`CleanupMedia`) runs
+   `deleteOrphanedMedia` every hour. It deletes media still unattached 25 hours after upload
+   (`ORPHANED_MEDIA_AGE_MS`), in batches of 200 until none are left (at most 50 batches a run; the next run goes on),
+   through `deleteMedia`. A media that fails to delete is logged as an error and skipped, and the next run tries it
+   again. The extra hour past the attach window means a save and the cleanup can never race. The
+   `attached_at, created_at` index serves the scan. It also catches a released media whose `media.discard` job ran
+   out of tries.
 
 ### Deleting a user
 
 `media.uploaded_by` is `on delete restrict`, so the database refuses to delete a user who still has media rows. That
 is deliberate: a cascade would remove the rows and leave their files in the bucket with nothing pointing at them. Code
 that deletes an account first deletes that user's entities through their services (which release and discard their
-media) and then any media still left with `deleteMedia`, and only then the user.
+media) and then any media still left with `deleteMedia` (`src/orpc/media/jobs.server.ts`, which deletes the files
+before the row), and only then the user.
 
 ## Rendering
 
@@ -121,5 +132,8 @@ through Caddy (`deploy/Caddyfile`, docs/deployment.md):
 | `S3_BUCKET_NAME`   | `app-media`                       | the project's bucket      |
 | `S3_ACCESS_KEY`    | any (S3 auth is off locally)      | the app's identity key    |
 | `S3_SECRET_KEY`    | any                               | the app's identity secret |
-| `S3_REGION`        | `us-east-1`                       | `us-east-1`               |
+| `S3_REGION`        | `us-east-1`                       | `us-east-1` (the default) |
 | `MEDIA_PUBLIC_URL` | `http://localhost:8333/app-media` | `/media`                  |
+
+They are read into `AppConfig.s3` and `AppConfig.mediaPublicUrl` (`src/server/config.server.ts`); the keys are
+`Redacted`. A missing one, `S3_REGION` aside, stops the server at startup.

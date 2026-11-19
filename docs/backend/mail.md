@@ -4,21 +4,21 @@ The app sends its own email through one ordinary mailbox over SMTP: a Gmail or Y
 comes with the domain's hosting. No email service account. Nodemailer does the SMTP, React Email builds the HTML, the
 text comes from the Paraglide messages in the recipient's language, and every email goes out through one queued job.
 
-The code is `src/mail/`:
+The code:
 
-| File                  | What it is                                                                                      |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| `transport.server.ts` | The SMTP connection from `.env`, `deliverMail`, and the errors it throws                        |
-| `templates/`          | One React Email component per email, the shared frame (`layout.tsx`) and its colours            |
-| `render.server.tsx`   | The list of templates (`TEMPLATES`) and `renderMail`: subject, sender name, HTML and plain text |
-| `jobs.server.ts`      | `mail.send`, the job that renders and sends one email, and `queueMail`                          |
+| File                          | What it is                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------------- |
+| `src/server/mailer.server.ts` | `Mailer`: the SMTP connection from `AppConfig`, and `MailDeliveryError`           |
+| `src/mail/templates/`         | One React Email component per email, the shared frame (`layout.tsx`), its colours |
+| `src/mail/render.server.tsx`  | `TEMPLATES` and `renderMail`: subject, sender name, HTML and plain text           |
+| `src/mail/jobs.server.ts`     | `SendMail`, the `mail.send` job that renders and sends one email                  |
 
-The emails today are Better-Auth's (`src/lib/auth.server.ts`): the sign-up confirmation (`verify-email`), the
+The emails today are Better-Auth's (`src/server/better-auth.server.ts`): the sign-up confirmation (`verify-email`), the
 password reset (`reset-password`), and the note to an address that signs up again (`account-exists`).
 
 ## The Mailbox
 
-Set in `.env` (`src/env.server.ts`):
+Set in `.env`, read into `AppConfig.smtp` (`src/server/config.server.ts`):
 
 | Variable        | Development            | Production (Gmail)              |
 | --------------- | ---------------------- | ------------------------------- |
@@ -28,8 +28,9 @@ Set in `.env` (`src/env.server.ts`):
 | `SMTP_PASSWORD` | empty                  | an app password, without spaces |
 | `MAIL_FROM`     | `no-reply@example.com` | `myapp@gmail.com`               |
 
-- **Port 465** is TLS from the first byte; **any other port** (587) starts plain and upgrades with STARTTLS. With a
-  login set, the transport refuses a server that doesn't offer STARTTLS, so the password never travels in the clear.
+- **Port 465** is TLS from the first byte; **any other port** (587, the default) starts plain and upgrades with
+  STARTTLS. With a login set, the transport refuses a server that doesn't offer STARTTLS, so the password never travels
+  in the clear. The password is `Redacted`, so it never shows in a log line.
 - **`MAIL_FROM` is just the address.** The sender's name is the app's (`site_name`) in the email's language. Most
   mailboxes only send as their own address, or an alias verified with them: anything else is refused or lands in spam.
 - **Development** sends to Mailpit (`compose.dev.yaml`, started by `pnpm services`). It accepts every email without a
@@ -63,45 +64,57 @@ A regular mailbox is made for a person, not an app:
 
 ## Sending an Email
 
-Every email goes through `mail.send` (`src/mail/jobs.server.ts`), never straight from a request:
+Every email goes through `mail.send` (`SendMail` in `src/mail/jobs.server.ts`), never straight from a request:
 
 - **The request doesn't wait on the mailbox.** Queueing is one insert; SMTP takes a second or more.
-- **A mailbox that's down is tried again.** Retries wait about 2 s, 4 s, … 256 s (`retryLimit: 8`), so an outage of up
-  to eight minutes still delivers the email while its link works.
+- **A mailbox that's down is tried again.** Retries wait 2 s, 4 s, … 256 s (`maxAttempts: 9`), so an outage of up to
+  eight minutes still delivers the email while its link works. A silent server is given up on after 15 seconds to
+  connect or greet and 30 seconds of silence, so a run never holds the one worker for long.
 - **A refusal for good isn't retried.** A 5xx reply (an unknown address, a rejected login, a daily limit reached) is
-  logged as an error once, with the server's reply, and the job ends. A 4xx reply, a timeout or a dropped connection
-  throws, and the job is retried.
-- **No addresses in the logs.** The log line for a sent email has the template and the message ID. A failure is a
-  `MailDeliveryError`, the server's reply with every address in it masked.
+  a `MailDeliveryError` with `permanent: true`: the job logs it as an error once, which reports it to the error viewer
+  with the server's reply, and ends. A 4xx reply, a timeout or a dropped connection fails the run, and it is retried.
+- **No addresses in the logs.** The line for a sent email (`email sent`) has the template and the message ID. A
+  failure is a `MailDeliveryError`, the server's reply with every address in it masked.
 - **Not exactly once.** A run cut off after the server accepted the email, but before the queue heard back, runs
   again and the email arrives twice. Every email must be safe to receive twice.
-- **The payload holds the link,** token included, so the job row is as secret as the link. Finished jobs are deleted
-  after three days (`KEEP_FINISHED_SECONDS` in `src/lib/jobs.server.ts`); a link's own expiry is shorter.
+- **The payload holds the link,** token included, so the job row is as secret as the link. The queue deletes finished
+  rows after three days and failed ones after 30 ([jobs.md](./jobs.md) → When a Job Fails); a link's own expiry is
+  shorter.
 
-Queue one with `queueMail` (or `sendMailJob.enqueue({ data, db: tx })` from a service, so the email is queued only if
-its transaction commits, docs/backend/jobs.md → Queueing a Job):
+Queue one from a service with `SendMail.enqueue`, inside the transaction it follows from, so the email is queued only
+if that transaction commits ([jobs.md](./jobs.md) → Queueing a Job). The service yields `Jobs` when its layer is built
+and provides it to the call:
 
+<!-- prettier-ignore -->
 ```ts
-await queueMail({ template: "verify-email", to: user.email, name: user.name, url, locale });
+yield* SendMail.enqueue({ template: "verify-email", to: user.email, name: user.name, url, locale }).pipe(
+  Effect.provideService(Jobs, jobs),
+);
 ```
 
+Better-Auth's callbacks run outside Effect, so the `Auth` layer (`src/server/auth.server.ts`) gives
+`createBetterAuth` a `queueMail` function that runs `SendMail.enqueue` with the layer's `Jobs`. The auth emails don't
+wait for it either (`sendAuthMail`): Better-Auth answers a request for an unknown address without sending anything, so
+a request that waited on the queue would take measurably longer for an address that has an account.
+
 The locale is the recipient's, not the process's: a job has no request. Better-Auth's emails take it from the
-`x-locale` header the auth client sends (`requestLocale` in `src/lib/auth.server.ts`). An email that isn't a reply to
-the reader's own request (a notification) needs the reader's language stored with them.
+`x-locale` header the auth client sends (`requestLocale` in `src/server/better-auth.server.ts`). An email that isn't a
+reply to the reader's own request (a notification) needs the reader's language stored with them.
 
 ## Adding an Email
 
 1. **Template:** `src/mail/templates/<name>.tsx`, a component built on `MailLayout` that takes `MailProps` (`locale`,
    `name`, `url`), and its subject function. Copy `reset-password.tsx`.
-2. **Messages:** the subject, preview line, heading, body and button label, `mail_<name>_*` in every file of
+2. **Messages:** the subject, preview line, heading, body and button label, `mail_<name>_*` keys in every file of
    `messages/`. Call each with `{ locale }` as its second argument: `m.mail_x({}, { locale })`. The template never
    reads `getLocale()`, which in a job is the base locale.
-3. **Register it** in `TEMPLATES` (`src/mail/render.server.tsx`). The name is part of queued payloads: keep a name as
-   long as jobs that use it may be queued, and add a new one rather than changing what an old one means.
-4. **Queue it** where the email follows from something (a service, an auth hook) with `queueMail`.
+3. **Register it** in `TEMPLATES` (`src/mail/render.server.tsx`); the payload schema's `template` accepts the names
+   there. The name is part of queued payloads: keep a name as long as jobs that use it may be queued, and add a new one
+   rather than changing what an old one means.
+4. **Queue it** where the email follows from something (a service, an auth hook) with `SendMail.enqueue`.
 
 A template that needs more than a name and a link (an order's lines, a date) widens `MailProps` with its own fields,
-in the job's schema too.
+and `MailPayload` in `src/mail/jobs.server.ts` too.
 
 ### Writing a Template
 
@@ -123,6 +136,8 @@ development and open it in Mailpit, which also shows the plain-text part and the
 
 ## Testing
 
-The browser tests read the emails from Mailpit's API (`e2e/mailbox.ts`): sign-up opens its confirmation link
-(`signUpAndConfirm` in `e2e/accounts.ts`), and `e2e/password-reset.spec.ts` goes through a reset. CI runs Mailpit with
-the other services (`pnpm services`).
+`src/mail/jobs.server.test.ts` runs `SendMail.run` against a mailbox in memory (`Mailer.layerMemory`): the email is
+rendered in its language with its link, a refusal for good ends the run, and a temporary one fails it so the queue
+retries. The browser tests read real emails from Mailpit's API (`e2e/mailbox.ts`): sign-up opens its confirmation
+link (`signUpAndConfirm` in `e2e/accounts.ts`), and `e2e/password-reset.spec.ts` goes through a reset. CI runs
+Mailpit with the other services (`pnpm services`).

@@ -30,17 +30,19 @@ decide. The `notes` route (`src/routes/notes/`) is the worked example.
    as messages.
    - The page's data comes from oRPC procedures. If one it needs doesn't exist yet, add it first with
      [backend-flow.md](./backend-flow.md).
-   - Shareable view state (filters, tabs, pagination) goes in the URL through the route's `validateSearch`
-     ([search-params.md](./frontend/search-params.md)); client state shared across distant parts of the tree goes in
-     [Jotai](./frontend/jotai.md).
+   - Shareable view state (filters, tabs, pagination) goes in the URL through the route's `validateSearch`, a
+     `searchSchema` whose fields fall back instead of failing ([search-params.md](./frontend/search-params.md));
+     client state shared across distant parts of the tree goes in [Jotai](./frontend/jotai.md).
 3. **UI**: build it from primitives (`components/primitive/`), shared components (`components/shared/`) and the
    slice's own components. Standard controls use the primitive of the matching shadcn component; create the primitive
    if it doesn't exist yet ([components.md](./frontend/components.md)). Build the loading, empty, error and success
    states. Every text is a message in `messages/fa.json` and `messages/en.json`, called in render, never at module
    scope; layout uses logical classes so it works in both directions ([i18n.md](./frontend/i18n.md)).
-4. **Forms**: add the form's `schema.ts` (each check's message an `error: () => m.<key>()` function), run it with `react-hook-form` and `zodResolver`, and lay fields out with the
-   `Field` primitives. Submit with `useMutation(orpc.<feature>.<procedure>.mutationOptions())`, show the server's
-   errors through `describeApiFailure`, and invalidate the queries the mutation changed on success. `src/components/shared/note-form/note-form.tsx` does
+4. **Forms**: add the form's `schema.ts`, an Effect Schema struct passed through `standardSchema` (`src/lib/schema.ts`),
+   each check's message a `text: () => m.<key>()` function. Run it with `react-hook-form` and `standardSchemaResolver`,
+   and lay fields out with the `Field` primitives. Submit with
+   `useMutation(orpc.<feature>.<procedure>.mutationOptions())`, show the server's errors through `describeApiFailure`,
+   and invalidate the queries the mutation changed on success. `src/components/shared/note-form/note-form.tsx` does
    all of this ([architecture.md](./frontend/architecture.md) → Forms). Image fields follow
    [media.md](./backend/media.md).
 5. **Promote**: move a slice component to `components/shared/` (or a hook to `src/hooks/`) once a second route needs it.

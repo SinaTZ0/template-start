@@ -60,11 +60,161 @@ using it.
   import `#/paraglide/messages`. The procedure's error map turns a tagged error into a contract error, and the text is
   rendered there, in the request's locale.
 - **Only boundaries run Effects.** `Effect.runPromise*` / `runtime.runPromise*` appear only in the oRPC boundary
-  (`src/orpc/effect.server.ts`), the server entry, the job worker, seeds and tests. Inside Effect code, compose with
-  `yield*`.
+  (`src/orpc/effect.server.ts`), the server entry, the job worker, seeds and tests, plus the server routes outside
+  oRPC (`/healthz`, `/api/auth/*`, `/robots.txt`, `/sitemap.xml`) and Better-Auth's callbacks
+  (`src/server/auth.server.ts`). Inside Effect code, compose with `yield*`.
 - **Unstable modules are wrapped once.** `effect/sql`, `effect/persistence`, `effect/observability` and
   `ErrorReporter` are `@stability unstable` and may break in a minor release. Use them only inside `src/server/`; the
   rest of the code goes through that wrapper.
+
+## This Project's Patterns
+
+Short templates, copied from the `note` and `media` features. Copy the shape from the real file, not from memory.
+
+### A Domain Error (`src/orpc/note/errors.ts`)
+
+```ts
+import { Schema } from "effect";
+
+/** No note with this ID belongs to the user. Another user's note looks the same as a missing one. */
+export class NoteNotFound extends Schema.TaggedError<NoteNotFound>()("NoteNotFound", { id: Schema.String }) {}
+```
+
+Facts only: the procedure that receives it writes the message. The errors every procedure may meet (`Unauthorized`,
+`Forbidden`, `InvalidInput`, `RateLimited`, `CaptchaFailed`) are in `src/server/errors.ts`.
+
+### A Repository Method (`src/orpc/note/repository.ts`)
+
+```ts
+export class NoteRepo extends Context.Service<
+  NoteRepo,
+  {
+    /** Finds a note only when it belongs to the owner, so another user's note looks the same as a missing one. */
+    readonly findOwned: (args: { id: string; ownerId: string }) => Effect.Effect<Option.Option<NoteWithImage>>;
+    // …
+  }
+>()("app/orpc/note/NoteRepo") {
+  static readonly layer = Layer.effect(
+    NoteRepo,
+    Effect.gen(function* () {
+      const { q } = yield* Db;
+
+      const findOwned = Effect.fn("NoteRepo.findOwned")(function* ({ id, ownerId }: { id: string; ownerId: string }) {
+        const [row] = yield* q
+          .select({ note, image: media })
+          .from(note)
+          .leftJoin(media, eq(note.imageMediaId, media.id))
+          .where(and(eq(note.id, id), eq(note.ownerId, ownerId)))
+          .limit(1);
+        return Option.fromNullishOr(row);
+      }, Effect.orDie);
+
+      return NoteRepo.of({ findOwned /* , … */ });
+    }),
+  );
+}
+```
+
+A Drizzle query is an Effect (`yield* q.select()…`). Every method ends in `Effect.orDie`, passed to `Effect.fn`, so a
+failed query is a defect and the method's error type stays `never`. A query inside a `db.transaction` joins it without
+being passed a `tx`.
+
+### A Service Method with a Transaction (`src/orpc/note/service.ts`)
+
+```ts
+// Inside `NoteService.layer`'s `Effect.gen`, after `const db = yield* Db; const notes = yield* NoteRepo; …`
+const decodeFields = decodeInput(NoteFields);
+
+const add = Effect.fn("NoteService.add")(function* ({ ownerId, input }: { ownerId: string; input: unknown }) {
+  const { title, body = "", imageMediaId } = yield* decodeFields(input);
+  const image = imageMediaId || null;
+
+  return yield* db.transaction(
+    Effect.gen(function* () {
+      if (image) yield* mediaService.attach({ mediaId: image, kind: "image", userId: ownerId });
+      const record = yield* notes.insert({ ownerId, title, body, imageMediaId: image });
+      return yield* publicNote(record);
+    }),
+  );
+});
+```
+
+`decodeInput` (`src/server/errors.ts`) checks the input against the feature's domain schema (`validation.ts`) and
+fails with `InvalidInput`, which holds the schema issue; the boundary turns it into field messages. A typed failure
+inside `db.transaction` (`MediaUnusable` from `attach`) rolls it back and keeps its type. The service's interface
+declares each method's errors: `Effect.Effect<Note, InvalidInput | MediaUnusable>`.
+
+### A Procedure (`src/orpc/note/procedure.ts`)
+
+```ts
+/** The picked image can't be used: shown under the image field. Called by the error map, in the request's locale. */
+const imageUnusable = () => ({ errors: [], fields: { imageMediaId: m.note_error_image_unusable() } });
+
+export const updateNoteProcedure = effectProcedure(base.note.update, {
+  access: "user",
+  run: ({ input: { id, ...fields } }) =>
+    Effect.gen(function* () {
+      const user = yield* CurrentUser;
+      return yield* (yield* NoteService).edit({ ownerId: user.id, id, input: fields });
+    }),
+  errors: {
+    NoteNotFound: ({ errors }) => errors.NOT_FOUND({ data: noErrorData }),
+    MediaUnusable: ({ errors }) => errors.INVALID_INPUT({ data: imageUnusable() }),
+  },
+});
+```
+
+`access` is `"user"` or a list of roles (`["admin"]`); left out, the procedure is public and its Effect can't require
+`CurrentUser`. `errors` needs a key for every tagged error `run` can fail with, except the common ones
+`effectProcedure` maps itself, so a new failure doesn't compile until each procedure says what the client sees. The
+contract must declare each code used (`errors.NOT_FOUND` needs `NOT_FOUND` in the contract's `.errors`). Optional:
+`rateLimit` (a stricter policy, `src/orpc/media/procedure.ts`) and `captcha: true`.
+
+### A Job (`src/orpc/media/jobs.server.ts`)
+
+```ts
+export const DiscardMedia = defineJob({
+  name: "media.discard",
+  payload: Schema.Struct({ mediaId: Schema.String }),
+  run: Effect.fn("MediaJobs.discard")(function* ({ mediaId }: { readonly mediaId: string }) {
+    if (!isMediaId(mediaId)) return;
+    const found = yield* (yield* MediaRepo).findById(mediaId);
+    if (Option.isNone(found) || found.value.attachedAt) return;
+    yield* deleteMedia(mediaId);
+  }),
+});
+```
+
+List every job in `src/jobs.server.ts`, or no worker runs it. Queue it with `yield* DiscardMedia.enqueue({ mediaId })`;
+inside a `db.transaction` the queued row is part of the transaction. Delivery is at least once, so `run` must be safe
+to run twice (here: it checks the row again). A scheduled job adds `cron` and gets the payload `{}`
+(`CleanupMedia`, same file). `defineJob` is in `src/server/jobs.server.ts`.
+
+### A Test on the App's Layers (`src/orpc/note/integration.test.ts`)
+
+```ts
+const runtime = ManagedRuntime.make(AppLayer);
+const run = <A, E>(effect: Effect.Effect<A, E, AppServices>) => runtime.runPromise(effect);
+/** Runs an Effect that must fail, and returns its error. */
+const failure = <A, E>(effect: Effect.Effect<A, E, AppServices>) => runtime.runPromise(Effect.flip(effect));
+const notes = <A, E>(f: (service: NoteService["Service"]) => Effect.Effect<A, E>) => NoteService.use(f);
+
+afterAll(async () => {
+  // … delete the rows this run created
+  await runtime.dispose();
+});
+
+it("lets only the owner delete a note", async () => {
+  const { id } = await run(notes((s) => s.add({ ownerId: owner, input: { title: "حذف‌شدنی" } })));
+
+  expect(await failure(notes((s) => s.remove({ ownerId: stranger, id })))).toBeInstanceOf(NoteNotFound);
+  await run(notes((s) => s.remove({ ownerId: owner, id })));
+});
+```
+
+The services run on the app's real layers (`AppLayer`, `src/server/runtime.server.ts`) against the database in
+`DATABASE_URL`, after `pnpm db:migrate`. Assert on the tagged error's class, never on message text. A test is a
+boundary, so it may run Effects.
 
 ## Common Mistakes
 
@@ -79,5 +229,9 @@ using it.
 - **Effect's default `ConfigProvider` in a Vite build.** It merges `import.meta.env` over `process.env`, and Vite
   freezes `import.meta.env` at build time. Settings are read through `serverEnv` (`#/server/config.server`), which
   reads the process's environment only.
+- **A transforming schema in a contract.** oRPC validates a procedure's output by running it through the contract's
+  schema, so a `PersianText` or a `decodeTo` there changes what the client receives. Contract schemas are
+  structure-only `standardSchema(...)`; normalizing and limits belong to the feature's `validation.ts`, decoded in the
+  service with `decodeInput`.
 - **Reading `AsyncLocalStorage` inside a fiber.** Request facts reach Effect code through the `RequestContext`
   service, read once at the boundary.

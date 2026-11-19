@@ -5,8 +5,8 @@ the route-side rules. Upstream page: `https://orpc.dev/docs/adapters/tanstack-st
 
 ## Mounting the Handler
 
-A catch-all server route mounts the RPC handler. The handler itself lives in `src/orpc/handler.server.ts`; the route
-only adapts Start's `request` to it.
+A catch-all server route mounts the RPC handler. The handlers live in `src/orpc/handler.server.ts` (one for JSON
+calls, one with a larger body limit for uploads, picked by path); the route only adapts Start's `request` to them.
 
 ```ts
 // src/routes.ts (virtual file routes)
@@ -17,10 +17,10 @@ route("/rpc/$", "rpc/rpc.ts"),
 // src/routes/rpc/rpc.ts: a server route, no component
 import { createFileRoute } from "@tanstack/react-router";
 
-import { rpcHandler } from "~/orpc/handler.server";
+import { rpcHandlerFor } from "#/orpc/handler.server";
 
 async function handleRequest({ request }: { request: Request }) {
-  const { response } = await rpcHandler.handle(request, {
+  const { response } = await rpcHandlerFor(new URL(request.url).pathname).handle(request, {
     prefix: "/rpc", // must match the route path and the browser link's `url`
     context: { headers: request.headers }, // initial context; may be an async function
   });
@@ -41,19 +41,21 @@ Route loaders are isomorphic, so the client is too (`src/orpc/client.ts`):
 
 ```ts
 const getClient = createIsomorphicFn()
-  .server(
-    (): RouterContractClient<typeof contract> =>
-      createRouterClient(router, { context: () => ({ headers: getRequestHeaders() }) }),
+  .server((): RouterContractClient<typeof contract> =>
+    createRouterClient(router, { context: () => ({ headers: getRequestHeaders() }) }),
   )
-  .client((): RouterContractClient<typeof contract> => createORPCClient(new RPCLink({ url: "/rpc" })));
+  .client((): RouterContractClient<typeof contract> =>
+    // `/rpc` has no locale in its path, so each call names the page's (docs/frontend/i18n.md).
+    createORPCClient(new RPCLink({ url: "/rpc", headers: () => ({ [LOCALE_HEADER]: getLocale() }) })),
+  );
 
 export const client = getClient();
 export const orpc = createTanstackQueryUtils(client);
 ```
 
-- **Server branch:** calls procedures in-process during SSR and in server functions. The instance is created once
-  and shared by every request, so the context is a **function**: each call reads its own request's headers through
-  `getRequestHeaders()`. Never put request data in a plain context object here.
+- **Server branch:** calls procedures in-process during SSR (the app has no server functions). The instance is
+  created once and shared by every request, so the context is a **function**: each call reads its own request's
+  headers through `getRequestHeaders()`. Never put request data in a plain context object here.
 - **Browser branch:** `RPCLink` over HTTP, resolved against `window.location`.
 - Start's compiler drops the `.server()` branch from the client bundle, and with it the router and all server code.
 - Loaders and components use the same options: `ensureQueryData(orpc.note.list.queryOptions())` in the loader,
@@ -68,7 +70,9 @@ Consequences of the in-process server branch:
 - **Handler plugins don't run.** `context.reqHeaders` / `context.resHeaders` are `undefined` unless passed in. A
   procedure that sets cookies must be called over HTTP (from the browser) or set them through Start's `setCookie`.
 - Middleware applied only in the handler path (handler-level interceptors) is skipped; middleware applied in the
-  implementer still runs.
+  implementer still runs. In this project the handler's same-origin check and its own rate limit are skipped, while
+  everything `effectProcedure` does (rate limits, captcha, `access`, error mapping) runs on both paths, on the same
+  runtime.
 
 ## Browser Interactions
 
@@ -82,5 +86,5 @@ Consequences of the in-process server branch:
 
 Start's import protection fails the build when browser-reachable code imports a `*.server.ts` module outside a server
 function's handler or an isomorphic function's `.server()` branch. Keep the implementer, router, handler, services,
-and repositories server-only; components may import only contracts, `constants.ts`, `*.errors.ts`, and
-`src/orpc/client.ts`. Type-only imports (`import type`) are erased and safe.
+and repositories server-only (`effect.server.ts`, `src/server/`); components may import only contracts,
+`constants.ts`, `src/orpc/errors.ts`, and `src/orpc/client.ts`. Type-only imports (`import type`) are erased and safe.

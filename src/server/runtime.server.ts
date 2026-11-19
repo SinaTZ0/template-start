@@ -31,9 +31,8 @@ const PlatformLive = Auth.layer.pipe(
 );
 
 /**
- * Logging, tracing and export (docs/backend/logging.md), built in this order: the app's loggers, then the OTLP exporter
- * (when configured), which adds its logger to them and sets its tracer, then the request collector, which wraps
- * whichever tracer is in place.
+ * Logging, tracing and export (docs/backend/logging.md), built in this order: the app's logger, then the OTLP exporter
+ * (when configured), which sets its tracer, then the request collector, which wraps whichever tracer is in place.
  */
 const ObservabilityLive = RequestSpansLive.pipe(Layer.provideMerge(ExportLive), Layer.provideMerge(LoggerLive));
 

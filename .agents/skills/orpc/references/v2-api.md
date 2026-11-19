@@ -3,6 +3,11 @@
 Verified against the v2 docs (`2.0.0-beta`). Where this file and the installed `.d.ts` disagree, the types win.
 File names and layering follow `docs/backend/architecture.md`; that guideline wins on architecture, this file on API usage.
 
+> **This project.** The examples below are oRPC's API, written with zod as orpc.dev writes them. This project has no
+> zod: contracts pass Effect Schema through `standardSchema` (`src/lib/schema.ts`), and procedures are implemented with
+> `effectProcedure` (`src/orpc/effect.server.ts`), not with middleware and `.handler`. Each section says what the
+> project does instead; `src/orpc/note/contract.ts` and `src/orpc/note/procedure.ts` are the worked example.
+
 ## Contract (`@orpc/contract`, browser-safe)
 
 ```ts
@@ -16,6 +21,22 @@ export const findPlanetContract = oc
 
 export const planetContract = { find: findPlanetContract };
 export const contract = { planet: planetContract }; // root contract is a plain object
+```
+
+**This project:** the same contract with Effect Schema. Contract schemas check structure only and never transform, an
+input field that may be `undefined` is `Schema.optional`, and domain rules live in the feature's `validation.ts`:
+
+```ts
+import { oc } from "@orpc/contract";
+import { Schema } from "effect";
+
+import { standardSchema } from "#/lib/schema";
+import { authErrors, commonErrors, errorDataSchema } from "#/orpc/errors";
+
+export const getNoteContract = oc
+  .errors({ ...commonErrors, ...authErrors, NOT_FOUND: { message: "Note not found.", data: errorDataSchema } })
+  .input(standardSchema(Schema.Struct({ id: Schema.String })))
+  .output(standardSchema(NoteSchema));
 ```
 
 - `.input` / `.output` **stack**: each call adds a schema. Object inputs merge (two levels deep), outputs are piped
@@ -45,9 +66,24 @@ export const findPlanetProcedure = base.planet.find
   .use(dbMiddleware) // feature middleware: after the procedure key, runs after input validation
   .handler(async ({ input, context, errors }) => {
     const planet = await findPlanet({ db: context.db, id: input.id });
-    if (!planet) throw errors.NOT_FOUND({ data: { errors: {}, fields: {} } });
+    if (!planet) throw errors.NOT_FOUND({ data: { errors: [], fields: {} } });
     return planet; // checked against the contract output
   });
+```
+
+**This project:** a procedure is never `.use(...).handler(...)`. It is an Effect, and `effectProcedure` applies the rate
+limits, the captcha, the session check (`access`) and the error mapping (`errors`, one entry per tagged error):
+
+```ts
+export const getNoteProcedure = effectProcedure(base.note.get, {
+  access: "user",
+  run: ({ input }) =>
+    Effect.gen(function* () {
+      const user = yield* CurrentUser;
+      return yield* (yield* NoteService).read({ ownerId: user.id, id: input.id });
+    }),
+  errors: { NoteNotFound: ({ errors }) => errors.NOT_FOUND({ data: noErrorData }) },
+});
 ```
 
 ```ts
@@ -63,6 +99,11 @@ export const router = implementer.router({ planet: { find: findPlanetProcedure }
   `'CODE' in errors` when not every contract declares it.
 
 ## Middleware
+
+**This project** has one middleware, `handleErrorsMiddleware` on `base` (`src/orpc/handle-errors.server.ts`), which
+normalizes the errors oRPC raises around contract validation. Dependencies, access, rate limits and the captcha are not
+middleware: they are Effect services and `effectProcedure`'s options. The API below is for that one middleware and for
+library reference.
 
 ```ts
 const dbMiddleware = os.$context<{ db?: Db }>().middleware(async ({ context, next }) => {
@@ -92,8 +133,10 @@ const dbMiddleware = os.$context<{ db?: Db }>().middleware(async ({ context, nex
 ### Declaring errors (browser-safe)
 
 ```ts
-// <feature>/<name>.errors.ts or middleware/<name>/<name>.errors.ts — plain map, no `@orpc/server` import
-import { errorDataSchema } from "~/orpc/errors"; // the shared `{ errors, fields }` shape
+// plain map, no `@orpc/server` import. In this project: the shared maps in `src/orpc/errors.ts`, a feature's own
+// beside its contract (`notFoundErrors` in `src/orpc/note/contract.ts`). A feature's `errors.ts` holds its Effect
+// domain errors (`Schema.TaggedError`), which `effectProcedure` maps to these.
+import { errorDataSchema } from "#/orpc/errors"; // the shared `{ errors, fields }` shape
 
 export const planetErrors = {
   NOT_FOUND: { message: "Planet not found", data: errorDataSchema },
@@ -109,7 +152,7 @@ oc.errors({ ...commonErrors, ...planetErrors }).input(...).output(...);
 ### Throwing errors
 
 ```ts
-throw errors.NOT_FOUND({ data: { errors: {}, fields: {} } }); // preferred: typed constructor from handler/middleware args
+throw errors.NOT_FOUND({ data: { errors: [], fields: {} } }); // preferred: typed constructor from handler/middleware args
 throw new ORPCError("UNAUTHORIZED", { message: "...", data: {...} }); // only where `errors` is not available
 ```
 
@@ -150,6 +193,10 @@ const errorMiddleware = os.middleware(async ({ next }) => {
   }
 });
 ```
+
+This project's version is `handleErrorsMiddleware` (`src/orpc/handle-errors.server.ts`). Failures of the domain
+rules (`validation.ts`) don't pass through it: the service fails with `InvalidInput`, and `effectProcedure` formats it
+into the same `INVALID_INPUT` shape (`issueToErrorData` in `src/lib/schema.ts`).
 
 Only middleware applied **before** validation (on the implementer) sees these errors. The converted error must be
 declared on every contract (e.g. via the shared common errors) to stay typed. More: `recipes/validation-customization.md`.

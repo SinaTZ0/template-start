@@ -52,7 +52,7 @@ services:
       timeout: 5s
       retries: 30
 
-  # Traces, logs and metrics over OTLP (docs/backend/logging.md → OpenTelemetry). Optional, so a plain
+  # Traces (with their log lines) and metrics over OTLP (docs/backend/logging.md → OpenTelemetry). Optional, so a plain
   # `pnpm services` doesn't start it: `docker compose -f compose.dev.yaml --profile observability up -d`, then set
   # OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_AUTHORIZATION in `.env` (see `.env.example`). Its UI is
   # http://localhost:5080, signed in with the address and password below.

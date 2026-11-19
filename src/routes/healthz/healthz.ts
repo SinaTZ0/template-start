@@ -28,7 +28,7 @@ const checkHealth = Effect.gen(function* () {
 
 /**
  * `GET /healthz`: Docker's healthcheck and uptime monitors poll it. The request log skips healthy probes
- * (`src/lib/request-log.server.ts`), so only failures and slow checks are written.
+ * (`#/server/observability/http.server`), so only failures and slow checks are written.
  */
 async function handleGet() {
   const healthy = await appRuntime.runPromise(checkHealth);

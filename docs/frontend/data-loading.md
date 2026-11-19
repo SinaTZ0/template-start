@@ -17,14 +17,15 @@ fills it before a page renders, and components read from it.
 ## Where Code Runs
 
 Route `beforeLoad` and `loader` functions are **isomorphic**: they run on the server for the first request, and in
-the browser for navigations and preloads. So a route file never imports server-only modules (`*.server.ts`, the
-database, `env`). Server-only work sits behind one door, **oRPC procedures**: feature data, and small reads such as
-the viewer (`session.viewer`) and the site origin (`site.origin`). Loaders call them through
+the browser for navigations and preloads. So a route file never imports server-only modules (`*.server.ts`,
+`src/server/`, the database, `AppConfig`). Server-only work sits behind one door, **oRPC procedures**: feature data,
+and small reads such as the viewer (`session.viewer`) and the site origin (`site.origin`). Loaders call them through
 `orpc.<feature>.<procedure>.queryOptions()`, which runs the procedure in-process during SSR and over `/rpc` in the
 browser, with the same code. Add one with [backend-flow.md](../backend-flow.md).
 
 The app has no server functions (`createServerFn`). A second door would need its own validation, rate limits, error
-handling and CSRF check, kept in step with the API's; a procedure gets them all from `base`.
+handling and CSRF check, kept in step with the API's; a procedure gets them all from the RPC handler, its contract
+and `effectProcedure` (`src/orpc/effect.server.ts`).
 
 Start's import protection fails the build when browser-reachable code imports a `*.server.ts` file. A module that must
 only run in the browser uses `createClientOnlyFn` (see `src/lib/error-reporting.browser.ts`), not a `.client.ts` name.
@@ -179,8 +180,8 @@ beforeLoad: async ({ context, location }) => {
 ```
 
 A guard only shapes navigation. It reads the cached viewer, which can be up to `staleTime` old, and it runs in the
-browser. The data is protected where it is served: every procedure checks the session and role again
-(`requireUserMiddleware`, `requireRoleMiddleware`).
+browser. The data is protected where it is served: every procedure checks the session and role again (the
+`access` of its `effectProcedure`, `src/orpc/effect.server.ts`).
 
 A tab left open doesn't see its session end elsewhere until the cached viewer goes stale. So the first API call that
 answers `UNAUTHORIZED` refetches the viewer, and if the session is gone, runs the page's guards again

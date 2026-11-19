@@ -3,10 +3,13 @@
 A starting point for full-stack [TanStack Start](https://tanstack.com/start) apps, Persian first (right-to-left) with
 English as a second language.
 
-- **Backend:** contract-first [oRPC](https://orpc.dev) v2, Drizzle + Postgres, Better-Auth (email + password, Altcha
-  captcha on sign-up, email confirmation and password reset), email through one regular mailbox over SMTP with React
-  Email templates, image uploads processed with sharp into S3-compatible storage, pino logging, and error tracking
-  with a small self-hosted error viewer (`tools/error-viewer`, Go + SQLite).
+- **Backend:** contract-first [oRPC](https://orpc.dev) v2 with every procedure implemented on
+  [Effect](https://effect.website) v4 (services and layers, typed errors), Effect Schema for contracts, forms, search
+  params and domain rules, Drizzle + Postgres on Effect's Postgres driver, Better-Auth (email + password, Altcha
+  captcha on sign-up, email confirmation and password reset), background jobs on Effect's persisted queue in the same
+  Postgres, email through one regular mailbox over SMTP with React Email templates, image uploads processed with sharp
+  into S3-compatible storage, logging and tracing through Effect with optional OpenTelemetry export (OpenObserve), and
+  error tracking with a small self-hosted error viewer (`tools/error-viewer`, Go + SQLite).
 - **Frontend:** flat route slices, shadcn components rebuilt as `primitive/`s on Base UI, Tailwind v4 tokens with
   light/dark themes, TanStack Query as the one data cache (filled by route loaders, preloaded on hover), typed search
   params, Jotai and Storybook, and Persian and English messages with [Paraglide JS](https://paraglidejs.com)
@@ -36,6 +39,10 @@ pnpm errors                   # optional, in a second terminal: error viewer on 
   `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` from `.env`.
 - **Error viewer.** The app reports to it only when `.env` has `SENTRY_DSN=http://developmentkey@localhost:8000/1`
   (restart `pnpm dev` after setting it). The viewer's password is `admin`.
+- **Traces.** Optional: `docker compose -f compose.dev.yaml --profile observability up -d` starts OpenObserve on
+  http://localhost:5080 (`dev@example.com`, password `development`). The app exports its traces (with their log
+  lines) and metrics there once `.env` sets `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_AUTHORIZATION`
+  (`.env.example` has the values).
 - **Git hooks.** `pnpm install` installs them: staged files are linted and formatted before each commit, and commit
   messages must follow [Conventional Commits](https://www.conventionalcommits.org) (`feat: add note search`,
   `fix(auth): …`). Outside a git repository they are skipped; run `pnpm install` again after `git init`.
@@ -43,40 +50,44 @@ pnpm errors                   # optional, in a second terminal: error viewer on 
 
 ## Scripts
 
-| Script                                 | What it does                                                          |
-| -------------------------------------- | --------------------------------------------------------------------- |
-| `pnpm dev` / `build` / `start`         | Dev server, production build, production server                       |
-| `pnpm lint` / `lint:fix` / `typecheck` | oxlint + message check; its automatic fixes; compile, routes + tsc    |
-| `pnpm lint:tw`                         | Lists non-canonical Tailwind classes (advisory)                       |
-| `pnpm i18n:compile`                    | Compiles `messages/` into `src/paraglide/`                            |
-| `pnpm format` / `format:check`         | Prettier (sorts Tailwind classes); the check CI runs                  |
-| `pnpm test` / `test:watch`             | Vitest (integration tests need the database)                          |
-| `pnpm test:e2e`                        | Playwright against the production build (needs `pnpm services`)       |
-| `pnpm check`                           | typecheck, lint, format check and tests, as CI                        |
-| `pnpm storybook`                       | Component previews on port 6006                                       |
-| `pnpm services` / `services:down`      | Starts `compose.dev.yaml` and creates the bucket; stops it            |
-| `pnpm db:generate` / `db:migrate`      | Record a schema change as a migration; apply it                       |
-| `pnpm db:check` / `db:studio`          | Checks the migrations for conflicts; Drizzle Studio                   |
-| `pnpm db:reset`                        | Empties the dev database and applies the migrations                   |
-| `pnpm db:seed` / `db:seed:notes`       | The first admin; sample notes for that admin                          |
-| `pnpm db:push`                         | Schema straight into a throwaway database, never one `db:migrate` ran |
-| `pnpm errors`                          | The error viewer on port 8000, with `go run`                          |
-| `pnpm deploy:build`                    | Rebuilds the deploy tool's binary after a change in `tools/deploy/`   |
+| Script                            | What it does                                                             |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `pnpm dev` / `build` / `start`    | Dev server, production build, production server                          |
+| `pnpm lint` / `lint:fix`          | oxlint, the message check and the Effect rules; oxlint's automatic fixes |
+| `pnpm typecheck`                  | Compiles messages and routes, then tsc with Effect's diagnostics         |
+| `pnpm lint:tw`                    | Lists non-canonical Tailwind classes (advisory)                          |
+| `pnpm i18n:compile`               | Compiles `messages/` into `src/paraglide/`                               |
+| `pnpm format` / `format:check`    | Prettier (sorts Tailwind classes); the check CI runs                     |
+| `pnpm test` / `test:watch`        | Vitest (integration tests need the database)                             |
+| `pnpm test:e2e`                   | Playwright against the production build (needs `pnpm services`)          |
+| `pnpm check`                      | typecheck, lint, format check and tests, as CI                           |
+| `pnpm storybook`                  | Component previews on port 6006                                          |
+| `pnpm services` / `services:down` | Starts `compose.dev.yaml` and creates the bucket; stops it               |
+| `pnpm db:generate` / `db:migrate` | Record a schema change as a migration; apply it                          |
+| `pnpm db:check` / `db:studio`     | Checks the migrations for conflicts; Drizzle Studio                      |
+| `pnpm db:reset`                   | Empties the dev database and applies the migrations                      |
+| `pnpm db:seed` / `db:seed:notes`  | The first admin; sample notes for that admin                             |
+| `pnpm db:push`                    | Schema straight into a throwaway database, never one `db:migrate` ran    |
+| `pnpm errors`                     | The error viewer on port 8000, with `go run`                             |
+| `pnpm deploy:build`               | Rebuilds the deploy tool's binary after a change in `tools/deploy/`      |
 
 ## Layout
 
 ```text
 src/
   routes.ts, styles.css            virtual route config (set in tsr.config.json), theme tokens
-  router.tsx, server.ts, client.tsx  router + QueryClient, server entry (tracing, logs), browser entry
+  router.tsx, server.ts, client.tsx  router + QueryClient, server entry (traces, logs, job workers), browser entry
+  jobs.server.ts                   every background job the workers run (docs/backend/jobs.md)
   routes/__root.tsx                root route: document shell, global providers
   routes/<slice>/                  one flat folder per route (docs/frontend/architecture.md)
   components/primitive/            this app's shadcn components (docs/frontend/components.md)
   components/shared/               app-made components used by several routes
   components/ui/                   untouched shadcn source, reference only
   orpc/                            the API, one folder per feature (docs/backend/architecture.md)
-  lib/                             auth, viewer query, storage, logger, helpers
-  db/                              Drizzle schema, client, seed
+  server/                          Effect services: AppConfig, database, jobs, auth, mail, storage, observability
+  lib/                             schema helpers (Effect Schema), auth client, viewer query, locale, helpers
+  mail/                            email templates and the job that sends them (docs/backend/mail.md)
+  db/                              Drizzle schema, seeds
   paraglide/                       generated message functions (gitignored, docs/frontend/i18n.md)
 messages/, project.inlang/         the text per locale; Paraglide settings and config
 drizzle/                           SQL migrations (generated, committed)
@@ -117,7 +128,8 @@ docs/                              start at backend-flow.md or frontend-flow.md
 Once the project has a feature of its own, remove `note` everywhere it reaches. `pnpm typecheck` and `pnpm lint` find
 most of what is left behind; the deploy tool and the docs they can't see.
 
-- **API:** `src/orpc/note/`, and its entries in `src/orpc/contract.ts` and `src/orpc/router.ts`.
+- **API:** `src/orpc/note/`, its entries in `src/orpc/contract.ts` and `src/orpc/router.ts`, and its two layers in
+  `AppLayer` (`src/server/runtime.server.ts`).
 - **Pages:** `src/routes/notes/`, `src/routes/notes_noteId/` and `src/components/shared/note-form/`, and their two
   routes in `src/routes.ts`. `src/routes/notes_layout/` is the signed-in guard: keep it, renamed, for the project's
   own signed-in pages.

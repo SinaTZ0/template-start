@@ -22,8 +22,10 @@ one-time jobs, before the app starts:  migrate ──▶ db      storage-init �
 | `db`           | Postgres 17                                                                                                   |
 | `seaweedfs`    | S3-compatible image storage with three identities: `anonymous`, `app` and `admin` (below)                     |
 | `error-viewer` | Receives and shows the app's server and browser errors and slow requests (Error Tracking below)               |
+| `openobserve`  | Optional, off by default: keeps the app's traces (with their log lines) and metrics for a week (Traces below) |
 
-Only Caddy publishes ports. Postgres and SeaweedFS are reachable from inside the stack only. Each container gets just
+Only Caddy publishes ports to the internet; OpenObserve and the database browser listen on the server's loopback,
+for an SSH tunnel. Postgres and SeaweedFS are reachable from inside the stack only. Each container gets just
 the variables it needs, listed in `compose.prod.yaml`. The store's identities (`configs.seaweedfs-s3`) split its
 access: `anonymous` may only read the bucket (Caddy's `/media`), `app` may read and write it, and only `storage-init`
 gets the `admin` key.
@@ -170,6 +172,47 @@ event. A Slack, Mattermost, Rocket.Chat or Google Chat webhook works as it is. F
 the bot's `sendMessage` URL and the chat in `ERROR_VIEWER_NOTIFY_CHAT_ID`. The message leaves the server: an error's
 title can hold whatever the error message held. Empty (the default) sends nothing.
 
+## Traces
+
+The app can send its traces (each with its log lines) and metrics over OpenTelemetry (OTLP/HTTP) to [OpenObserve](https://openobserve.ai),
+which runs in the stack as the `openobserve` service. What it exports, and how a request becomes a trace, is in
+[logging.md](./backend/logging.md). Where the error viewer shows one failed or slow request, OpenObserve shows every
+request: where the time went, across requests, over the last week.
+
+It's off by default, because it needs a few hundred MB of memory (Compose caps it at 768 MB, `mem_limit`), more than a
+small server spares. Off, nothing leaves the server, and the request log, the error viewer and its slow-request
+timelines work as before. To turn it on, set these in `.env` (Settings: edit `.env`, then apply). The deploy tool
+knows them all as optional, so it never asks for them:
+
+| Setting                            | Value                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `COMPOSE_PROFILES`                 | `observability`. Compose reads it from `.env` itself and starts `openobserve`   |
+| `OPENOBSERVE_ROOT_PASSWORD`        | 12 characters or more. The sign-in is `admin@<DOMAIN>` with this password       |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`      | `http://openobserve:5080/api/default`, the service by its name inside the stack |
+| `OTEL_EXPORTER_OTLP_AUTHORIZATION` | `Basic ` and the base64 of `admin@<DOMAIN>:<password>`                          |
+| `ERROR_VIEWER_TRACE_URL`           | `http://localhost:5080/web/traces?org_identifier=default&trace_id={traceId}`    |
+
+Make the authorization with `printf 'admin@example.com:the-password' | base64`. The app reads both `OTEL_*` values when
+it starts (`AppConfig`); with the endpoint empty it exports nothing, whatever the profile says.
+
+**Opening it.** Like the database browser, OpenObserve listens on the server's loopback only (`127.0.0.1:5080`), and
+Caddy doesn't route to it, so nothing on the internet reaches it. Open a tunnel from your computer and sign in:
+
+```bash
+ssh -N -L 5080:localhost:5080 you@your-server     # leave it running, then open http://localhost:5080
+```
+
+**From a report to its trace.** A request's trace ID is its `X-Request-Id`, and the `reqId` of its log lines and its
+error reports. With `ERROR_VIEWER_TRACE_URL` set, the error viewer adds "Open trace" to a report's `reqId`, which opens
+the request's trace through the same tunnel. The URL must contain `{traceId}`, where the ID goes, or the error viewer
+refuses to start.
+
+**History.** OpenObserve keeps 7 days (`ZO_COMPACT_DATA_RETENTION_DAYS` in `compose.prod.yaml`), in the
+`openobserve-data` volume. Backups don't include it: losing it loses that week's traces, nothing else.
+
+**Turning it off.** Empty `COMPOSE_PROFILES` and `OTEL_EXPORTER_OTLP_ENDPOINT` and apply, then remove the container,
+which a deploy leaves running: `docker compose -f compose.prod.yaml --profile observability rm -sf openobserve`.
+
 ## Package Registries
 
 The images come from Docker Hub, but their builds download packages: npm packages from `registry.npmjs.org` (the app)
@@ -297,10 +340,12 @@ and asks for is in [deploy-tool.md](./deploy-tool.md) → Settings (.env).
 
 ### Adding a Variable
 
-A variable the deployment sets goes in four places: `src/env.server.ts` (its schema), the service's `environment` in
+A variable the deployment sets goes in four places: `AppConfig` in `src/server/config.server.ts` (where the server
+reads and checks it; a missing or malformed value stops the server at startup), the service's `environment` in
 `compose.prod.yaml`, `.env.production.example` (with a comment saying what it is), and the deploy tool's settings
 registry (`Registry` in `tools/deploy/internal/settings/settings.go`), with the kind that says how the tool gets a
-value. Then rebuild the tool (`pnpm deploy:build`, [deploy-tool.md](./deploy-tool.md) → How it's built) and commit the
+value. Add it to `.env.example` too, for development. A setting logging needs before the server's runtime exists
+(`LOG_LEVEL`) is read in `src/server/observability/settings.server.ts` instead. Then rebuild the tool (`pnpm deploy:build`, [deploy-tool.md](./deploy-tool.md) → How it's built) and commit the
 binary with the rest:
 
 - **Required and can't be generated** (a domain, a third-party API key, an external URL): it must be asked for. Use an

@@ -1,9 +1,9 @@
 import { boolean, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /*===== Database Schema =====*/
-// Single source of truth for tables, read by Drizzle Kit (`drizzle.config.ts`) and the
-// runtime client (`client.server.ts`). Every change ships as a migration: `pnpm db:generate --name <what-changed>`, then
-// `pnpm db:migrate` (docs/backend/architecture.md, Database).
+// Single source of truth for tables, read by Drizzle Kit (`drizzle.config.ts`) and the runtime client (`Db`,
+// `src/server/db.server.ts`). Every change ships as a migration: `pnpm db:generate --name <what-changed>`, then `pnpm
+// db:migrate` (docs/backend/architecture.md, Database).
 
 /*===== Columns =====*/
 /**
@@ -96,8 +96,9 @@ export const verification = pgTable(
 );
 
 /*===== Media =====*/
-// One row per uploaded image (docs/backend/media.md). The row's id is the `mediaId` in the storage key, and it is inserted only
-// after every variant is in the bucket. Entities point to it with a nullable foreign key (`note.image_media_id`, ...).
+// One row per uploaded image (docs/backend/media.md). The row's id is the `mediaId` in the storage key, and it is
+// inserted only after every variant is in the bucket. Entities point to it with a nullable foreign key
+// (`note.image_media_id`, ...).
 
 export const media = pgTable(
   "media",
@@ -106,7 +107,8 @@ export const media = pgTable(
     // Plain text instead of a pg enum. Allowed values and their variants live in `src/orpc/media/constants.ts`.
     kind: text("kind").notNull(),
     // `restrict` on purpose: deleting the row would leave its files in the bucket with nothing pointing at them. Code
-    // that deletes a user deletes their media first, through `deleteMedia` (docs/backend/media.md → Deleting a user).
+    // that deletes a user deletes their media first, through `deleteMedia` (`src/orpc/media/jobs.server.ts`,
+    // docs/backend/media.md → Deleting a user).
     uploadedBy: text("uploaded_by")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
@@ -120,9 +122,9 @@ export const media = pgTable(
     createdAt: timestamptz("created_at").notNull().defaultNow(),
   },
   (table) => [
-    // Serves the cleanup's "unattached and older than 25 hours" scan (`findOrphanedMediaIds`).
+    // Serves the cleanup's "unattached and older than 25 hours" scan (`MediaRepo.findOrphanedIds`).
     index("media_attached_at_created_at_idx").on(table.attachedAt, table.createdAt),
-    // Serves the upload quota's count (`countUnattachedMedia`) and the foreign key's check when a user is deleted.
+    // Serves the upload quota's count (`MediaRepo.countUnattached`) and the foreign key's check when a user is deleted.
     index("media_uploaded_by_idx").on(table.uploadedBy),
   ],
 );
@@ -142,7 +144,7 @@ export const note = pgTable(
     /** Cleared if the media row is ever deleted, so a note never points at a missing image. */
     imageMediaId: uuid("image_media_id").references(() => media.id, { onDelete: "set null" }),
     // Millisecond precision, which is all a JavaScript `Date` holds: the list's cursor sends this value back to
-    // compare with (`findNotesByOwner`), and a stored microsecond would make the note it came from match again.
+    // compare with (`NoteRepo.findByOwner`), and a stored microsecond would make the note it came from match again.
     createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
   },
   (table) => [

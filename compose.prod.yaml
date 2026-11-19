@@ -1,6 +1,7 @@
 # Production stack (docs/deployment.md). Caddy is the only service with public ports: it terminates HTTPS and proxies to
-# the app and to the error viewer (on its own subdomain), and serves image variants read-only from SeaweedFS. Before the app starts, two one-time jobs run from the
-# app's image: `migrate` applies pending database migrations and `storage-init` creates the media bucket.
+# the app and to the error viewer (on its own subdomain), and serves image variants read-only from SeaweedFS. Before the
+# app starts, two one-time jobs run from the app's image: `migrate` applies pending database migrations and
+# `storage-init` creates the media bucket.
 #
 # Set up, update and back up with `deploy/deploy.sh`. By hand: configure with a `.env` file next to this one (copy
 # `.env.production.example`), then deploy or update with
@@ -163,7 +164,8 @@ services:
     logging: *logging
 
   # S3 with authentication (`configs.seaweedfs-s3`), reachable only inside this stack. Small volumes, not reserved up
-  # front, for the same reasons as in `compose.dev.yaml`: reserved, they took 10 GB of a 40 GB server for 1 MB of images.
+  # front, for the same reasons as in `compose.dev.yaml`: reserved, they took 10 GB of a 40 GB server for 1 MB of
+  # images.
   seaweedfs:
     image: chrislusf/seaweedfs:3.99
     restart: unless-stopped
@@ -200,16 +202,17 @@ services:
       NOTIFY_CHAT_ID: ${ERROR_VIEWER_NOTIFY_CHAT_ID:-}
       # The most the viewer's database may take of the disk, in MB; the oldest events go first.
       MAX_DB_MB: ${ERROR_VIEWER_MAX_DB_MB:-1024}
-      # Optional: a report's request in the tracing backend, `{traceId}` where its ID goes (docs/deployment.md → Traces).
+      # Optional: a report's request in the tracing backend, `{traceId}` where its ID goes (docs/deployment.md →
+      # Traces).
       TRACE_URL: ${ERROR_VIEWER_TRACE_URL:-}
     volumes:
       - error-viewer-data:/data
     logging: *logging
 
-  # ------ Traces ------
-  # OpenObserve, which keeps the app's traces, logs and metrics (docs/deployment.md → Traces). Off unless the server's
-  # `.env` has `COMPOSE_PROFILES=observability`, which Compose reads itself: it needs a few hundred MB of memory, more
-  # than a small server spares. Bound to the server's loopback, so it's reached through an SSH tunnel only, like pgweb.
+  # ------ Traces ------ OpenObserve, which keeps the app's traces (with their log lines) and metrics
+  # (docs/deployment.md → Traces). Off unless the server's `.env` has `COMPOSE_PROFILES=observability`, which Compose
+  # reads itself: it needs a few hundred MB of memory, more than a small server spares. Bound to the server's loopback,
+  # so it's reached through an SSH tunnel only, like pgweb.
   openobserve:
     image: public.ecr.aws/zinclabs/openobserve:v1.1.2
     profiles: [observability]

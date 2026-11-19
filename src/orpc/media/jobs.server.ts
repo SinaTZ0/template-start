@@ -16,7 +16,7 @@ import { Storage } from "#/server/storage.server";
  * The bucket goes first: if it fails, the row stays and the delete can be retried; the other order could leave files
  * nothing points to. Entities still pointing at the row are cleared by the foreign key.
  */
-const deleteMedia = Effect.fn("MediaJobs.deleteMedia")(function* (mediaId: string) {
+export const deleteMedia = Effect.fn("MediaJobs.deleteMedia")(function* (mediaId: string) {
   const repo = yield* MediaRepo;
   const found = yield* repo.findById(mediaId);
   if (Option.isNone(found)) return;

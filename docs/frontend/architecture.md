@@ -23,16 +23,16 @@ src/
       components/           # components used only by this route
       hooks/                # hooks used only by this route
       queries.ts            # query options used only by this route
-      search-params.ts      # this route's search schema
+      search-params.ts      # this route's search schema (Effect Schema, `searchSchema`)
       atoms.ts              # Jotai atoms used only by this route
-      schema.ts             # form schemas owned by this route
+      schema.ts             # form schemas owned by this route (Effect Schema, `standardSchema`)
   components/
     primitive/              # this app's versions of shadcn components
     shared/                 # app-made UI shared by multiple routes
     ui/                     # shadcn source, reference only
   hooks/                    # hooks shared by multiple routes
   atoms/                    # Jotai atoms shared by multiple routes (create it with the first one)
-  lib/                      # shared helpers (browser-safe, or *.server.ts)
+  lib/                      # shared helpers (browser-safe, or *.server.ts); schema helpers in lib/schema.ts
   orpc/client.ts            # isomorphic API client and query utilities (see ./data-loading.md)
   paraglide/                # generated message functions and runtime; never edit (see ./i18n.md)
 messages/                   # fa.json, en.json: the text, one file per locale
@@ -74,9 +74,9 @@ The full rules are in [data-loading.md](./data-loading.md). In short:
   `redirect(...)`. What it returns becomes route context for the routes below. Procedures check auth again on their
   own.
 - **Server-only code** uses the `.server.ts` suffix; Start's import protection fails the build when browser-reachable
-  code imports it. Secrets and environment values never reach a component.
-- The frontend may import browser-safe backend files (contracts, `constants.ts`, `*.errors.ts`) for types and shared
-  option values, never services, repositories, or `*.server.ts` files.
+  code imports it. Secrets and settings (`AppConfig`, `src/server/config.server.ts`) never reach a component.
+- The frontend may import browser-safe backend files (a feature's `contract.ts` and `constants.ts`,
+  `src/orpc/errors.ts`) for types and shared option values, never services, repositories, `src/server/` or `*.server.ts` files.
 
 ## State
 
@@ -99,9 +99,13 @@ The full rules are in [data-loading.md](./data-loading.md). In short:
 
 ## Forms
 
-- Forms use `react-hook-form` with `zodResolver` and the `Field` primitives (`Field`, `FieldLabel`, `FieldError`).
+- Forms use `react-hook-form` with `standardSchemaResolver` (`@hookform/resolvers/standard-schema`) and the `Field`
+  primitives (`Field`, `FieldLabel`, `FieldError`).
 - Each form has its own schema in its route's `schema.ts` (beside the form once it is shared,
-  `note-form.schema.ts`), written for user experience (messages, when to validate).
+  `note-form.schema.ts`), written for user experience (messages, when to validate). It is an Effect Schema struct
+  passed through `standardSchema` (`src/lib/schema.ts`); each check's message is a `text: () => m.<key>()` function,
+  and free text is `PersianText`, which normalizes it as it validates (`src/routes/auth/schema.ts`). Fields more than
+  one form asks for live in `src/lib/` (`EmailField`, `NewPasswordField` in `src/lib/auth-form-fields.ts`).
   Do not derive it from backend validation, even when the rules currently match; update both explicitly when a
   requirement changes.
 - Shared option lists (select values, limits) are imported from the feature's browser-safe constants.

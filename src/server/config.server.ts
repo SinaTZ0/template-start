@@ -43,7 +43,7 @@ export class AppConfig extends Context.Service<
     };
     /** Where errors and slow requests are reported (the error viewer). None turns reporting off. */
     readonly sentryDsn: Option.Option<string>;
-    /** Where traces, logs and metrics are exported over OTLP/HTTP (OpenObserve). None turns export off. */
+    /** Where traces and metrics are exported over OTLP/HTTP (OpenObserve). None turns export off. */
     readonly otlp: Option.Option<{
       readonly baseUrl: string;
       readonly authorization: Option.Option<Redacted.Redacted>;

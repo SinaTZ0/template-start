@@ -125,8 +125,8 @@ export function createBetterAuth({
       resetPasswordTokenExpiresIn: RESET_PASSWORD_LINK_HOURS * 60 * 60,
       // A new password ends every session: whoever knew the old one is signed out too.
       revokeSessionsOnPasswordReset: true,
-      // `url` is Better-Auth's own `/api/auth/reset-password/<token>`, which checks the token and sends the browser on to
-      // `/reset-password`, token included (or `?error=INVALID_TOKEN`).
+      // `url` is Better-Auth's own `/api/auth/reset-password/<token>`, which checks the token and sends the browser on
+      // to `/reset-password`, token included (or `?error=INVALID_TOKEN`).
       sendResetPassword: async ({ user, url }, request) => {
         const locale = requestLocale(request);
         const link = withLandingPage({ url, path: "/reset-password", locale });
@@ -142,8 +142,8 @@ export function createBetterAuth({
     /*------ Email Verification ------*/
     emailVerification: {
       sendOnSignUp: true,
-      // Signing in before confirming sends a fresh link (with a 403 `EMAIL_NOT_VERIFIED`), so a lost or expired email is
-      // never a dead end. Only after the password checked out, and the auth rate limit bounds how often.
+      // Signing in before confirming sends a fresh link (with a 403 `EMAIL_NOT_VERIFIED`), so a lost or expired email
+      // is never a dead end. Only after the password checked out, and the auth rate limit bounds how often.
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       expiresIn: VERIFY_EMAIL_LINK_HOURS * 60 * 60,
@@ -158,7 +158,8 @@ export function createBetterAuth({
 
     user: {
       additionalFields: {
-        // Never from the client: everyone signs up as `user`; only server code promotes or blocks (`user-constants.ts`).
+        // Never from the client: everyone signs up as `user`; only server code promotes or blocks
+        // (`user-constants.ts`).
         role: { type: "string", required: false, defaultValue: "user", input: false },
         status: { type: "string", required: false, defaultValue: "active", input: false },
       },
@@ -209,8 +210,8 @@ export function createBetterAuth({
         }
 
         /*------ Blocked Accounts ------*/
-        // A blocked account can't start a new session. Existing ones are revoked by the route guard and refused by the
-        // API middleware.
+        // A blocked account can't start a new session. Existing ones are revoked by the route guard and refused by
+        // `access` on every procedure (`effectProcedure`).
         if (ctx.path === "/sign-in/email") {
           const email: unknown = ctx.body?.email;
           if (typeof email !== "string") return;

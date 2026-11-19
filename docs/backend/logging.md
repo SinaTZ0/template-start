@@ -5,58 +5,83 @@ How the server logs, where errors and slow requests are reported, and how to fin
 ## Overview
 
 ```text
-request ──▶ src/server.ts (trace starts, reqId) ──▶ procedure ▸ service ▸ repository ▸ db
-                                                                                       │
-              one log line per request ◀── trace (time per kind + slowest spans) ◀─────┘
-              slow request ──▶ error viewer warning, with the timeline of its slowest spans
+request ──▶ src/server.ts ▸ observeRequest (root span) ──▶ rpc.<path> ▸ service ▸ repository ▸ db
+                                                                                               │
+          one log line per request ◀── request collector (time per kind + the request's spans) ◀┘
+          slow request ──▶ error viewer warning, with the timeline of its spans
 
-log.error({ err }) ──▶ log line + error viewer event      browser error ──▶ error viewer event
+Effect.logError(…, cause) / log.error({ err }) ──▶ log line + error viewer event
+browser error ──▶ error viewer event
+spans, Effect's logs, metrics ──▶ OTLP backend (OpenObserve), only when OTEL_EXPORTER_OTLP_ENDPOINT is set
 ```
 
-- **Logs are plain pino.** Server code logs through `src/lib/logger.server.ts`, never `console`. Production writes one
-  JSON object per line to stdout for Docker to collect. Development prints one line per log through `pino-pretty`.
+The code is in `src/server/observability/`.
+
+- **One writer.** Every line the server writes goes through `writeLog` (`log.server.ts`): Effect's log entries
+  through the app's logger (`logger.server.ts`), and the few places outside any fiber through `createLogger`.
+  Production writes one JSON object per line to stdout for Docker to collect. Development prints one readable line
+  per entry, with an error under it.
 - **Errors go to the error viewer.** `tools/error-viewer` is a small Go service of this repo that speaks Sentry's
   protocol, so the app uses the official Sentry SDKs (`@sentry/node`, `@sentry/browser`) pointed at it. It stores each
-  event with its stack and context in SQLite and lists them for searching. It doesn't group, alert or email. Development
-  runs it with `pnpm errors` (`go run`), production from `compose.prod.yaml`.
-- **One trace per request.** `src/lib/trace.server.ts` keeps the request's timings in `AsyncLocalStorage`, so a query
-  deep inside a service lands in the right request without anything being passed down. Slow requests are reported to
-  the error viewer with the trace's timeline.
+  event with its stack and context in SQLite and lists them for searching. Development runs it with `pnpm errors`
+  (`go run`), production from `compose.prod.yaml`.
+- **One trace per request.** The server entry opens a root span per request (`observeRequest` in `http.server.ts`),
+  and every Effect the request starts joins it, the procedures that loaders call in-process included. Its trace ID is
+  the request's ID. A tracer wrapper (`request-spans.server.ts`) keeps each request's spans for its log line and, when
+  it was slow, a report to the error viewer with the spans' timeline.
 
 ## Writing Logs
 
-Take a tagged child per module, keep the message short and constant, and put variable details in the object so logs
-stay searchable:
+Effect code logs with `Effect.logDebug`, `Effect.logInfo`, `Effect.logWarning` and `Effect.logError`. Keep the message
+short and constant, and put variable details in annotations so logs stay searchable:
 
+<!-- prettier-ignore -->
 ```ts
-const log = createLogger("media");
-
-log.info({ mediaId, kind }, "media uploaded");
-log.error({ err, mediaId }, "could not clean up the variants");
+yield* Effect.logInfo("deleted orphaned media").pipe(Effect.annotateLogs({ deleted, failed }));
 ```
 
-- Log errors under the `err` key. pino's standard serializer writes its type, message, stack and cause chain.
-- **Every `log.error({ err }, …)` is also reported to the error viewer**, with the line's other fields attached and its
-  `module`, `reqId` and `errorId` as searchable tags. There is no separate "report" call: logging the error is
-  reporting it. An error-level line without `err` (like `request failed`) is only logged.
-- The global oRPC middleware logs every unexpected procedure failure once, with the `errorId` the client receives.
-  Don't log and rethrow the same error in services: it would become two reports.
-- Every line written while a request is handled carries its `reqId`. Search for it to see everything one request did.
-  It is 16 hex characters, and every response returns it as an `X-Request-Id` header (set by the server entry,
-  `src/server.ts`), so it can be read from the browser's devtools and quoted in a bug report.
+- Log an error as the cause, after the message: `Effect.logError("could not clean up the variants", cause)` in an
+  `Effect.catchCause`. A typed error is logged as `Cause.fail(error)` (`mail.send` does it for a refused email). The
+  line gets the error under `err`, with its type, message, stack and cause chain.
+- **Every error-level line with an error is also reported to the error viewer**, with the line's other fields
+  attached and its `module`, `reqId`, `userId`, `clientId` and `errorId` as searchable tags. There is no separate
+  "report" call: logging the error is reporting it. An error-level line without one (like `request failed`) is only
+  logged.
+- The `module` annotation names the line's module (`Effect.annotateLogs({ module: "media" })`); without one it is
+  `app`. A procedure's lines are `orpc`, a job's `jobs`. Every other annotation becomes a field of the line.
+- The boundary logs every defect of a procedure once, with the `errorId` the client receives. Don't log a failure and
+  then fail with it in services: it would become two reports.
+- Every log entry is also an event on the span it was written in, so an exported trace shows the logs in place.
+
+Code that runs outside Effect (Better-Auth's callbacks, the oRPC handler's interceptor, `handleErrorsMiddleware`) takes
+a logger per module, with the error under `err`:
+
+```ts
+const log = createLogger("auth");
+
+created.on("error", (error) => log.error({ err: error }, "idle auth database connection failed"));
+```
+
+Never use `console` in server code; seeds and scripts are the exception.
+
+**Request IDs.** Every line written while a request is handled carries its `reqId`, the request's trace ID (32 hex
+characters), and the `spanId` it was written in. Search for the `reqId` to see everything one request did. Every
+response returns it as an `X-Request-Id` header (`observeRequest`), so it can be read from the browser's devtools and
+quoted in a bug report. Each job run is a trace of its own, so its lines share a `reqId` too.
 
 ## Error Reporting
 
-`src/lib/error-reporting.server.ts` sets up the server SDK; `src/client.tsx` sets up the browser's.
+`report.server.ts` sets up the server SDK; `src/client.tsx` sets up the browser's.
 
-| Source                                                   | How it reaches the error viewer                              |
-| -------------------------------------------------------- | ------------------------------------------------------------ |
-| Unexpected procedure failures (global oRPC middleware)   | `log.error({ err, errorId })`, tagged with the `errorId`     |
-| Failures of the request handler itself (`src/server.ts`) | `log.error({ err })`                                         |
-| Better-Auth errors, failed health checks, failed jobs…   | Any other `log.error({ err })`                               |
-| Crashes (uncaught exceptions, unhandled rejections)      | The SDK's own handlers                                       |
-| Browser errors                                           | The SDK's handlers, plus `onCaughtError` for boundary errors |
-| Slow requests                                            | A warning from the request instrumentation (below)           |
+| Source                                                 | How it reaches the error viewer                            |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| Defects in procedures (`effectProcedure`)              | `procedure failed`, tagged with the client's `errorId`     |
+| Other oRPC failures (an output off its schema)         | `handleErrorsMiddleware`, the same way                     |
+| Failures of the request handler itself                 | `unhandled request error`, from `observeRequest`           |
+| Failed jobs, Better-Auth errors, failed health checks… | Any other error line with an error                         |
+| Crashes (uncaught exceptions, unhandled rejections)    | The SDK's own handlers                                     |
+| Browser errors                                         | The SDK's handlers, and `onCaughtError` for boundaries     |
+| Slow requests                                          | A warning from `observeRequest` (Reading the Output below) |
 
 **Repeats are throttled.** Every server report reaches the error viewer from one address, and the viewer's answer to
 a burst past its limit makes the SDK stop sending everything for a while. So during an incident the app sends only the
@@ -65,33 +90,41 @@ first few of each kind of report (`src/lib/report-throttle.server.ts`):
 - **Errors:** at most 5 a minute with the same type, message (digits and UUIDs ignored) and first stack frame in the
   app's own code. Errors that differ in any of these never hold each other back. The next one sent carries how many were
   left out (`throttle.suppressed`), and the viewer shows it above the event.
-- **Slow requests:** one report a minute per method and route (see [Reading the Output](#reading-the-output)).
+- **Slow requests:** one report a minute per method and route.
 
 The log line is still written every time: only the report is left out. Up to 500 keys are tracked; past that, the
-least recently seen is forgotten.
+oldest is forgotten.
 
 A user who sees a 500 gets its `errorId`. Paste it into the error viewer's search box to find the full error, then
 click its `reqId` to see everything else that request reported.
 
-**Client ID.** Each browser gets a random ID in a `cid` cookie the first time the page runs
-(`src/lib/client-id.ts`). Browser reports carry it as a `clientId` tag, and so do the server's reports for that
-browser's requests, so one visitor's errors on both sides can be read together. It is random, not a fingerprint of the
-device, and identifies nobody: clearing cookies gives a new one. A browser's very first page load has no ID yet,
-because the cookie is set once that page runs.
+### Client ID
 
-**User ID.** Once a request's session is read (`getRequestSession` in `src/lib/auth.server.ts`, which every session
-lookup goes through), its log lines and reports carry the signed-in user's database ID as a `userId` tag. The browser
-sends the same ID as the report's user (`setReportedUser`, called after hydration from the viewer query in
-`src/routes/site_layout/`, and cleared on sign-out). The error viewer reads both, so `userId:` finds a user's server
-and browser events alike. Only the ID is sent, never the email or name. It does tie events to a person: the viewer is self-hosted, behind its password, and keeps events for
-30 days (`RETENTION_DAYS`), which is the accepted trade-off for finding one user's errors with `userId:`.
+Each browser gets a random ID in a `cid` cookie the first time the page runs (`src/lib/client-id.ts`). Browser
+reports carry it as a `clientId` tag, and so do the server's reports for that browser's requests, so one
+visitor's errors on both sides can be read together. It is random, not a fingerprint of the device, and identifies
+nobody: clearing cookies gives a new one. A browser's very first page load has no ID yet, because the cookie is set
+once that page runs.
 
-**What isn't sent.** Cookies, headers, request bodies, query strings, IP addresses, local variables and the user's
-email and name are all off (`dataCollection` in both setups); the user's ID is the one thing set on purpose. A failed
-query's parameters are replaced with `(hidden)` unless `LOG_QUERY_PARAMS` is on.
+### User ID
+
+Once a procedure with `access` has found the signed-in user, the rest of the request's lines and reports carry the
+user's database ID as a `userId` tag: `effectProcedure` puts it on the request scope, on the procedure's log lines and
+on its span (`user.id`). A request that runs no such procedure has none. The browser sends the same ID as the report's
+user (`setReportedUser`, called after hydration from the viewer query in `src/routes/site_layout/`, and cleared on
+sign-out). The error viewer reads both, so `userId:` finds a user's server and browser events alike. Only the ID is
+sent, never the email or name. It does tie events to a person: the viewer is self-hosted, behind its password, and
+keeps events for 30 days (`RETENTION_DAYS`), which is the accepted trade-off for finding one user's errors with
+`userId:`.
+
+### What Isn't Sent
+
+Cookies, headers, request bodies, query strings, IP addresses, local variables and the user's email and name are all
+off (`dataCollection` in both setups); the user's ID is the one thing set on purpose. A failed query's parameters are
+replaced with `(hidden)` unless `LOG_QUERY_PARAMS` is on; Drizzle leaves them out of its errors entirely unless it is.
 
 **Secrets are redacted** before a line is written or a report is sent (`src/lib/redact.server.ts`, adapted from
-`@nestjs/observe`). The logger redacts a line's fields once, for both its output and the report; the error serializer
+`@nestjs/observe`). `writeLog` redacts a line's fields once, for both its output and the report; the error serializer
 and the server SDK's `beforeSend` redact the error's message and stack.
 
 - **By key:** a field whose name ends in `password`, `secret`, `token`, `credential(s)`, `signature`, `jwt`, `cookie`,
@@ -103,11 +136,15 @@ and the server SDK's `beforeSend` redact the error's message and stack.
 - **In a URL:** the values of those query keys, plus `code`, `state`, `sig` and `key`.
 
 It is a safety net, not a guarantee: a secret logged in a shape none of these match still goes out. Don't log
-credentials. Ordinary text, Persian included, is never changed.
+credentials. Settings that are secrets are `Redacted` in `AppConfig`, so they print as `<redacted>` wherever they end
+up. Ordinary text, Persian included, is never changed.
+
+### Release and Source Maps
 
 **Release.** A production build carries the commit it was made from (`APP_RELEASE`, read in `vite.config.ts`: the
 deploy tool passes it to the image build, and a build on your machine asks git). Both SDKs send it as the report's
-release; the viewer shows it and finds a build's events with `release:<commit>`. The dev server sends none.
+release, and the OTLP export as the service version; the viewer shows it and finds a build's events with
+`release:<commit>`. The dev server sends none.
 
 **Stacks point at source files.** The server bundle ships with source maps and runs with `--enable-source-maps`
 (`Dockerfile`), so stacks are mapped before they are logged or sent. The dev server maps them itself. The image also
@@ -127,66 +164,73 @@ after a deploy replaced that build's files, stays minified.
 
 ### What Is Timed
 
-| Kind         | Recorded by                                          | Name                                |
-| ------------ | ---------------------------------------------------- | ----------------------------------- |
-| `procedure`  | `traceProcedureMiddleware`, first on the implementer | procedure path: `note.list`         |
-| `service`    | `traceLayers` Vite plugin (below)                    | `<feature>.<fn>`: `note.listNotes`  |
-| `repository` | `traceLayers` Vite plugin                            | `<feature>.<fn>`: `note.insertNote` |
-| `db`         | the traced pool in `src/db/client.server.ts`         | the SQL, without parameters         |
-| `storage`    | S3 client middleware in `src/lib/storage.server.ts`  | command: `PutObject`                |
-| `task`       | `span(...)` calls in app code                        | whatever the call names             |
+Every span is sorted into a kind by its name (`spanKind` in `timeline.ts`), so the naming convention of `Effect.fn` is
+what makes the timing work:
 
-Kinds nest: a procedure's time includes its service and repository calls, and those include their queries. Add the
-kinds up and you count the same time more than once.
+| Kind         | Spans                                                       | Example                              |
+| ------------ | ----------------------------------------------------------- | ------------------------------------ |
+| `procedure`  | `effectProcedure`'s span, `rpc.<path>`                      | `rpc.note.list`                      |
+| `service`    | Names that start with `<Name>Service.`                      | `NoteService.list`                   |
+| `repository` | Names that start with `<Name>Repo.`                         | `NoteRepo.findOwned`                 |
+| `db`         | Each statement on the app's pool: Drizzle's and the queue's | the SQL, without parameters          |
+| `storage`    | Names that start with `Storage.`                            | `Storage.put`                        |
+| `task`       | Every other span                                            | `Auth.session`, `media.processImage` |
 
-Procedures are timed the same way over HTTP (`/rpc/*`) and in-process, when a loader calls them during SSR.
-Loaders, `beforeLoad` and rendering aren't spans of their own: they run in the browser too, and the server-side work
-they start is already a `procedure` span. Time spent rendering shows as the gap between those spans and the end of the
-request.
+The request itself is the root span, `GET /notes/$noteId` (the route pattern), of kind `server`. Kinds nest: a
+procedure's time includes its service and repository calls, and those include their queries. Add the kinds up and you
+count the same time more than once.
 
-**Services and repositories** are timed by the `traceLayers` Vite plugin (`vite-plugins/trace-layers.ts`): every
-`export async function` in `src/orpc/<feature>/service.ts` or `repository.ts` becomes a span named
-`<feature>.<function>`, with no change to the feature's code. Only `async` functions count. A plain function that returns
-a Drizzle query (like `findNotesByOwner`) is left alone, because a query builder runs again each time it is awaited;
-its query still shows up as a `db` span. Unit tests (`vitest.config.ts`) don't load the plugin.
+Procedures are timed the same way over HTTP (`/rpc/*`) and in-process, when a loader calls them during SSR: both are
+children of the request's root span, which the boundary finds through the request scope (`request-scope.server.ts`,
+read outside the fiber only). Loaders, `beforeLoad` and rendering aren't spans of their own: they run in the browser
+too, and the server-side work they start is already a `procedure` span. Time spent rendering shows as the gap between
+those spans and the end of the request.
+
+Better-Auth's queries run on its own pool, which isn't traced: their time is the `Auth.session` span's.
 
 ### Timing Other Work
 
-Wrap anything that may be slow and isn't covered above, such as CPU-heavy processing or a call to an external API:
+A function written as `Effect.fn("Owner.method")` is already a span. Wrap anything else that may be slow, such as
+CPU-heavy processing or a call to an external API, in `Effect.withSpan`:
 
+<!-- prettier-ignore -->
 ```ts
-import { span } from "#/lib/trace.server";
-
-const processed = await span({ kind: "task", name: "media.processImage" }, () => processImage({ file, kind }));
+const processed = yield* Effect.promise(() => processImage({ file, kind })).pipe(
+  Effect.withSpan("media.processImage"),
+);
 ```
 
-Outside a request (startup, `pnpm db:seed`, tests) `span` just runs the function.
+Outside a request (startup, a job, `pnpm db:seed`, tests) spans are still made and exported, but no request line
+collects them.
 
 ### Reading the Output
 
-Every request writes one line:
+Every request writes one line, here as development prints it:
 
 ```text
-INFO: GET /notes 200 45ms (procedure 2×34ms, db 3×9ms) {"module":"http","reqId":"638455eb2c7f1a90"}
+[09:41:07.215] INFO: GET /notes 200 45ms (task 2×9ms, service 2×30ms, procedure 2×36ms, db 1×9ms, repository 1×12ms)
 ```
 
-`procedure 2×34ms` means two procedures ran, taking 34 ms in total. A 5xx is an error line. A request slower than
-`LOG_SLOW_REQUEST_MS` is a warning line, and is also **reported to the error viewer** as
-`Slow request: GET /notes/$id (1420ms)`, of kind `slow`. Search `route:/notes/$id` to see the slow hits on one route.
-Only one report per method and route is sent a minute, so a slow database doesn't flood the viewer and crowd out the
-errors. The next report carries how many were left out (`timeline.skipped`), shown as "N more slow requests on this
-route since the last report". The warning line is written for every one.
+followed by its fields: `module`, `reqId`, `userId` when known, and `request` with the method, path, status, time and
+route. `procedure 2×36ms` means two procedures ran, taking 36 ms in total; kinds are listed in the order their first
+span ended. A 5xx is an error line (`request failed: …`). A request slower than `LOG_SLOW_REQUEST_MS` is a warning
+line (`slow request: …`), and is also **reported to the error viewer** as `Slow request: GET /notes/$noteId (1420ms)`,
+of kind `slow`. Search `route:/notes/$noteId` to see the slow hits on one route. Only one report per method and route
+is sent a minute, so a slow database doesn't flood the viewer and crowd out the errors. The next report carries how
+many were left out (`timeline.skipped`), shown as "N more slow requests on this route since the last report". The
+warning line is written for every one.
 
 The report has no stack trace (a stack shows where code is, not where time went). Its **Timeline** shows the time per
 kind and draws the request's spans as a waterfall, one row each:
 
 ```text
 Span                                          Start  Duration  0        1s        2s        3s
-procedure session.viewer                        1ms     121ms  ▇
-  db select … from session where …              6ms     116ms  ▇
-procedure note.list                           123ms    3116ms   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
-  db ×5 select … from user where …            124ms      87ms   ▇
-  service note.listNotes                      214ms    3024ms    ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+procedure rpc.session.viewer                    1ms     121ms  ▇
+  service SessionService.viewer                 2ms     119ms  ▇
+    task Auth.session                           2ms     118ms  ▇
+procedure rpc.note.list                       123ms    3116ms   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+  task Auth.session                           124ms      87ms   ▇
+  service NoteService.list                    214ms    3024ms    ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
 3 spans under 65ms not shown.
 ```
 
@@ -195,52 +239,86 @@ bar shows the same on the request's time axis. The bars show order and waiting: 
 it ends ran after it, two that start together ran in parallel, and a gap is time spent on untraced work. A span is
 indented under the one it ran inside, so parallel work keeps its own children. Identical siblings are merged into one
 row (`db ×5`) with their total time. Spans under 2% of the request are left out, and the line under the table counts
-them. Queries show their shape only: quotes and column lists are dropped, and parameters are never included. The app
-sends the rows as data (`traceTimeline` in `src/lib/trace.server.ts`); the viewer draws them.
+them. Queries show their shape only: quotes and column lists are dropped (`sql-text.ts`), and parameters are never
+included. The app sends the rows as data (`buildTimeline` in `timeline.ts`); the viewer draws them.
 
-Read it from the top down: follow the longest bar at each level. Here the page waits on `note.list`, which spends
-87 ms on queries and 3024 ms in `note.listNotes`, whose own query is too fast to be listed. So the time went into the
-service's own code.
+Read it from the top down: follow the longest bar at each level. Here the page waits on `rpc.note.list`, which spends
+87 ms reading the session and 3024 ms in `NoteService.list`, whose own query is too fast to be listed. So the time went
+into the service's own code.
 
 - **One span takes most of the time:** that is the bottleneck. For a query, check its plan and indexes.
 - **A `×N` row** (`db ×41 select …`): a query inside a loop (N+1). Fetch them in one query or a join.
 - **A span much slower than its children:** time in its own code, usually rendering, CPU work or waiting on something
-  untraced. Wrap the suspect in a `task` span.
-- **`failed`:** that span threw (its bar is red). Its error is reported separately with the same `reqId` tag.
+  untraced. Wrap the suspect in `Effect.withSpan`.
+- **`failed`:** that span ended with a defect (its bar is red). Its error is reported separately with the same `reqId`
+  tag. A typed failure (`NoteNotFound`) is an expected outcome, not a failed span.
 
-A query slower than `LOG_SLOW_QUERY_MS` also gets its own `slow query` warning line, inside or outside a request. It
-isn't reported to the error viewer: the slow request it belongs to is.
+A query slower than `LOG_SLOW_QUERY_MS` also gets its own `slow query` warning line (module `db`, with `sql` and `ms`),
+inside or outside a request. It isn't reported to the error viewer: the slow request it belongs to is.
 
 ### Limits
 
 - A request's time ends when its response starts. Content streamed in later (the rest of a streamed page) isn't
   counted.
-- A trace keeps at most 300 spans. Spans past that still count in the totals but not in the timeline, and the timeline
-  shows at most 40 rows.
-- Only queries through `db` (`src/db/client.server.ts`) are traced. A separate `pg` pool or client isn't.
+- A request keeps at most 300 spans. Spans past that still count in the totals but not in the timeline, and the
+  timeline shows at most 40 rows.
+- Only statements on the app's pool (`PgLive`) are `db` spans. A separate `pg` pool or client, like Better-Auth's,
+  isn't traced.
 - The error viewer shows errors, not performance: there are no percentile charts, only reports for requests past the
-  threshold. The log lines carry every request's timing.
+  threshold. The log lines carry every request's timing, and the OTLP export every request's trace.
+
+## OpenTelemetry
+
+With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the app sends its traces and metrics to an OpenTelemetry backend over
+OTLP/HTTP (`export.server.ts`, Effect's `OtlpTracer` and `OtlpMetrics`). Without it, nothing leaves the
+server. `OTEL_EXPORTER_OTLP_AUTHORIZATION`, when set, is sent as the `Authorization` header.
+
+- **Traces** are the same spans the request line is made from: one trace per request, with its procedures, services,
+  repositories, queries (their SQL, never their parameters) and bucket calls, and one per job run. The exporter's
+  tracer sits under the request collector, so the request line and the slow-request timeline keep working.
+- **Logs** travel inside the traces: each line Effect code writes is also an event of the span it was written in,
+  redacted like the stdout line (`logger.server.ts`). Log lines aren't exported on their own: Effect's OTLP logger
+  would send their fields unredacted. They stay in the container's log, with lines written outside any fiber
+  (`createLogger`).
+- **Metrics** (`metrics.server.ts`): `http.server.request.duration`, every request's time by method, route pattern and
+  status class, and `jobs.runs`, every job run by job and outcome (`success`, `retry`, `failed`).
+- The service is named `app`, with the build's commit as its version and `deployment.environment.name` set to
+  `development` or `production`.
+
+In development, OpenObserve runs from `compose.dev.yaml` under the `observability` profile, which `pnpm services`
+doesn't start: `docker compose -f compose.dev.yaml --profile observability up -d`. Its UI is http://localhost:5080
+(`dev@example.com`, password `development`). Then set in `.env`:
+
+```text
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5080/api/default
+OTEL_EXPORTER_OTLP_AUTHORIZATION=Basic <base64 of dev@example.com:development>
+```
+
+In production it is optional and off by default, since it needs a few hundred MB of memory
+([deployment.md](../deployment.md) → Traces). With `TRACE_URL` set on the error viewer, each report's `reqId` links
+to its trace in the backend ("Open trace").
 
 ## The Error Viewer
 
 `tools/error-viewer` receives Sentry envelopes at `/api/1/envelope/`, keeps their `event` items in SQLite and shows
 them on a dashboard. It runs as its own process with its own database, so it keeps working when the app or Postgres
-is down. Its settings and internals are in [its README](../../tools/error-viewer/README.md).
+is down. Its settings and internals are in [its README](../../tools/error-viewer/README.md), including how it groups
+alike events and how it announces a new kind of error to a chat webhook (`NOTIFY_URL`).
 
 - **List** (`/`): newest first, with filters for level, kind (`error`, `slow`, `message`, `browser`), platform,
   environment and time, a 14-day count strip and an auto-refresh toggle. Every view is a URL you can bookmark.
   Consecutive events with the same `clientId` are drawn as one card, with the client and its event count on the first
   row. Only neighbors group: a client whose events are interleaved with another's shows as separate cards.
-- **Search box:** a UUID finds an `errorId`, 16 hex characters a `reqId` (8 for events stored before reqIds grew);
-  `errorId:`, `reqId:`, `path:`, `route:`, `module:`, `clientId:` and `userId:` match that field exactly; anything
-  else is searched in titles.
+- **Search box:** a UUID finds an `errorId`, 32 hex characters a `reqId` (16 and 8 for events stored before reqIds
+  became trace IDs); `errorId:`, `reqId:`, `path:`, `route:`, `module:`, `clientId:` and `userId:` match that field
+  exactly; anything else is searched in titles.
 - **Detail** (`/events/<id>`): tags (each `errorId`, `reqId`, `path`, `route`, `clientId` and `userId` links to the
-  list filtered by it), the exception chain with source lines for the app's own frames, the timeline of a slow
-  request, the log line's fields, browser details and the raw JSON. A value holding a hidden or look-alike character
-  (Arabic `ي` or `ك`, a direction mark, a ZWNJ, NBSP, a BOM, Arabic-Indic digits, mixed digit systems) is shown again
-  under itself with each such character marked, e.g. `عل[ي U+064A Arabic yeh]`. Text the app accepts is normalized
-  on the way in ([architecture.md](./architecture.md) → Free text is normalized); this shows what got through
-  anyway.
+  list filtered by it, and the `reqId` to its trace when `TRACE_URL` is set), the exception chain with source lines for
+  the app's own frames, the timeline of a slow request, the log line's fields, browser details and the raw JSON. A
+  value holding a hidden or look-alike character (Arabic `ي` or `ك`, a direction mark, a ZWNJ, NBSP, a BOM,
+  Arabic-Indic digits, mixed digit systems) is shown again under itself with each such character marked, e.g.
+  `عل[ي U+064A Arabic yeh]`. Text the app accepts is normalized on the way in ([architecture.md](./architecture.md) →
+  Free text is normalized); this shows what got through anyway.
 
 ### Development
 
@@ -260,32 +338,41 @@ details. Set `LOG_LEVEL=info` to see every request line again.
 ### Another Tracker
 
 The app only speaks Sentry's protocol, so Bugsink or Sentry itself work as a drop-in: point `SENTRY_DSN` at one of their
-projects. Do that when you need what the viewer leaves out: grouping into issues, alerts, several projects or users.
+projects. Do that when you need what the viewer leaves out: issues to assign and resolve, alert rules, several
+projects or users.
 
 ## Configuration
 
-| Variable              | Default | Meaning                                                         |
-| --------------------- | ------- | --------------------------------------------------------------- |
-| `LOG_LEVEL`           | `info`  | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`    |
-| `LOG_SLOW_REQUEST_MS` | `1000`  | A request at least this slow is a warning and an error report   |
-| `LOG_SLOW_QUERY_MS`   | `200`   | A query at least this slow is logged on its own                 |
-| `LOG_QUERY_PARAMS`    | `false` | Log and report a failed query's parameters (personal data risk) |
-| `SENTRY_DSN`          | (empty) | The error viewer's DSN, for the server and the browser          |
+| Variable                           | Default | Meaning                                                         |
+| ---------------------------------- | ------- | --------------------------------------------------------------- |
+| `LOG_LEVEL`                        | `info`  | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`    |
+| `LOG_SLOW_REQUEST_MS`              | `1000`  | A request at least this slow is a warning and an error report   |
+| `LOG_SLOW_QUERY_MS`                | `200`   | A query at least this slow is logged on its own                 |
+| `LOG_QUERY_PARAMS`                 | `false` | Log and report a failed query's parameters (personal data risk) |
+| `SENTRY_DSN`                       | (empty) | The error viewer's DSN, for the server and the browser          |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`      | (empty) | Where traces and metrics are exported; empty sends none         |
+| `OTEL_EXPORTER_OTLP_AUTHORIZATION` | (empty) | The `Authorization` header sent with the export (a secret)      |
+
+`LOG_LEVEL`, `LOG_QUERY_PARAMS` and `SENTRY_DSN` are read once at startup by `settings.server.ts`, since the writer and
+the reporter work outside the runtime too; the rest are `AppConfig`'s. Both read the process's environment only
+(`serverEnv`), so a value baked into the build never wins over the one the server starts with.
 
 `.env.example` turns `LOG_QUERY_PARAMS` on, since development data is your own and the values help debugging.
 Production leaves it off unless you set it.
 
 At `LOG_LEVEL=warn`, only the slow, failed and erroring requests are written, which suits development next to the
-error viewer and a busy production server. `fatal` and `silent` also stop error reports, which are sent from the logger.
+error viewer and a busy production server. `fatal` and `silent` also stop error reports, which are sent from the
+writer.
 
 The browser bundle reads `SENTRY_DSN` when it is built (`envPrefix` in `vite.config.ts`), so changing it needs a
 rebuild. The server reads it at startup.
 
 ## Production Logs
 
-- Each line is one JSON object. The request line has `request.{method,path,status,ms}`, `request.route` (the matched
-  route pattern, e.g. `/notes/$id` or `/rpc/$`, for grouping; the path when no route matched) and
-  `request.timing.<kind>.{count,ms}`.
+- Each line is one JSON object: `level`, `time`, `module`, `msg`, `reqId` and `spanId` inside a trace, `userId` when
+  known, the line's own fields, and `err` for an error (type, message, stack, cause).
+- The request line has `request.{method,path,status,ms}` and `request.route` (the matched route pattern, e.g.
+  `/notes/$noteId` or `/rpc/$`, for grouping; the path when no route matched). Its time per kind is in `msg`.
 - Paths are logged without their query string, which can carry tokens.
 - A healthy `/healthz` probe writes no request line, because Docker and uptime monitors poll it every few seconds. A
   slow or failing probe is logged like any other request.

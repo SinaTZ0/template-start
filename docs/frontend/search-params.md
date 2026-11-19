@@ -9,23 +9,27 @@ See the table in [`jotai.md`](./jotai.md#what-goes-where) for what belongs in th
 
 ## Defining the Schema
 
-Each route that uses URL state validates it with `validateSearch`. The schema lives in the slice's `search-params.ts`
-(or inline in the route file while it is small), and it is the single definition for the route's loader, components
-and links:
+Each route that uses URL state validates it with `validateSearch`. The schema is Effect Schema, built with the helpers
+in `src/lib/schema.ts`. It lives in the slice's `search-params.ts` (or inline in the route file while it is small),
+and it is the single definition for the route's loader, components and links:
 
 ```ts
 // src/routes/orders/search-params.ts
-import { z } from "zod";
+import { Schema } from "effect";
+
+import { searchParam, searchSchema } from "#/lib/schema";
 
 export const ORDER_SORTS = ["date", "amount"] as const;
 
 export const ordersSearchDefaults = { q: "", sort: "date", page: 1 } as const;
 
-export const ordersSearchSchema = z.object({
-  q: z.string().trim().max(100).default(ordersSearchDefaults.q).catch(ordersSearchDefaults.q),
-  sort: z.enum(ORDER_SORTS).default(ordersSearchDefaults.sort).catch(ordersSearchDefaults.sort),
-  page: z.coerce.number().int().min(1).default(ordersSearchDefaults.page).catch(ordersSearchDefaults.page),
-});
+export const ordersSearchSchema = searchSchema(
+  Schema.Struct({
+    q: searchParam(Schema.String.check(Schema.isMaxLength(100)), ordersSearchDefaults.q),
+    sort: searchParam(Schema.Literals(ORDER_SORTS), ordersSearchDefaults.sort),
+    page: searchParam(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), ordersSearchDefaults.page),
+  }),
+);
 ```
 
 ```tsx
@@ -40,18 +44,23 @@ export const Route = createFileRoute("/_site-layout/orders")({
 });
 ```
 
-- **`.catch()` on every field.** A hand-edited or outdated link must not break the page: an invalid value falls back
-  instead of throwing.
+- **A search param never fails the page.** A hand-edited or outdated link must not break it, so every field is
+  `searchParam(schema, fallback)`: missing or invalid, it reads as the fallback. Wrap the struct in `searchSchema`,
+  which turns it into the Standard Schema `validateSearch` takes and drops keys it doesn't name (a URL may carry
+  parameters other code added), where `standardSchema` would refuse them.
+- **The router has already parsed the values.** Its default `parseSearch` reads `?page=2` as the number `2`, so a
+  number field is `Schema.Int` or `Schema.Number` with checks, not a string to convert.
 - **Defaults stay out of the URL.** The router writes validated values back into the URL; `stripSearchParams` with
   the same defaults removes them again. Without it, opening `/orders` redirects to the long form.
-- **Optional instead of a default** when "absent" means something different from any value. `redirectTo` on the
-  sign-in page is `undefined` when missing, and the page applies its fallback where it uses it
-  (`redirectToParam` in `src/lib/search-params.ts`).
+- **Optional instead of a default** when "absent" means something different from any value:
+  `optionalSearchParam(schema)`, which reads an invalid value as missing. `redirectTo` on the sign-in page is `undefined` when missing, and the page
+  applies its fallback where it uses it (`redirectToParam` in `src/lib/search-params.ts`).
 - **Parse, don't trust.** Values from the URL are user input. Same-site redirect targets go through
   `redirectToParam`; ids are validated like any other input, and the procedure checks access again.
 - **Shared parsers** that more than one route needs live in `src/lib/search-params.ts`.
 - **A cursor instead of a page number** when the list is read by position: the notes page keeps `?before=<cursor>`
-  (`src/routes/notes/search-params.ts`), optional because a missing one means the newest notes.
+  (`optionalSearchParam` in `src/routes/notes/search-params.ts`), optional because a missing one means the newest
+  notes.
 
 ## Reading in Loaders
 
@@ -95,10 +104,12 @@ const [text, setText] = useSearchText({ value: q, onCommit: commit });
 
 Keep `onCommit` stable (`useCallback`): a new function each render restarts the pause.
 
-A list the page already has (links, a directory) is filtered in the component: `listSearchSchema`
-(`src/lib/search-params.ts`) validates `?q=` and `?group=`, and `matchesSearch(searchWords(q), [title, description])`
-(`src/lib/persian-text.ts`) matches the way a reader expects: ZWNJ or space, Arabic or Persian letters, Persian or
-Latin digits. A list the server searches normalizes the query with `persianText()` in its input schema instead.
+A list the page already has (links, a directory) is filtered in the component: `ListSearch` (`src/lib/search-params.ts`,
+used as `searchSchema(ListSearch)`, with `listSearchDefaults`) reads `?q=` and `?group=`, and
+`matchesSearch(searchWords(q), [title, description])` (`src/lib/persian-text.ts`) matches the way a reader expects:
+ZWNJ or space, Arabic or Persian letters, Persian or Latin digits. A list the server searches normalizes the query on
+the server instead (`normalizePersianText`, or `PersianText` in the feature's `validation.ts`): contracts check
+structure only.
 
 ## History
 
@@ -142,5 +153,6 @@ schema's keys. The server parses the resulting URL with the same `validateSearch
 
 ## Testing
 
-A schema with real rules (a redirect target, a page range) gets a unit test of `schema.parse(...)` for the inputs that
-matter. Don't test zod itself.
+A schema with real rules (a redirect target, a page range) gets a unit test of `schema["~standard"].validate(...)`
+for the inputs that matter, as `src/lib/search-params.test.ts` does for `redirectToParam`. Don't test Effect Schema
+itself.
