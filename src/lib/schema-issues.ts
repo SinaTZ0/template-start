@@ -1,5 +1,5 @@
 /*===== Types =====*/
-// Structural subset of Standard Schema issues, so both Zod errors and oRPC `ValidationError`s fit.
+// Structural subset of Standard Schema issues, so both Effect Schema's formatted issues and oRPC `ValidationError`s fit.
 type PathSegment = PropertyKey | { readonly key: PropertyKey };
 
 type SchemaIssueLike = {

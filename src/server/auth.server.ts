@@ -32,8 +32,9 @@ export class Auth extends Context.Service<
     Auth,
     Effect.gen(function* () {
       const config = yield* AppConfig;
-      // Better-Auth's emails are queued on the app's own queue, from its callbacks outside any fiber.
-      const context = yield* Effect.context<Jobs>();
+      // Better-Auth calls back outside any fiber: its emails are queued, and its captcha checked, on this layer's
+      // services.
+      const run = Effect.runPromiseWith(yield* Effect.context<Jobs>());
       const captcha = yield* Captcha;
 
       /*------ Pool ------*/
@@ -59,9 +60,9 @@ export class Auth extends Context.Service<
       const betterAuth = createBetterAuth({
         config,
         db: drizzle({ client: pool }),
-        queueMail: (mail) => Effect.runPromiseWith(context)(SendMail.enqueue(mail)),
+        queueMail: (mail) => run(SendMail.enqueue(mail)),
         verifyCaptcha: (payload) =>
-          Effect.runPromise(
+          run(
             captcha.verify(payload).pipe(
               Effect.as(true),
               Effect.orElseSucceed(() => false),

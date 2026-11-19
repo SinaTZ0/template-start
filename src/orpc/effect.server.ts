@@ -54,6 +54,14 @@ type ErrorCases<E, Errors> = {
   }) => ORPCError<string, unknown>;
 };
 
+/**
+ * `access` is required exactly when the Effect requires `CurrentUser`: a public procedure that reads the user doesn't
+ * compile, and the error names the missing `access`.
+ */
+type AccessOption<R> = [Extract<R, CurrentUser>] extends [never]
+  ? { readonly access?: Access }
+  : { readonly access: Access };
+
 type Spec<P extends ProcedureBuilder, A, E, R> = {
   readonly run: (args: { readonly input: InputOf<P> }) => Effect.Effect<A, E, R>;
   readonly errors: ErrorCases<E, ErrorsOf<P>>;
@@ -102,8 +110,8 @@ function commonError(error: Tagged): ORPCError<string, unknown> | undefined {
 
 /*===== Effect Procedure =====*/
 /**
- * What a public procedure's Effect gets as `CurrentUser`: the overloads below keep its code from asking for one, so
- * this is only for the types, and reading it is a bug.
+ * What a public procedure's Effect gets as `CurrentUser`: `AccessOption` keeps its code from asking for one, so this
+ * is only for the types, and reading it is a bug.
  */
 const noUser = new Proxy({} as CurrentUser["Service"], {
   get: () => {
@@ -142,13 +150,7 @@ export function effectProcedure<
   A extends OutputOf<P>,
   E extends Tagged,
   R extends AppServices | RequestContext | CurrentUser,
->(procedure: P, spec: Spec<P, A, E, R> & { readonly access: Access }): ReturnType<P["handler"]>;
-export function effectProcedure<
-  P extends ProcedureBuilder,
-  A extends OutputOf<P>,
-  E extends Tagged,
-  R extends AppServices | RequestContext,
->(procedure: P, spec: Spec<P, A, E, R> & { readonly access?: undefined }): ReturnType<P["handler"]>;
+>(procedure: P, spec: Spec<P, A, E, R> & AccessOption<R>): ReturnType<P["handler"]>;
 export function effectProcedure(
   procedure: ProcedureBuilder,
   spec: Spec<ProcedureBuilder, unknown, Tagged, AppServices | RequestContext | CurrentUser> & {
@@ -176,7 +178,7 @@ export function effectProcedure(
       yield* checkRateLimit(API_RATE_LIMIT);
       if (rateLimit) yield* checkRateLimit(rateLimit);
       if (captcha) yield* (yield* Captcha).verify((input as { captcha: string }).captcha);
-      // A public procedure's Effect can't require `CurrentUser` (the overloads above), so this never runs.
+      // A public procedure's Effect can't require `CurrentUser` (`AccessOption`), so the stand-in is never read.
       if (!access) return yield* spec.run({ input }).pipe(Effect.provideService(CurrentUser, noUser));
       const user = yield* access === "user" ? requireUser : requireRole(access);
       // The rest of the request's lines and reports carry the user's ID (never the email or name).

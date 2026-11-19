@@ -3,7 +3,7 @@ import type { SchemaIssue } from "effect";
 
 /*===== Shared Errors =====*/
 // The expected failures any procedure can meet. The oRPC boundary maps each to its contract error once
-// (`commonCases` in `#/orpc/effect.server`), so a procedure's own error map lists only its feature's errors. Like every
+// (`commonError` in `#/orpc/effect.server`), so a procedure's own error map lists only its feature's errors. Like every
 // domain error they carry facts, never user-facing text.
 
 /** No signed-in user, or the account is blocked. */
