@@ -287,11 +287,11 @@ server. `OTEL_EXPORTER_OTLP_AUTHORIZATION`, when set, is sent as the `Authorizat
 
 In development, OpenObserve runs from `compose.dev.yaml` under the `observability` profile, which `pnpm services`
 doesn't start: `docker compose -f compose.dev.yaml --profile observability up -d`. Its UI is http://localhost:5080
-(`dev@example.com`, password `development`). Then set in `.env`:
+(`dev@example.com`, password `Dev-pass-1`). Then set in `.env`:
 
 ```text
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5080/api/default
-OTEL_EXPORTER_OTLP_AUTHORIZATION=Basic <base64 of dev@example.com:development>
+OTEL_EXPORTER_OTLP_AUTHORIZATION=Basic ZGV2QGV4YW1wbGUuY29tOkRldi1wYXNzLTE=
 ```
 
 In production it is optional and off by default, since it needs a few hundred MB of memory

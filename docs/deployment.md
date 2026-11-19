@@ -184,13 +184,13 @@ small server spares. Off, nothing leaves the server, and the request log, the er
 timelines work as before. To turn it on, set these in `.env` (Settings: edit `.env`, then apply). The deploy tool
 knows them all as optional, so it never asks for them:
 
-| Setting                            | Value                                                                           |
-| ---------------------------------- | ------------------------------------------------------------------------------- |
-| `COMPOSE_PROFILES`                 | `observability`. Compose reads it from `.env` itself and starts `openobserve`   |
-| `OPENOBSERVE_ROOT_PASSWORD`        | 12 characters or more. The sign-in is `admin@<DOMAIN>` with this password       |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`      | `http://openobserve:5080/api/default`, the service by its name inside the stack |
-| `OTEL_EXPORTER_OTLP_AUTHORIZATION` | `Basic ` and the base64 of `admin@<DOMAIN>:<password>`                          |
-| `ERROR_VIEWER_TRACE_URL`           | `http://localhost:5080/web/traces?org_identifier=default&trace_id={traceId}`    |
+| Setting                            | Value                                                                                                                                                           |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COMPOSE_PROFILES`                 | `observability`. Compose reads it from `.env` itself and starts `openobserve`                                                                                   |
+| `OPENOBSERVE_ROOT_PASSWORD`        | 12 characters or more, with a lowercase and an uppercase letter, a digit and a symbol (OpenObserve refuses to start otherwise). The sign-in is `admin@<DOMAIN>` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`      | `http://openobserve:5080/api/default`, the service by its name inside the stack                                                                                 |
+| `OTEL_EXPORTER_OTLP_AUTHORIZATION` | `Basic ` and the base64 of `admin@<DOMAIN>:<password>`                                                                                                          |
+| `ERROR_VIEWER_TRACE_URL`           | `http://localhost:5080/web/traces?org_identifier=default&trace_id={traceId}`                                                                                    |
 
 Make the authorization with `printf 'admin@example.com:the-password' | base64`. The app reads both `OTEL_*` values when
 it starts (`AppConfig`); with the endpoint empty it exports nothing, whatever the profile says.
