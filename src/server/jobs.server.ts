@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Metric } from "effect";
+import { Context, Effect, Layer, Metric, References } from "effect";
 import { Schedule } from "effect";
 import type { Duration, Schema } from "effect";
 import * as PersistedQueue from "effect/persistence/PersistedQueue";
@@ -147,11 +147,17 @@ export function runJobWorkers<R>(jobs: ReadonlyArray<RunnableJob<R>>) {
             ),
             Effect.withSpan(`job ${job.name}`, {
               kind: "consumer",
+              root: true,
               attributes: { "job.id": id, "job.attempt": attempts },
             }),
+            // Traced again inside the run (see `untraced` below).
+            Effect.provideService(References.TracerEnabled, true),
             Effect.annotateLogs({ module: "jobs", job: job.name, jobId: id, attempt: attempts }),
           ),
         );
+        // The queue polls its table about once a second per job, and each poll would be a trace of its own: hundreds
+        // of thousands a day of empty ones, burying the requests in the trace backend. Only a run is traced.
+        const untraced = Effect.provideService(References.TracerEnabled, false);
         /*------ Schedule ------*/
         if (job.cron) {
           // A scheduled job's payload is `{}`.
@@ -165,7 +171,7 @@ export function runJobWorkers<R>(jobs: ReadonlyArray<RunnableJob<R>>) {
         }
 
         // A failed run is already recorded by the queue (retried or marked failed) and logged above.
-        return yield* runOnce.pipe(Effect.ignoreCause, Effect.forever);
+        return yield* runOnce.pipe(untraced, Effect.ignoreCause, Effect.forever);
       }).pipe(Effect.forkScoped),
     { discard: true },
   );
