@@ -4,6 +4,8 @@ import { MediaRepo } from "#/orpc/media/repository";
 import { MediaService } from "#/orpc/media/service";
 import { NoteRepo } from "#/orpc/note/repository";
 import { NoteService } from "#/orpc/note/service";
+import { SessionService } from "#/orpc/session/service";
+import { Auth } from "#/server/auth.server";
 import { AppConfig } from "#/server/config.server";
 import { Db, PgLive } from "#/server/db.server";
 import { Jobs } from "#/server/jobs.server";
@@ -15,15 +17,15 @@ import { Storage } from "#/server/storage.server";
 // The app's services, each built once per runtime from its dependencies (docs/backend/architecture.md). A new
 // feature adds its repository and service layers here.
 
-/** The infrastructure: configuration, the Postgres pool and what shares it, the bucket. */
+/** The infrastructure: configuration, the Postgres pool and what shares it, the bucket, auth. */
 const PlatformLive = Layer.mergeAll(Db.layer, Jobs.layer).pipe(
   Layer.provideMerge(PgLive),
-  Layer.provideMerge(Storage.layer),
+  Layer.provideMerge(Layer.mergeAll(Storage.layer, Auth.layer)),
   Layer.provideMerge(AppConfig.layer),
 );
 
 /** The features' repositories and services. A service may use another feature's service (`note` uses `media`). */
-const FeaturesLive = NoteService.layer.pipe(
+const FeaturesLive = Layer.mergeAll(NoteService.layer, SessionService.layer).pipe(
   Layer.provideMerge(MediaService.layer),
   Layer.provideMerge(Layer.mergeAll(NoteRepo.layer, MediaRepo.layer)),
 );

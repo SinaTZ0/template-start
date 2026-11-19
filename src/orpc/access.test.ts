@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthSession } from "#/lib/auth.server";
 import { router } from "#/orpc/router";
 
-/*===== Note Access =====*/
+/*===== Access =====*/
 // Who gets past the boundary, called the way a loader calls the API (`createRouterClient`). Only the session is
 // faked; the one call let through reads a user who has no notes.
 
@@ -22,6 +22,12 @@ const client = createRouterClient(router, { context: { headers: new Headers() } 
 
 beforeEach(() => {
   session.current = null;
+});
+
+describe("public procedures", () => {
+  it("serve a visitor", async () => {
+    await expect(client.session.viewer()).resolves.toBeNull();
+  });
 });
 
 describe("note access", () => {

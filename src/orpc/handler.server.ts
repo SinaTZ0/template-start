@@ -3,10 +3,10 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { RequestLimitHandlerPlugin } from "@orpc/server/plugins";
 
 import { createLogger } from "#/lib/logger.server";
+import { limitRequest, rateLimitedMessage } from "#/lib/rate-limit.server";
 import type { RateLimitPolicy } from "#/lib/rate-limit.server";
 import { ERROR_STATUS_MAP } from "#/orpc/errors";
 import { MEDIA_MAX_BYTES } from "#/orpc/media/constants";
-import { assertWithinRateLimit } from "#/orpc/middleware/rate-limit/rate-limit.middleware";
 import { router } from "#/orpc/router";
 
 const log = createLogger("orpc");
@@ -15,7 +15,7 @@ const log = createLogger("orpc");
 // oRPC decodes the request body before any procedure middleware runs, so these two checks sit in front of it: a
 // request they refuse costs no parsing.
 
-// Their own counters, with the numbers of the policies the procedures apply (`#/orpc/implementer.server`,
+// Their own counters, with the numbers of the policies the procedures apply (`#/orpc/effect.server`,
 // `#/orpc/media/procedure`). Those also count the calls loaders make through the server client; sharing a counter
 // would count every browser call twice.
 const RPC_RATE_LIMIT: RateLimitPolicy = { name: "rpc", limit: 300, windowMs: 60_000 };
@@ -36,6 +36,21 @@ function assertSameOrigin(headers: Headers): void {
   if (host !== headers.get("host")) {
     throw new ORPCError("FORBIDDEN", { message: "Cross-origin request.", data: { errors: [], fields: {} } });
   }
+}
+
+/**
+ * Counts the request against `policy`, before its body is read. Procedures count their own calls separately
+ * (`effectProcedure`), which also covers the calls loaders make in-process.
+ *
+ * @throws `TOO_MANY_REQUESTS` with `retryAfterSeconds` once the limit is reached.
+ */
+function assertWithinRateLimit({ headers, policy }: { headers: Headers; policy: RateLimitPolicy }): void {
+  const result = limitRequest({ headers, policy });
+  if (result.allowed) return;
+  throw new ORPCError("TOO_MANY_REQUESTS", {
+    message: "Too many requests.",
+    data: { errors: [rateLimitedMessage()], fields: {}, retryAfterSeconds: result.retryAfterSeconds },
+  });
 }
 
 /*===== Body Size =====*/

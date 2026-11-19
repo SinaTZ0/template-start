@@ -15,7 +15,8 @@ export type CaptchaCheckState = "idle" | "solving" | "verified" | "error";
 const FRESH_FOR_MS = 9 * 60_000;
 
 /**
- * Drives a visible captcha check on top of `useCaptcha`, for a public form whose procedure uses `captchaMiddleware`.
+ * Drives a visible captcha check on top of `useCaptcha`, for a public form whose procedure sets `captcha`
+ * (`effectProcedure`).
  * `start` solves a challenge in the background (call it on the form's first focus, so the answer is usually ready by
  * the time the visitor sends); `take` hands the answer to a submission, waiting for a solve still in progress instead
  * of starting over. `state` and `slow` are for drawing the check beside the submit button.

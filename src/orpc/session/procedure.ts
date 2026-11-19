@@ -1,9 +1,17 @@
-import { getRequestSession } from "#/lib/auth.server";
+import { Effect } from "effect";
+
+import { effectProcedure } from "#/orpc/effect.server";
 import { base } from "#/orpc/implementer.server";
-import { resolveViewer } from "#/orpc/session/service";
+import { SessionService } from "#/orpc/session/service";
+import { RequestContext } from "#/server/request-context.server";
 
 /*===== Viewer =====*/
-export const viewerProcedure = base.session.viewer.handler(async ({ context }) => {
-  const session = await getRequestSession(context.headers);
-  return resolveViewer({ user: session?.user ?? null });
+// Public: a visitor reads as `null`.
+export const viewerProcedure = effectProcedure(base.session.viewer, {
+  run: () =>
+    Effect.gen(function* () {
+      const { headers } = yield* RequestContext;
+      return yield* (yield* SessionService).viewer(headers);
+    }),
+  errors: {},
 });

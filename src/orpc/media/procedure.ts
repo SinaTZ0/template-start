@@ -6,7 +6,6 @@ import { noErrorData } from "#/orpc/errors";
 import { base } from "#/orpc/implementer.server";
 import { IMAGE_REJECTION_TEXT } from "#/orpc/media/processing.server";
 import { MediaService } from "#/orpc/media/service";
-import { rateLimitMiddleware } from "#/orpc/middleware/rate-limit/rate-limit.middleware";
 import { m } from "#/paraglide/messages";
 import { CurrentUser } from "#/server/request-context.server";
 
@@ -18,8 +17,9 @@ const UPLOAD_RATE_LIMIT = { name: "media-upload", limit: 20, windowMs: 60_000 };
 const fileError = (message: string) => ({ errors: [], fields: { file: message } });
 
 // Any signed-in user; which kinds a role may upload is the service's rule.
-export const uploadMediaProcedure = effectProcedure(base.media.upload.use(rateLimitMiddleware(UPLOAD_RATE_LIMIT)), {
+export const uploadMediaProcedure = effectProcedure(base.media.upload, {
   access: "user",
+  rateLimit: UPLOAD_RATE_LIMIT,
   run: ({ input }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;

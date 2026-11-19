@@ -2,9 +2,8 @@ import { oc } from "@orpc/contract";
 import { Schema } from "effect";
 
 import { standardSchema } from "#/lib/schema";
-import { commonErrors } from "#/orpc/errors";
+import { authErrors, commonErrors, roleErrors } from "#/orpc/errors";
 import { MEDIA_KINDS } from "#/orpc/media/constants";
-import { authErrors, roleErrors } from "#/orpc/middleware/auth/auth.errors";
 
 /*===== Schemas =====*/
 /** What clients get for an uploaded image: enough to render any variant without further requests. */

@@ -33,12 +33,38 @@ export const commonErrors = {
     // `errorId` correlates the response with the full error in the server logs and the error viewer.
     data: standardSchema(Schema.Struct({ ...ErrorData.fields, errorId: Schema.String })),
   },
-  // Common because every procedure is rate limited (`rateLimitMiddleware` on `base`).
+  // Common because every procedure is rate limited (`effectProcedure` applies the API's policy to each).
   TOO_MANY_REQUESTS: {
     message: "Too many requests.",
     data: standardSchema(
       Schema.Struct({ ...ErrorData.fields, retryAfterSeconds: Schema.Int.check(Schema.isGreaterThan(0)) }),
     ),
+  },
+};
+
+/*===== Access Errors =====*/
+// Declared on the contract of every procedure whose `effectProcedure` sets `access` (`authErrors`), and, with roles,
+// `roleErrors` too.
+export const authErrors = {
+  UNAUTHORIZED: {
+    message: "Sign in to continue.",
+    data: errorDataSchema,
+  },
+};
+
+export const roleErrors = {
+  FORBIDDEN: {
+    message: "Your account can't do this.",
+    data: errorDataSchema,
+  },
+};
+
+/*===== Captcha Errors =====*/
+// Declared on the contract of every procedure whose `effectProcedure` sets `captcha`.
+export const captchaErrors = {
+  CAPTCHA_FAILED: {
+    message: "The security check failed.",
+    data: errorDataSchema,
   },
 };
 

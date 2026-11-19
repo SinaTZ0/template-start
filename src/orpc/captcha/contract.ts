@@ -1,32 +1,36 @@
 import { oc } from "@orpc/contract";
-import { z } from "zod";
+import { Schema } from "effect";
 
+import { standardSchema } from "#/lib/schema";
 import { commonErrors } from "#/orpc/errors";
 
 /*===== Schemas =====*/
-// Mirrors altcha-lib's `Challenge` field for field. The signature covers every parameter, so a key
-// missing here would be stripped from the output and the widget's solution would fail verification.
-const altchaChallengeSchema = z.object({
-  parameters: z.object({
-    algorithm: z.string(),
-    nonce: z.string(),
-    salt: z.string(),
-    cost: z.number(),
-    keyLength: z.number(),
-    keyPrefix: z.string(),
-    keySignature: z.string().optional(),
-    memoryCost: z.number().optional(),
-    parallelism: z.number().optional(),
-    expiresAt: z.number().optional(),
-    data: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+// Mirrors altcha-lib's `Challenge` field for field. The signature covers every parameter, so the output is checked
+// strictly: a key altcha-lib adds and this doesn't name fails the call loudly, instead of reaching the browser
+// without it and failing every solution's verification.
+const AltchaChallengeSchema = Schema.Struct({
+  parameters: Schema.Struct({
+    algorithm: Schema.String,
+    nonce: Schema.String,
+    salt: Schema.String,
+    cost: Schema.Finite,
+    keyLength: Schema.Finite,
+    keyPrefix: Schema.String,
+    keySignature: Schema.optional(Schema.String),
+    memoryCost: Schema.optional(Schema.Finite),
+    parallelism: Schema.optional(Schema.Finite),
+    expiresAt: Schema.optional(Schema.Finite),
+    data: Schema.optional(
+      Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean, Schema.Null])),
+    ),
   }),
-  signature: z.string().optional(),
+  signature: Schema.optional(Schema.String),
 });
 
-export type AltchaChallenge = z.infer<typeof altchaChallengeSchema>;
+export type AltchaChallenge = typeof AltchaChallengeSchema.Type;
 
 /*===== Procedures =====*/
-export const createCaptchaChallengeContract = oc.errors(commonErrors).output(altchaChallengeSchema);
+export const createCaptchaChallengeContract = oc.errors(commonErrors).output(standardSchema(AltchaChallengeSchema));
 
 export const captchaContract = {
   createChallenge: createCaptchaChallengeContract,

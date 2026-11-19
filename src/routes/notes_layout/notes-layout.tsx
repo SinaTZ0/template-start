@@ -16,7 +16,7 @@ const ROLES: readonly UserRole[] = ["user", "admin"];
  * - A role outside `ROLES`: that role's own home.
  *
  * This guard only shapes navigation. The data is protected where it is served: oRPC procedures check the session and
- * role again (`requireUserMiddleware`, `requireRoleMiddleware`).
+ * role again (`access` on `effectProcedure`).
  */
 export const Route = createFileRoute("/_site-layout/_notes-layout")({
   beforeLoad: async ({ context, location }) => {

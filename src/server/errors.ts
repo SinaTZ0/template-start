@@ -12,6 +12,14 @@ export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthoriz
 /** The signed-in user's role may not do this. */
 export class Forbidden extends Schema.TaggedError<Forbidden>()("Forbidden", {}) {}
 
+/** The client's address used up a rate limit (`#/server/rate-limit.server`). */
+export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited", {
+  retryAfterSeconds: Schema.Int,
+}) {}
+
+/** A public write without a solved, unused captcha (`#/server/captcha.server`). */
+export class CaptchaFailed extends Schema.TaggedError<CaptchaFailed>()("CaptchaFailed", {}) {}
+
 /**
  * Input that breaks a domain rule (`validation.ts`), with the schema issue that says where and why. The boundary
  * turns the issue into per-field messages in the request's locale. A `Data` error, not a `Schema` one: the issue is a

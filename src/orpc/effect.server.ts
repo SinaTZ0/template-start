@@ -2,15 +2,25 @@ import { ORPCError } from "@orpc/server";
 import { Cause, Effect, Exit, Result } from "effect";
 
 import { createLogger } from "#/lib/logger.server";
+import { rateLimitedMessage } from "#/lib/rate-limit.server";
+import type { RateLimitPolicy } from "#/lib/rate-limit.server";
 import { issueToErrorData } from "#/lib/schema";
 import type { UserRole } from "#/lib/user-constants";
 import { noErrorData } from "#/orpc/errors";
-import type { Forbidden, InvalidInput, Unauthorized } from "#/server/errors";
+import { m } from "#/paraglide/messages";
+import { verifyCaptcha } from "#/server/captcha.server";
+import type { CaptchaFailed, Forbidden, InvalidInput, RateLimited, Unauthorized } from "#/server/errors";
+import { checkRateLimit } from "#/server/rate-limit.server";
 import { CurrentUser, RequestContext, requireRole, requireUser } from "#/server/request-context.server";
 import { appRuntime } from "#/server/runtime.server";
 import type { AppServices } from "#/server/runtime.server";
 
 const log = createLogger("orpc");
+
+/*===== Policies =====*/
+// Generous on purpose: many Iranian mobile users share one carrier address (CGNAT), and a page's loaders count too.
+// Expensive procedures add their own, stricter policy (`rateLimit`).
+const API_RATE_LIMIT: RateLimitPolicy = { name: "api", limit: 300, windowMs: 60_000 };
 
 /*===== Types =====*/
 /** Who may call: any signed-in user, or only the listed roles. Left out, the procedure is public. */
@@ -18,8 +28,8 @@ type Access = "user" | readonly UserRole[];
 
 type Tagged = { readonly _tag: string };
 
-/** The errors every procedure may meet, mapped here once (`commonCases`). */
-type CommonError = Unauthorized | Forbidden | InvalidInput;
+/** The errors every procedure may meet, mapped here once (`commonError`). */
+type CommonError = Unauthorized | Forbidden | InvalidInput | RateLimited | CaptchaFailed;
 
 /** What a contract-first procedure from `base` offers: its `.handler`, typed by the contract. */
 type ProcedureBuilder = { handler: (handler: never) => unknown };
@@ -29,13 +39,13 @@ type InputOf<P> = OptionsOf<P> extends { input: infer I } ? I : never;
 type ErrorsOf<P> = OptionsOf<P> extends { errors: infer E } ? E : never;
 type OutputOf<P> = HandlerOf<P> extends (...args: never[]) => infer R ? Awaited<R> : never;
 
+type TagOf<E> = E extends { readonly _tag: infer Tag extends string } ? Tag : never;
+
 /**
  * One mapping per feature error the Effect can fail with: the contract error the client receives instead. A key is
  * required for every `_tag` in the error type, so a new error the service starts failing with doesn't compile until
  * each procedure that can receive it says what the client sees.
  */
-type TagOf<E> = E extends { readonly _tag: infer Tag extends string } ? Tag : never;
-
 type ErrorCases<E, Errors> = {
   readonly [Tag in TagOf<Exclude<E, CommonError>>]: (args: {
     readonly error: Extract<E, { readonly _tag: Tag }>;
@@ -46,10 +56,18 @@ type ErrorCases<E, Errors> = {
 type Spec<P extends ProcedureBuilder, A, E, R> = {
   readonly run: (args: { readonly input: InputOf<P> }) => Effect.Effect<A, E, R>;
   readonly errors: ErrorCases<E, ErrorsOf<P>>;
+  /** A stricter policy than the API's, for an expensive procedure. Counted before the session is read. */
+  readonly rateLimit?: RateLimitPolicy;
+  /**
+   * For a public procedure that writes: the call must carry a solved captcha in `input.captcha`, which keeps scripts
+   * from filling the tables. Its contract declares `captchaErrors`.
+   */
+  readonly captcha?: InputOf<P> extends { readonly captcha: string } ? true : never;
 };
 
 /*===== Common Errors =====*/
-// The messages are for developers; the UI words a sign-in or role failure itself (`#/lib/api-error`).
+// The developer-facing `message`s stay English; what a person reads is in `data`, or worded by the UI
+// (`#/lib/api-error`).
 function commonError(error: Tagged): ORPCError<string, unknown> | undefined {
   switch (error._tag) {
     case "Unauthorized":
@@ -62,13 +80,35 @@ function commonError(error: Tagged): ORPCError<string, unknown> | undefined {
         message: "Invalid input.",
         data: issueToErrorData((error as InvalidInput).issue),
       });
+    case "RateLimited":
+      return new ORPCError("TOO_MANY_REQUESTS", {
+        message: "Too many requests.",
+        data: {
+          errors: [rateLimitedMessage()],
+          fields: {},
+          retryAfterSeconds: (error as RateLimited).retryAfterSeconds,
+        },
+      });
+    case "CaptchaFailed":
+      return new ORPCError("CAPTCHA_FAILED", {
+        message: "The security check failed.",
+        data: { errors: [m.common_captcha_failed()], fields: {} },
+      });
     default:
       return undefined;
   }
 }
 
 /*===== Effect Procedure =====*/
-const noUser = Effect.die(new Error("A public procedure required CurrentUser."));
+/**
+ * What a public procedure's Effect gets as `CurrentUser`: the overloads below keep its code from asking for one, so
+ * this is only for the types, and reading it is a bug.
+ */
+const noUser = new Proxy({} as CurrentUser["Service"], {
+  get: () => {
+    throw new Error("A public procedure read CurrentUser.");
+  },
+});
 
 /**
  * Implements a contract procedure with an Effect, run on the app's runtime (`#/server/runtime.server`):
@@ -84,13 +124,17 @@ const noUser = Effect.die(new Error("A public procedure required CurrentUser."))
  * });
  * ```
  *
- * - **Access.** With `access`, the session is checked first and the user provided as `CurrentUser`. Without it,
- *   code that requires `CurrentUser` doesn't compile.
- * - **Expected failures** become contract errors: `Unauthorized`, `Forbidden` and `InvalidInput` here, the feature's
- *   own through `errors`, which must name every one the Effect can fail with.
+ * In order, before `run`: the API's rate limit, the procedure's own (`rateLimit`), the captcha (`captcha`), then the
+ * session (`access`), so a flood is turned away before any verification or session work.
+ *
+ * - **Access.** With `access`, the user is provided as `CurrentUser`. Without it, code that requires `CurrentUser`
+ *   doesn't compile.
+ * - **Expected failures** become contract errors: the common ones here, the feature's own through `errors`, which must
+ *   name every one the Effect can fail with.
  * - **Defects** (a failed query, a bug) are logged once with an `errorId`, which the client receives in an
  *   `INTERNAL_SERVER_ERROR` and the error viewer is searched by.
  * - **A client that disconnects** interrupts the Effect, which rolls back its open transaction.
+ * - **Tracing.** The call is an `rpc.<path>` span (`rpc.note.list`), over HTTP and in-process alike.
  */
 export function effectProcedure<
   P extends ProcedureBuilder,
@@ -124,13 +168,19 @@ export function effectProcedure(
     signal?: AbortSignal;
   }) => {
     /*------ Run ------*/
-    const { access } = spec;
+    const { access, rateLimit, captcha } = spec;
     const program = Effect.gen(function* () {
+      yield* checkRateLimit(API_RATE_LIMIT);
+      if (rateLimit) yield* checkRateLimit(rateLimit);
+      if (captcha) yield* verifyCaptcha((input as { captcha: string }).captcha);
       // A public procedure's Effect can't require `CurrentUser` (the overloads above), so this never runs.
-      if (!access) return yield* spec.run({ input }).pipe(Effect.provideServiceEffect(CurrentUser, noUser));
+      if (!access) return yield* spec.run({ input }).pipe(Effect.provideService(CurrentUser, noUser));
       const user = yield* access === "user" ? requireUser : requireRole(access);
       return yield* spec.run({ input }).pipe(Effect.provideService(CurrentUser, user));
-    }).pipe(Effect.provideService(RequestContext, { headers: context.headers }));
+    }).pipe(
+      Effect.withSpan(`rpc.${path.join(".")}`, { kind: "server" }),
+      Effect.provideService(RequestContext, { headers: context.headers }),
+    );
 
     const exit = await appRuntime.runPromiseExit(program, { signal });
     if (Exit.isSuccess(exit)) return exit.value;

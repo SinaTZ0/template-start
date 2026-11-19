@@ -1,5 +1,10 @@
-import { issueCaptchaChallenge } from "#/orpc/captcha/service";
+import { effectProcedure } from "#/orpc/effect.server";
 import { base } from "#/orpc/implementer.server";
+import { issueCaptchaChallenge } from "#/server/captcha.server";
 
 /*===== Create Challenge =====*/
-export const createCaptchaChallengeProcedure = base.captcha.createChallenge.handler(() => issueCaptchaChallenge());
+// Public: anyone about to submit a public form needs one.
+export const createCaptchaChallengeProcedure = effectProcedure(base.captcha.createChallenge, {
+  run: () => issueCaptchaChallenge,
+  errors: {},
+});

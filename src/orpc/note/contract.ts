@@ -2,9 +2,8 @@ import { oc } from "@orpc/contract";
 import { Schema } from "effect";
 
 import { standardSchema } from "#/lib/schema";
-import { commonErrors, errorDataSchema } from "#/orpc/errors";
+import { authErrors, commonErrors, errorDataSchema, roleErrors } from "#/orpc/errors";
 import { MediaSchema } from "#/orpc/media/contract";
-import { authErrors, roleErrors } from "#/orpc/middleware/auth/auth.errors";
 
 /*===== Schemas =====*/
 export const NoteSchema = Schema.Struct({
