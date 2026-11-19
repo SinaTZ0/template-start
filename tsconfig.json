@@ -1,4 +1,5 @@
 {
+  "$schema": "./node_modules/@effect/tsgo/schema.json",
   "include": ["**/*", ".storybook/**/*"],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2023"],
@@ -19,7 +20,20 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "strict": true
+    "strict": true,
+    // Effect diagnostics, run by `effect-tsgo tsc` in `pnpm typecheck` (the `effect` skill). Warnings fail the
+    // typecheck too. v3 APIs are errors: agents often reach for them. APIs Effect marks `@stability unstable` (sql,
+    // persistence, observability, ErrorReporter) may change in a minor release, so each is wrapped once in
+    // `src/server/` and used through that wrapper everywhere else.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "outdatedApi": "error", "unstableApiUsage": "error" },
+        "overrides": [
+          { "include": ["src/server/**/*.ts"], "options": { "diagnosticSeverity": { "unstableApiUsage": "off" } } }
+        ]
+      }
+    ]
   },
   "exclude": ["node_modules", ".output", "src/components/ui/**", "docs/frontend/reference/**", "target/**"]
 }
