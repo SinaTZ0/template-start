@@ -14,9 +14,13 @@ test("a forgotten password is replaced through the emailed link", async ({ page,
   await context.clearCookies();
   await page.goto("/auth");
   await page.getByRole("link", { name: "رمز عبور را فراموش کرده‌اید؟" }).click();
-  await page.getByLabel("ایمیل").fill(email);
-  await page.getByRole("button", { name: "فرستادن پیوند" }).click();
-  await expect(page.getByRole("status").getByText(email)).toBeVisible();
+  // The link opens the page before its scripts have started, and a field filled by then is emptied when the form
+  // starts. Nothing on the page says when that is, so the address is typed again until the form takes it.
+  await expect(async () => {
+    await page.getByLabel("ایمیل").fill(email);
+    await page.getByRole("button", { name: "فرستادن پیوند" }).click();
+    await expect(page.getByRole("status").getByText(email)).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
 
   /*------ Choose a New Password ------*/
   await page.goto(await linkFromEmail({ to: email, subject: "انتخاب رمز عبور تازه" }));
