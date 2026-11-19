@@ -1,9 +1,11 @@
+import { performance } from "node:perf_hooks";
+
 import { Context, Effect, Layer, Metric, References } from "effect";
 import { Schedule } from "effect";
 import type { Duration, Schema } from "effect";
 import * as PersistedQueue from "effect/persistence/PersistedQueue";
 
-import { jobRuns } from "#/server/observability/metrics.server";
+import { jobRunDuration } from "#/server/observability/metrics.server";
 
 /*===== Jobs =====*/
 // Background work on Effect's persisted queue, stored in the app's own Postgres (docs/backend/jobs.md). A job is
@@ -125,8 +127,8 @@ export class Jobs extends Context.Service<
 /*===== Workers =====*/
 /**
  * Runs each job's queue in its own fiber for as long as the runtime lives, one run at a time per job. A run is a
- * `job <name>` span with its attempt. A failure with attempts left is a warning; the last one is an error, which is
- * reported to the error viewer.
+ * `job <name>` span with its attempt, and is timed by its outcome (`job.run.duration`). A failure with attempts left
+ * is a warning; the last one is an error, which is reported to the error viewer.
  */
 export function runJobWorkers<R>(jobs: ReadonlyArray<RunnableJob<R>>) {
   return Effect.forEach(
@@ -135,20 +137,31 @@ export function runJobWorkers<R>(jobs: ReadonlyArray<RunnableJob<R>>) {
       Effect.gen(function* () {
         const queue = yield* Jobs.use((all) => all.queue(job));
         const maxAttempts = job.maxAttempts ?? 10;
-        const runs = (outcome: "success" | "retry" | "failed") =>
-          jobRuns.pipe(Metric.withAttributes({ job: job.name, outcome }), Metric.update(1));
+        const record = ({ outcome, startedAt }: { outcome: "success" | "retry" | "failed"; startedAt: number }) =>
+          jobRunDuration.pipe(
+            Metric.withAttributes({ "job.name": job.name, "job.outcome": outcome }),
+            Metric.update((performance.now() - startedAt) / 1000),
+          );
         const runOnce = queue.take((payload, { id, attempts }) =>
-          job.run(payload as never).pipe(
-            Effect.tap(() => runs("success")),
-            Effect.tapCause((cause) =>
-              attempts >= maxAttempts
-                ? Effect.logError("job failed, no attempts left", cause).pipe(Effect.andThen(runs("failed")))
-                : Effect.logWarning("job failed, will retry", cause).pipe(Effect.andThen(runs("retry"))),
-            ),
+          Effect.suspend(() => {
+            const startedAt = performance.now();
+            return job.run(payload as never).pipe(
+              Effect.tap(() => record({ outcome: "success", startedAt })),
+              Effect.tapCause((cause) =>
+                attempts >= maxAttempts
+                  ? Effect.logError("job failed, no attempts left", cause).pipe(
+                      Effect.andThen(record({ outcome: "failed", startedAt })),
+                    )
+                  : Effect.logWarning("job failed, will retry", cause).pipe(
+                      Effect.andThen(record({ outcome: "retry", startedAt })),
+                    ),
+              ),
+            );
+          }).pipe(
             Effect.withSpan(`job ${job.name}`, {
               kind: "consumer",
               root: true,
-              attributes: { "job.id": id, "job.attempt": attempts },
+              attributes: { "job.name": job.name, "job.id": id, "job.attempt": attempts },
             }),
             // Traced again inside the run (see `untraced` below).
             Effect.provideService(References.TracerEnabled, true),

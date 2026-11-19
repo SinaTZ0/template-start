@@ -1,4 +1,4 @@
-import { COMMON_ERROR_STATUS_MAP, ORPCError, onError } from "@orpc/server";
+import { COMMON_ERROR_STATUS_MAP, ORPCError, Procedure, getRouter, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { RequestLimitHandlerPlugin } from "@orpc/server/plugins";
 
@@ -116,4 +116,18 @@ const uploadHandler = createHandler({ maxBodySize: MAX_UPLOAD_BODY_BYTES, rateLi
  */
 export function rpcHandlerFor(pathname: string) {
   return UPLOAD_PATHS.has(pathname.replace(/^\/rpc/, "")) ? uploadHandler : handler;
+}
+
+/*===== Routes =====*/
+/**
+ * The route of a request for a procedure: its own path (`/rpc/note/list`), so the request's span, its log line and
+ * the request metric tell procedures apart. Undefined for a path that names no procedure, which must not become a
+ * route of its own: anyone can request any path, and each route is a series the metrics keep.
+ *
+ * @param pathname The request's path, `/rpc` included.
+ */
+export function procedureRoute(pathname: string): string | undefined {
+  if (!pathname.startsWith("/rpc/")) return undefined;
+  const found = getRouter(router, pathname.slice("/rpc/".length).split("/"));
+  return found instanceof Procedure ? pathname : undefined;
 }

@@ -129,9 +129,10 @@ and `src/mail/jobs.server.test.ts` with `SendMail.run` on a mailbox in memory, n
 
 ## When a Job Fails
 
-Each run is a `job <name>` span of its own trace, with the job's ID and attempt, so its log lines and queries share one
-`reqId` ([logging.md](./logging.md)). Its lines carry `module: "jobs"`, `job`, `jobId` and `attempt`, and the
-`jobs.runs` metric counts each run by job and outcome.
+Each run is a `job <name>` span of its own trace, with the job's name, ID and attempt, so its log lines and queries
+share one `trace_id` ([logging.md](./logging.md)). Its lines carry `module: "jobs"`, `job`, `jobId` and `attempt`, and
+the `job.run.duration` metric times each run by job and outcome (`success`, `retry`, `failed`). A run that fails in
+any way ends its span as failed.
 
 | Log line                          | Level | Meaning                                                          |
 | --------------------------------- | ----- | ---------------------------------------------------------------- |

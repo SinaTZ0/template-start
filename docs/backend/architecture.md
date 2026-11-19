@@ -239,7 +239,8 @@ other oRPC middlewares: a cross-cutting concern is an option of `effectProcedure
   (which queues the deletion of its files) in one transaction. Work outside the database, such as deleting files from
   the bucket, is a job queued in the transaction, so it happens only if the transaction commits.
 - **Only boundaries run Effects**: `effectProcedure`, the server entry (`observeRequest`, the job workers), the
-  `/api/auth/*` and `/healthz` routes, seeds and tests. Everywhere else, compose with `yield*`.
+  server routes outside oRPC (`/api/auth/*`, `/healthz`, `/robots.txt`, `/sitemap.xml`), Better-Auth's callbacks
+  (`src/server/auth.server.ts`), seeds and tests. Everywhere else, compose with `yield*`.
 - A promise API is wrapped once, in its platform service (`Storage`, `Mailer`, `Auth`), and used as Effects from
   there. Effect's `@stability unstable` modules (`effect/sql`, `effect/persistence`, `effect/observability`) are used
   only inside `src/server/`.

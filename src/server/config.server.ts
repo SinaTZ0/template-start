@@ -19,6 +19,30 @@ const Secret = (name: string) =>
 const OptionalString = (name: string) =>
   Config.String(name).pipe(Config.option, Config.map(Option.filter((value) => value !== "")));
 
+/**
+ * `OTEL_EXPORTER_OTLP_HEADERS` as OpenTelemetry defines it: `name=value` pairs separated by commas, each value
+ * percent-encoded where it needs to be (`Authorization=Basic%20…`). A value written as it is (`Basic …`, base64
+ * padding included) is accepted too: a pair is split at its first `=`.
+ */
+export function parseOtlpHeaders(text: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const pair of text.split(",")) {
+    const at = pair.indexOf("=");
+    if (at <= 0) continue;
+    headers[pair.slice(0, at).trim()] = decodeHeaderValue(pair.slice(at + 1).trim());
+  }
+  return headers;
+}
+
+/** A value that isn't valid percent-encoding is taken as it was written. */
+function decodeHeaderValue(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /*===== App Config =====*/
 /**
  * The server's settings, read from the environment once when the runtime is built. A missing or malformed variable
@@ -27,6 +51,9 @@ const OptionalString = (name: string) =>
  * `.env.production.example` and the deploy tool's settings (docs/deployment.md → Adding a Variable).
  *
  * Secrets are `Redacted`: logging or serializing one prints `<redacted>`, and only `Redacted.value` reveals it.
+ *
+ * `LOG_LEVEL` and `SENTRY_DSN` aren't here: the log writer and the error reporter work before the runtime exists, and
+ * read them themselves (`#/server/observability/settings.server`).
  */
 export class AppConfig extends Context.Service<
   AppConfig,
@@ -41,12 +68,17 @@ export class AppConfig extends Context.Service<
       /** Whether a failed query's parameters may be logged and reported. They can hold personal data. */
       readonly queryParams: boolean;
     };
-    /** Where errors and slow requests are reported (the error viewer). None turns reporting off. */
-    readonly sentryDsn: Option.Option<string>;
-    /** Where traces and metrics are exported over OTLP/HTTP (OpenObserve). None turns export off. */
+    /**
+     * Where traces, metrics and logs are exported over OTLP/HTTP (OpenObserve), read from OpenTelemetry's own
+     * variables. None turns export off.
+     */
     readonly otlp: Option.Option<{
+      /** `OTEL_EXPORTER_OTLP_ENDPOINT`: each signal is posted to `<baseUrl>/v1/{traces,metrics,logs}`. */
       readonly baseUrl: string;
-      readonly authorization: Option.Option<Redacted.Redacted>;
+      /** `OTEL_EXPORTER_OTLP_HEADERS`, sent with every export. It holds the backend's credentials. */
+      readonly headers: Redacted.Redacted<Record<string, string>>;
+      /** `OTEL_SERVICE_NAME`: the name the backend lists this app under. */
+      readonly serviceName: string;
     }>;
     /**
      * The site's public address (`BETTER_AUTH_URL`): Better-Auth's base URL, and the origin of every absolute link.
@@ -87,7 +119,8 @@ export class AppConfig extends Context.Service<
         Config.withDefault("development" as const),
       );
       const otlpEndpoint = yield* OptionalString("OTEL_EXPORTER_OTLP_ENDPOINT");
-      const otlpAuthorization = yield* OptionalString("OTEL_EXPORTER_OTLP_AUTHORIZATION");
+      const otlpHeaders = yield* OptionalString("OTEL_EXPORTER_OTLP_HEADERS");
+      const otlpServiceName = yield* OptionalString("OTEL_SERVICE_NAME");
       return AppConfig.of({
         isDevelopment: nodeEnv === "development",
         databaseUrl: yield* Config.Redacted("DATABASE_URL"),
@@ -96,10 +129,10 @@ export class AppConfig extends Context.Service<
           slowQueryMs: yield* Config.Int("LOG_SLOW_QUERY_MS").pipe(Config.withDefault(200)),
           queryParams: yield* Config.Boolean("LOG_QUERY_PARAMS").pipe(Config.withDefault(false)),
         },
-        sentryDsn: yield* OptionalString("SENTRY_DSN"),
         otlp: Option.map(otlpEndpoint, (baseUrl) => ({
           baseUrl: baseUrl.replace(/\/+$/, ""),
-          authorization: Option.map(otlpAuthorization, Redacted.make),
+          headers: Redacted.make(parseOtlpHeaders(Option.getOrElse(otlpHeaders, () => ""))),
+          serviceName: Option.getOrElse(otlpServiceName, () => "app"),
         })),
         siteUrl: yield* Config.URL("BETTER_AUTH_URL"),
         authSecret: yield* Secret("BETTER_AUTH_SECRET"),

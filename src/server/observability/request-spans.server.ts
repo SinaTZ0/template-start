@@ -1,9 +1,11 @@
 import { performance } from "node:perf_hooks";
 
-import { Cause, Effect, Layer, Option, Tracer } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Metric, Option, Tracer } from "effect";
 
+import { redactText } from "#/lib/redact.server";
 import { AppConfig } from "#/server/config.server";
 import { writeLog } from "#/server/observability/log.server";
+import { dbOperationDuration } from "#/server/observability/metrics.server";
 import { sqlText } from "#/server/observability/sql-text";
 import { spanKind } from "#/server/observability/timeline";
 import type { CollectedSpan, SpanKind } from "#/server/observability/timeline";
@@ -34,6 +36,66 @@ export function takeRequestRecord(traceId: string): RequestRecord | undefined {
   return record;
 }
 
+/*===== Outcomes =====*/
+/**
+ * The exit a span is exported with. Effect's exporter marks every failed span as an error, but a typed failure
+ * (`NoteNotFound`, `Unauthorized`, `RateLimited`) is an expected outcome: a signed-out visitor would otherwise fill the
+ * backend's error list. Such a span ends as a success that names the failure (`app.outcome`). An interruption ends
+ * as it is. A defect ends as an error, and so does any failure of an entry span: a request's, which fails only for a
+ * 5xx, and a job run's, for which any failure is a failed run. An error is exported with its text redacted
+ * (`redactedFailure`).
+ */
+function exportedExit({
+  span,
+  exit,
+  isEntry,
+}: {
+  span: Tracer.Span;
+  exit: Exit.Exit<unknown, unknown>;
+  isEntry: boolean;
+}) {
+  if (exit._tag === "Success" || Cause.hasInterruptsOnly(exit.cause)) return exit;
+  if (isEntry || Cause.hasDies(exit.cause)) return redactedFailure(exit.cause);
+  const failure = Cause.findError(exit.cause);
+  const tag = failure._tag === "Success" ? (failure.success as { _tag?: unknown } | null)?._tag : undefined;
+  span.attribute("app.outcome", typeof tag === "string" ? tag : "failure");
+  return Exit.void;
+}
+
+/**
+ * The failure a span is exported with: the same errors, as the exporter would render them (name, message, stack with
+ * the spans it ran in), with secrets in their text redacted like a log line's (`#/lib/redact.server`). The exporter
+ * copies an error's message and stack into the span as they are, and an error can quote what it failed on.
+ */
+function redactedFailure(cause: Cause.Cause<unknown>): Exit.Exit<never, never> {
+  const errors = Cause.prettyErrors(cause, { includeCauseInStack: true }).map(({ name, message, stack }) => ({
+    name,
+    message: redactText(message),
+    stack: redactText(stack ?? `${name}: ${message}`),
+  }));
+  return Exit.failCause(Cause.fromReasons(errors.map((error) => Cause.makeDieReason(error))));
+}
+
+/*===== Database Metric =====*/
+const noServices = Context.empty();
+const operations = new Map<string, Metric.Metric<number, unknown>>();
+
+/** Counts a statement's time under its first keyword (`SELECT`, `INSERT`, `WITH`…): a handful of values, never the text. */
+function recordStatement({ sql, system, ms }: { sql: string; system: unknown; ms: number }) {
+  const operation = /^\s*([a-z]+)/i.exec(sql)?.[1]?.toUpperCase() ?? "OTHER";
+  let metric = operations.get(operation);
+  if (!metric) {
+    metric = dbOperationDuration.pipe(
+      Metric.withAttributes({
+        "db.system.name": typeof system === "string" ? system : "postgresql",
+        "db.operation.name": operation,
+      }),
+    );
+    operations.set(operation, metric);
+  }
+  metric.updateUnsafe(ms / 1000, noServices);
+}
+
 /*===== Tracer =====*/
 /**
  * Wraps the tracer spans are exported with (Effect's own, or OTLP's) to also:
@@ -42,6 +104,8 @@ export function takeRequestRecord(traceId: string): RequestRecord | undefined {
  *   `server` without a parent: the server entry's, one per request.
  * - write a `slow query` line for a statement at least `slowQueryMs` long, inside a request or not. It isn't reported:
  *   the slow request it belongs to is.
+ * - count every statement's time (`db.client.operation.duration`).
+ * - export a span that ended in an expected failure as a success (`exportedExit`).
  *
  * A span counts as failed when its exit carries a defect. A typed failure (`NoteNotFound`) is an expected outcome.
  */
@@ -55,11 +119,14 @@ function collectingTracer({ base, slowQueryMs }: { base: Tracer.Tracer; slowQuer
 
       const end = span.end.bind(span);
       span.end = (endTime, exit) => {
-        end(endTime, exit);
+        end(endTime, exportedExit({ span, exit, isEntry: options.kind === "server" || options.kind === "consumer" }));
         const ms = performance.now() - start;
         const query = span.attributes.get("db.query.text");
         const sql = typeof query === "string" ? sqlText(query) : undefined;
         const kind: SpanKind = isRoot ? "http" : spanKind({ name: span.name, sql });
+        if (typeof query === "string") {
+          recordStatement({ sql: query, system: span.attributes.get("db.system.name"), ms });
+        }
 
         if (sql !== undefined && ms >= slowQueryMs) {
           writeLog({

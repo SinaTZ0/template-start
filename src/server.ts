@@ -4,6 +4,7 @@ import { Cause, Effect, Exit, Fiber } from "effect";
 
 import { jobs } from "#/jobs.server";
 import { defineLocaleHeaderStrategy } from "#/lib/locale.server";
+import { procedureRoute } from "#/orpc/handler.server";
 import { deLocalizeHref } from "#/paraglide/runtime";
 import { paraglideMiddleware } from "#/paraglide/server";
 import { runJobWorkers } from "#/server/jobs.server";
@@ -55,11 +56,14 @@ defineLocaleHeaderStrategy();
 const routeMatcher = getRouter();
 
 /**
- * The route pattern a path matched (`/notes/$id`), so the request log and slow-request reports group a route's
- * requests together, in every locale (`/en/notes/…` too). Paths no route matches (assets, 404s)
- * are returned as they are.
+ * The route a path belongs to, so the request's span, log line, metric and slow-request reports group a route's
+ * requests together: the route pattern it matched (`/notes/$noteId`), in every locale (`/en/notes/…` too), and a
+ * procedure's own path (`/rpc/note/list`). Every other path falls to the catch-all routes (`/$`, `/rpc/$`), so the
+ * set of routes stays as small as the app's own.
  */
 function routePattern(path: string): string {
+  const procedure = procedureRoute(path);
+  if (procedure) return procedure;
   const [, , foundRoute] = routeMatcher.getMatchedRoutes(deLocalizeHref(path));
   return foundRoute?.fullPath ?? path;
 }

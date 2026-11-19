@@ -40,9 +40,9 @@ pnpm errors                   # optional, in a second terminal: error viewer on 
 - **Error viewer.** The app reports to it only when `.env` has `SENTRY_DSN=http://developmentkey@localhost:8000/1`
   (restart `pnpm dev` after setting it). The viewer's password is `admin`.
 - **Traces.** Optional: `docker compose -f compose.dev.yaml --profile observability up -d` starts OpenObserve on
-  http://localhost:5080 (`dev@example.com`, password `development`). The app exports its traces (with their log
-  lines) and metrics there once `.env` sets `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_AUTHORIZATION`
-  (`.env.example` has the values).
+  http://localhost:5080 (`dev@example.com`, password `Dev-pass-1`). The app exports its traces, metrics and logs
+  there once `.env` sets `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` (`.env.example` has the
+  values).
 - **Git hooks.** `pnpm install` installs them: staged files are linted and formatted before each commit, and commit
   messages must follow [Conventional Commits](https://www.conventionalcommits.org) (`feat: add note search`,
   `fix(auth): …`). Outside a git repository they are skipped; run `pnpm install` again after `git init`.

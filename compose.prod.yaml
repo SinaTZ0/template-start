@@ -78,7 +78,8 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       # Optional OpenTelemetry export (docs/deployment.md → Traces). Empty sends nothing.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-      OTEL_EXPORTER_OTLP_AUTHORIZATION: ${OTEL_EXPORTER_OTLP_AUTHORIZATION:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-}
       DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/app
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
       BETTER_AUTH_URL: https://${DOMAIN}
@@ -209,7 +210,7 @@ services:
       - error-viewer-data:/data
     logging: *logging
 
-  # ------ Traces ------ OpenObserve, which keeps the app's traces (with their log lines) and metrics
+  # ------ Traces ------ OpenObserve, which keeps the app's traces, metrics and logs
   # (docs/deployment.md → Traces). Off unless the server's `.env` has `COMPOSE_PROFILES=observability`, which Compose
   # reads itself: it needs a few hundred MB of memory, more than a small server spares. Bound to the server's loopback,
   # so it's reached through an SSH tunnel only, like pgweb.

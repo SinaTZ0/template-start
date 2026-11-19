@@ -1,7 +1,6 @@
 import { Cause, Layer, Logger, References } from "effect";
 import type { LogLevel as EffectLogLevel } from "effect";
 
-import { redactFields, redactText } from "#/lib/redact.server";
 import { writeLog } from "#/server/observability/log.server";
 import type { LogLevel } from "#/server/observability/log.server";
 
@@ -23,10 +22,9 @@ const LEVEL: Record<EffectLogLevel.LogLevel, LogLevel | undefined> = {
  *
  * - The `module` annotation names the line's module (`Effect.annotateLogs({ module: "media" })`); `userId` and
  *   `clientId` tag the line and its report; every other annotation is a field.
- * - The line carries the trace and span it was written in (`reqId`, `spanId`), so a request's lines and its trace are
- *   found by one ID.
+ * - The line carries the trace and span it was written in (`trace_id`, `span_id`), so a request's lines and its trace
+ *   are found by one ID, on stdout and in the exported logs alike.
  * - A logged cause is the line's `err`, so `Effect.logError("…", cause)` is reported to the error viewer.
- * - The line is also an event of the current span, redacted, so an exported trace carries its logs.
  */
 const appLogger = Logger.make((options) => {
   const level = LEVEL[options.logLevel];
@@ -37,17 +35,6 @@ const appLogger = Logger.make((options) => {
   const message = parts.map((part) => (typeof part === "string" ? part : JSON.stringify(part))).join(" ");
   const span = options.fiber.cache.span;
   const err = options.cause.reasons.length > 0 ? Cause.squash(options.cause) : undefined;
-
-  // The line as an event of the span it was written in, so an exported trace shows its logs. Redacted like the line:
-  // Effect's own tracer logger would copy the fields as they are.
-  if (span?._tag === "Span" && span.status._tag !== "Ended") {
-    span.event(message, BigInt(options.date.getTime()) * 1_000_000n, {
-      "log.level": level,
-      ...(typeof module === "string" && { "log.module": module }),
-      ...redactFields(fields),
-      ...(err !== undefined && { "exception.message": redactText(Cause.pretty(options.cause)) }),
-    });
-  }
 
   writeLog({
     level,

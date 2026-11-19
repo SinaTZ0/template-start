@@ -12,7 +12,7 @@ request ──▶ src/server.ts ▸ observeRequest (root span) ──▶ rpc.<pa
 
 Effect.logError(…, cause) / log.error({ err }) ──▶ log line + error viewer event
 browser error ──▶ error viewer event
-spans, Effect's logs, metrics ──▶ OTLP backend (OpenObserve), only when OTEL_EXPORTER_OTLP_ENDPOINT is set
+spans, log lines, metrics ──▶ OTLP backend (OpenObserve), only when OTEL_EXPORTER_OTLP_ENDPOINT is set
 ```
 
 The code is in `src/server/observability/`.
@@ -20,7 +20,7 @@ The code is in `src/server/observability/`.
 - **One writer.** Every line the server writes goes through `writeLog` (`log.server.ts`): Effect's log entries
   through the app's logger (`logger.server.ts`), and the few places outside any fiber through `createLogger`.
   Production writes one JSON object per line to stdout for Docker to collect. Development prints one readable line
-  per entry, with an error under it.
+  per entry, with an error under it. With the OTLP export on, the same lines also go to the backend.
 - **Errors go to the error viewer.** `tools/error-viewer` is a small Go service of this repo that speaks Sentry's
   protocol, so the app uses the official Sentry SDKs (`@sentry/node`, `@sentry/browser`) pointed at it. It stores each
   event with its stack and context in SQLite and lists them for searching. Development runs it with `pnpm errors`
@@ -51,7 +51,6 @@ yield* Effect.logInfo("deleted orphaned media").pipe(Effect.annotateLogs({ delet
   `app`. A procedure's lines are `orpc`, a job's `jobs`. Every other annotation becomes a field of the line.
 - The boundary logs every defect of a procedure once, with the `errorId` the client receives. Don't log a failure and
   then fail with it in services: it would become two reports.
-- Every log entry is also an event on the span it was written in, so an exported trace shows the logs in place.
 
 Code that runs outside Effect (Better-Auth's callbacks, the oRPC handler's interceptor, `handleErrorsMiddleware`) takes
 a logger per module, with the error under `err`:
@@ -64,10 +63,16 @@ created.on("error", (error) => log.error({ err: error }, "idle auth database con
 
 Never use `console` in server code; seeds and scripts are the exception.
 
-**Request IDs.** Every line written while a request is handled carries its `reqId`, the request's trace ID (32 hex
-characters), and the `spanId` it was written in. Search for the `reqId` to see everything one request did. Every
-response returns it as an `X-Request-Id` header (`observeRequest`), so it can be read from the browser's devtools and
-quoted in a bug report. Each job run is a trace of its own, so its lines share a `reqId` too.
+**Request IDs.** A request's ID is its trace ID (32 hex characters), under one name per place:
+
+- **`trace_id`** in every line written while the request is handled, with the `span_id` it was written in. These are
+  OpenTelemetry's names, which log collectors match a line to its trace by. Search the logs for the ID to see
+  everything one request did.
+- **`X-Request-Id`** on every response (`observeRequest`), so it can be read from the browser's devtools and quoted in a
+  bug report.
+- **`reqId`** on the request's reports in the error viewer.
+
+Each job run is a trace of its own, so its lines share a `trace_id` too.
 
 ## Error Reporting
 
@@ -123,9 +128,10 @@ Cookies, headers, request bodies, query strings, IP addresses, local variables a
 off (`dataCollection` in both setups); the user's ID is the one thing set on purpose. A failed query's parameters are
 replaced with `(hidden)` unless `LOG_QUERY_PARAMS` is on; Drizzle leaves them out of its errors entirely unless it is.
 
-**Secrets are redacted** before a line is written or a report is sent (`src/lib/redact.server.ts`, adapted from
-`@nestjs/observe`). `writeLog` redacts a line's fields once, for both its output and the report; the error serializer
-and the server SDK's `beforeSend` redact the error's message and stack.
+**Secrets are redacted** before a line is written, a report is sent or a span is exported
+(`src/lib/redact.server.ts`, adapted from `@nestjs/observe`). `writeLog` redacts a line's message and fields once, for
+its output, its report and its export; the error serializer and the server SDK's `beforeSend` redact the error's
+message and stack; and the tracer redacts the error a failed span is exported with (`request-spans.server.ts`).
 
 - **By key:** a field whose name ends in `password`, `secret`, `token`, `credential(s)`, `signature`, `jwt`, `cookie`,
   `apiKey`, `privateKey`, `accessKey`, `secretKey`, `sessionId` or `authorization` (`resetToken`, `client_secret`), or
@@ -176,7 +182,9 @@ what makes the timing work:
 | `storage`    | Names that start with `Storage.`                            | `Storage.put`                        |
 | `task`       | Every other span                                            | `Auth.session`, `media.processImage` |
 
-The request itself is the root span, `GET /notes/$noteId` (the route pattern), of kind `server`. Kinds nest: a
+The request itself is the root span, of kind `server`, named for its method and route: `GET /notes/$noteId` (the
+route pattern) for a page, `POST /rpc/note/list` (the procedure's path) for a call from the browser. A path that
+matches nothing falls to a catch-all route (`/$`, `/rpc/$`), so the routes are only ever the app's own. Kinds nest: a
 procedure's time includes its service and repository calls, and those include their queries. Add the kinds up and you
 count the same time more than once.
 
@@ -211,8 +219,9 @@ Every request writes one line, here as development prints it:
 [09:41:07.215] INFO: GET /notes 200 45ms (task 2×9ms, service 2×30ms, procedure 2×36ms, db 1×9ms, repository 1×12ms)
 ```
 
-followed by its fields: `module`, `reqId`, `userId` when known, and `request` with the method, path, status, time and
-route. `procedure 2×36ms` means two procedures ran, taking 36 ms in total; kinds are listed in the order their first
+followed by its fields: `module`, `trace_id`, `span_id`, `userId` when known, and the request's method, path, status
+and route under the names its span uses (`http.request.method`, `url.path`, `http.response.status_code`, `http.route`),
+with its time as `duration_ms`. `procedure 2×36ms` means two procedures ran, taking 36 ms in total; kinds are listed in the order their first
 span ended. A 5xx is an error line (`request failed: …`). A request slower than `LOG_SLOW_REQUEST_MS` is a warning
 line (`slow request: …`), and is also **reported to the error viewer** as `Slow request: GET /notes/$noteId (1420ms)`,
 of kind `slow`. Search `route:/notes/$noteId` to see the slow hits on one route. Only one report per method and route
@@ -265,25 +274,78 @@ inside or outside a request. It isn't reported to the error viewer: the slow req
 - Only statements on the app's pool (`PgLive`) are `db` spans. A separate `pg` pool or client, like Better-Auth's,
   isn't traced.
 - The error viewer shows errors, not performance: there are no percentile charts, only reports for requests past the
-  threshold. The log lines carry every request's timing, and the OTLP export every request's trace.
+  threshold. The log lines carry every request's timing, and the OTLP export every request's trace and the metrics
+  to chart percentiles from.
 
 ## OpenTelemetry
 
-With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the app sends its traces and metrics to an OpenTelemetry backend over
-OTLP/HTTP (`export.server.ts`, Effect's `OtlpTracer` and `OtlpMetrics`). Without it, nothing leaves the
-server. `OTEL_EXPORTER_OTLP_AUTHORIZATION`, when set, is sent as the `Authorization` header.
+With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the app sends its traces, metrics and logs to an OpenTelemetry backend over
+OTLP/HTTP (`export.server.ts`). Without it, nothing leaves the server. The settings are OpenTelemetry's own
+variables, and the names of spans, attributes and metrics are its
+[semantic conventions](https://opentelemetry.io/docs/specs/semconv/) wherever one exists, so any OTLP backend can be
+set up from its own instructions and its ready-made views read the data.
 
-- **Traces** are the same spans the request line is made from: one trace per request, with its procedures, services,
-  repositories, queries (their SQL, never their parameters) and bucket calls, and one per job run. The exporter's
-  tracer sits under the request collector, so the request line and the slow-request timeline keep working.
-- **Logs** travel inside the traces: each line Effect code writes is also an event of the span it was written in,
-  redacted like the stdout line (`logger.server.ts`). Log lines aren't exported on their own: Effect's OTLP logger
-  would send their fields unredacted. They stay in the container's log, with lines written outside any fiber
-  (`createLogger`).
-- **Metrics** (`metrics.server.ts`): `http.server.request.duration`, every request's time by method, route pattern and
-  status class, and `jobs.runs`, every job run by job and outcome (`success`, `retry`, `failed`).
-- The service is named `app`, with the build's commit as its version and `deployment.environment.name` set to
-  `development` or `production`.
+### Traces
+
+The same spans the request line is made from: one trace per request, with its procedures, services, repositories,
+queries and bucket calls, and one per job run. The exporter's tracer sits under the request collector, so the request
+line and the slow-request timeline keep working.
+
+| Span              | Kind       | Name                 | Attributes                                                                                                         |
+| ----------------- | ---------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| A request         | `server`   | `GET /notes/$noteId` | `http.request.method`, `http.route`, `url.path`, `url.scheme`, `http.response.status_code`; `error.type` for a 5xx |
+| A procedure       | `internal` | `rpc.note.list`      | `user.id` once the session is read                                                                                 |
+| A service, a repo | `internal` | `NoteService.list`   | What the code adds with `Effect.annotateCurrentSpan`                                                               |
+| A statement       | `client`   | The database's name  | `db.system.name`, `db.namespace`, `db.query.text` (never its parameters), `db.operation.name`, `server.address`    |
+| A job run         | `consumer` | `job media.discard`  | `job.name`, `job.id`, `job.attempt`                                                                                |
+
+**What counts as failed.** A span is exported as an error only when something went wrong:
+
+- A span that ends with a defect (a failed query, a bug) is an error, with the exception as its event, its message
+  and stack redacted like a log line's.
+- A span that ends with a typed failure (`NoteNotFound`, `Unauthorized`, `RateLimited`) is not: that is an expected
+  outcome, and a signed-out visitor would otherwise fill the backend's error list. The span names the failure in
+  `app.outcome` instead.
+- The request's span is an error when the response is a 5xx, as the conventions ask of a server, and a job run's span
+  when the run fails in any way.
+
+The trace context a request arrives with (`traceparent`) is not read: the app is the first hop behind Caddy, and a
+header anyone can send must not pick the trace a request joins.
+
+### Metrics
+
+Defined in `metrics.server.ts`, exported every 10 seconds. Durations are in seconds.
+
+| Metric                         | Kind      | Attributes                                                       |
+| ------------------------------ | --------- | ---------------------------------------------------------------- |
+| `http.server.request.duration` | histogram | `http.request.method`, `http.route`, `http.response.status_code` |
+| `db.client.operation.duration` | histogram | `db.system.name`, `db.operation.name` (`SELECT`, `INSERT`…)      |
+| `job.run.duration`             | histogram | `job.name`, `job.outcome` (`success`, `retry`, `failed`)         |
+| `process.memory.usage`         | gauge     | The resident memory, in bytes                                    |
+| `v8js.memory.heap.used`        | gauge     | The heap in use, in bytes                                        |
+| `nodejs.eventloop.delay.p99`   | gauge     | The event loop's delay over the last 10 seconds                  |
+| `nodejs.eventloop.utilization` | gauge     | The share of that time the event loop was busy                   |
+
+A histogram's count is the number of requests, statements or runs, so rates and error rates come from the same
+metric (requests by `http.response.status_code`, runs by `job.outcome`). Attributes hold route patterns, never paths
+or IDs: each distinct value is a series the backend keeps. The process's gauges are sampled only while exporting. Add
+a metric next to these, named the way the conventions name its kind, and record it with `Metric.update`.
+
+### Logs
+
+Every line the server writes is exported as an OTLP log record, by the log writer itself (`writeLog`), so the backend
+gets exactly what stdout got, redacted the same way: the lines Effect code writes and the few written outside any
+fiber alike. A record carries its severity, the `trace_id` and `span_id` it was written in (which is how the backend
+shows a request's lines beside its trace), the line's fields as attributes (nested ones as dotted names), the user as
+`user.id`, and an error as `exception.type`, `exception.message` and `exception.stacktrace`.
+
+### The Resource
+
+Every export names where it came from: `service.name` (`OTEL_SERVICE_NAME`, `app` by default), `service.version` (the
+build's commit) and `deployment.environment.name` (`development` or `production`). `OTEL_RESOURCE_ATTRIBUTES` adds
+more (`service.namespace=shop,host.name=web-1`), which tells several apps or servers apart in one backend.
+
+### Running It
 
 In development, OpenObserve runs from `compose.dev.yaml` under the `observability` profile, which `pnpm services`
 doesn't start: `docker compose -f compose.dev.yaml --profile observability up -d`. Its UI is http://localhost:5080
@@ -291,7 +353,7 @@ doesn't start: `docker compose -f compose.dev.yaml --profile observability up -d
 
 ```text
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5080/api/default
-OTEL_EXPORTER_OTLP_AUTHORIZATION=Basic ZGV2QGV4YW1wbGUuY29tOkRldi1wYXNzLTE=
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic ZGV2QGV4YW1wbGUuY29tOkRldi1wYXNzLTE=
 ```
 
 In production it is optional and off by default, since it needs a few hundred MB of memory
@@ -343,15 +405,17 @@ projects or users.
 
 ## Configuration
 
-| Variable                           | Default | Meaning                                                         |
-| ---------------------------------- | ------- | --------------------------------------------------------------- |
-| `LOG_LEVEL`                        | `info`  | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`    |
-| `LOG_SLOW_REQUEST_MS`              | `1000`  | A request at least this slow is a warning and an error report   |
-| `LOG_SLOW_QUERY_MS`                | `200`   | A query at least this slow is logged on its own                 |
-| `LOG_QUERY_PARAMS`                 | `false` | Log and report a failed query's parameters (personal data risk) |
-| `SENTRY_DSN`                       | (empty) | The error viewer's DSN, for the server and the browser          |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`      | (empty) | Where traces and metrics are exported; empty sends none         |
-| `OTEL_EXPORTER_OTLP_AUTHORIZATION` | (empty) | The `Authorization` header sent with the export (a secret)      |
+| Variable                      | Default | Meaning                                                                  |
+| ----------------------------- | ------- | ------------------------------------------------------------------------ |
+| `LOG_LEVEL`                   | `info`  | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`             |
+| `LOG_SLOW_REQUEST_MS`         | `1000`  | A request at least this slow is a warning and an error report            |
+| `LOG_SLOW_QUERY_MS`           | `200`   | A query at least this slow is logged on its own                          |
+| `LOG_QUERY_PARAMS`            | `false` | Log and report a failed query's parameters (personal data risk)          |
+| `SENTRY_DSN`                  | (empty) | The error viewer's DSN, for the server and the browser                   |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | (empty) | Where traces, metrics and logs are exported; empty sends none            |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | (empty) | Headers sent with every export, `name=value,…`: the backend's credential |
+| `OTEL_SERVICE_NAME`           | `app`   | The name the backend lists the app under                                 |
+| `OTEL_RESOURCE_ATTRIBUTES`    | (empty) | More about where the export comes from, `name=value,…`                   |
 
 `LOG_LEVEL`, `LOG_QUERY_PARAMS` and `SENTRY_DSN` are read once at startup by `settings.server.ts`, since the writer and
 the reporter work outside the runtime too; the rest are `AppConfig`'s. Both read the process's environment only
@@ -361,18 +425,19 @@ the reporter work outside the runtime too; the rest are `AppConfig`'s. Both read
 Production leaves it off unless you set it.
 
 At `LOG_LEVEL=warn`, only the slow, failed and erroring requests are written, which suits development next to the
-error viewer and a busy production server. `fatal` and `silent` also stop error reports, which are sent from the
-writer.
+error viewer and a busy production server. The export sends the lines that are written, so the level decides what
+reaches the backend too. `fatal` and `silent` also stop error reports, which are sent from the writer.
 
 The browser bundle reads `SENTRY_DSN` when it is built (`envPrefix` in `vite.config.ts`), so changing it needs a
 rebuild. The server reads it at startup.
 
 ## Production Logs
 
-- Each line is one JSON object: `level`, `time`, `module`, `msg`, `reqId` and `spanId` inside a trace, `userId` when
-  known, the line's own fields, and `err` for an error (type, message, stack, cause).
-- The request line has `request.{method,path,status,ms}` and `request.route` (the matched route pattern, e.g.
-  `/notes/$noteId` or `/rpc/$`, for grouping; the path when no route matched). Its time per kind is in `msg`.
+- Each line is one JSON object: `level`, `time`, `module`, `msg`, `trace_id` and `span_id` inside a trace, `userId`
+  when known, the line's own fields, and `err` for an error (type, message, stack, cause).
+- The request line has `http.request.method`, `url.path`, `http.response.status_code`, `duration_ms` and `http.route`
+  (the route pattern, e.g. `/notes/$noteId`, or the procedure's path, `/rpc/note/list`, for grouping). Its time per
+  kind is in `msg`.
 - Paths are logged without their query string, which can carry tokens.
 - A healthy `/healthz` probe writes no request line, because Docker and uptime monitors poll it every few seconds. A
   slow or failing probe is logged like any other request.

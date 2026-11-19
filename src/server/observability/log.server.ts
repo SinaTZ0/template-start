@@ -43,13 +43,34 @@ export function serializeError(error: unknown, depth = 0): unknown {
 /** What a line knows about where it was written: the request and span it belongs to, when there is one. */
 export type LogContext = ReportContext & { readonly spanId?: string | undefined };
 
+/*===== Export =====*/
+/** A line as it is handed on for export: what stdout got, already redacted. */
+export type ExportedLog = {
+  readonly level: LogLevel;
+  readonly time: Date;
+  readonly module: string;
+  readonly message: string;
+  /** The line's fields, redacted. */
+  readonly fields: Record<string, unknown>;
+  /** The line's error as `serializeError` made it, redacted. */
+  readonly err: unknown;
+  readonly context: LogContext;
+};
+
+let exportLog: ((entry: ExportedLog) => void) | undefined;
+
+/**
+ * Sends every line written from now on to `sink` as well, or stops with `undefined`. The OTLP export sets it for as
+ * long as its runtime lives (`#/server/observability/export.server`): lines go out through the one writer, so what is
+ * exported is exactly what stdout got, redacted the same way.
+ */
+export function setLogExport(sink: ((entry: ExportedLog) => void) | undefined): void {
+  exportLog = sink;
+}
+
 // Development prints one readable line per entry (and an error under it); production writes one JSON object per line
 // to stdout for Docker to collect. `import.meta.env` is Vite's: a script run by tsx has none and is development.
 const pretty = !import.meta.env?.PROD;
-
-function time(): string {
-  return new Date().toISOString().slice(11, 23);
-}
 
 /**
  * Writes one log line. Every line of the server goes through here: Effect's logger (`#/server/observability/logger
@@ -74,26 +95,33 @@ export function writeLog({
   context?: LogContext;
 }): void {
   if (RANK[level] < minimum) return;
+  const now = new Date();
+  // `Effect.log("…", value)` puts its values in the message, so the text is redacted like the fields.
+  const text = redactText(message);
   const safe = redactFields(fields);
+  const error = err === undefined ? undefined : serializeError(err);
+  // OpenTelemetry's names for a line's place in a trace, which log collectors match a line to its trace by. The
+  // trace ID is the request's ID: its `X-Request-Id` header and its reports' `reqId` tag.
   const ids = {
-    ...(context.traceId && { reqId: context.traceId }),
-    ...(context.spanId && { spanId: context.spanId }),
+    ...(context.traceId && { trace_id: context.traceId }),
+    ...(context.spanId && { span_id: context.spanId }),
     ...(context.userId && { userId: context.userId }),
   };
 
   if (pretty) {
     const extra = JSON.stringify({ module, ...ids, ...safe });
-    const line = `[${time()}] ${level.toUpperCase()}: ${message} ${extra}`;
-    const error =
-      err === undefined ? "" : `\n    err: ${JSON.stringify(serializeError(err), null, 2).replaceAll("\n", "\n    ")}`;
-    process.stdout.write(`${line}${error}\n`);
+    const line = `[${now.toISOString().slice(11, 23)}] ${level.toUpperCase()}: ${text} ${extra}`;
+    const under = error === undefined ? "" : `\n    err: ${JSON.stringify(error, null, 2).replaceAll("\n", "\n    ")}`;
+    process.stdout.write(`${line}${under}\n`);
   } else {
-    const entry = { level, time: new Date().toISOString(), module, msg: message, ...ids, ...safe };
-    process.stdout.write(`${JSON.stringify(err === undefined ? entry : { ...entry, err: serializeError(err) })}\n`);
+    const entry = { level, time: now.toISOString(), module, msg: text, ...ids, ...safe };
+    process.stdout.write(`${JSON.stringify(error === undefined ? entry : { ...entry, err: error })}\n`);
   }
 
+  exportLog?.({ level, time: now, module, message: text, fields: safe, err: error, context });
+
   if (err !== undefined && RANK[level] >= RANK.error) {
-    reportError({ err, message, fields: { module, ...safe }, context });
+    reportError({ err, message: text, fields: { module, ...safe }, context });
   }
 }
 
@@ -110,7 +138,7 @@ type LogMethod = (fieldsOrMessage: Record<string, unknown> | string, message?: s
 
 /**
  * A logger for code that runs outside Effect: Better-Auth's callbacks, the server entry, the oRPC handler's
- * interceptor. Effect code logs with `Effect.log*` instead. Lines carry the current request's `reqId` and `userId`.
+ * interceptor. Effect code logs with `Effect.log*` instead. Lines carry the current request's `trace_id` and `userId`.
  *
  * Errors go under `err`, as in Effect code: `log.error({ err, mediaId }, "could not …")`.
  */

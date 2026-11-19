@@ -22,7 +22,7 @@ one-time jobs, before the app starts:  migrate ──▶ db      storage-init �
 | `db`           | Postgres 17                                                                                                   |
 | `seaweedfs`    | S3-compatible image storage with three identities: `anonymous`, `app` and `admin` (below)                     |
 | `error-viewer` | Receives and shows the app's server and browser errors and slow requests (Error Tracking below)               |
-| `openobserve`  | Optional, off by default: keeps the app's traces (with their log lines) and metrics for a week (Traces below) |
+| `openobserve`  | Optional, off by default: keeps the app's traces, metrics and logs for a week (Traces below)                  |
 
 Only Caddy publishes ports to the internet; OpenObserve and the database browser listen on the server's loopback,
 for an SSH tunnel. Postgres and SeaweedFS are reachable from inside the stack only. Each container gets just
@@ -174,8 +174,8 @@ title can hold whatever the error message held. Empty (the default) sends nothin
 
 ## Traces
 
-The app can send its traces (each with its log lines) and metrics over OpenTelemetry (OTLP/HTTP) to [OpenObserve](https://openobserve.ai),
-which runs in the stack as the `openobserve` service. What it exports, and how a request becomes a trace, is in
+The app can send its traces, metrics and logs over OpenTelemetry (OTLP/HTTP) to
+[OpenObserve](https://openobserve.ai), which runs in the stack as the `openobserve` service. What it exports, and how a request becomes a trace, is in
 [logging.md](./backend/logging.md). Where the error viewer shows one failed or slow request, OpenObserve shows every
 request: where the time went, across requests, over the last week.
 
@@ -184,16 +184,19 @@ small server spares. Off, nothing leaves the server, and the request log, the er
 timelines work as before. To turn it on, set these in `.env` (Settings: edit `.env`, then apply). The deploy tool
 knows them all as optional, so it never asks for them:
 
-| Setting                            | Value                                                                                                                                                           |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `COMPOSE_PROFILES`                 | `observability`. Compose reads it from `.env` itself and starts `openobserve`                                                                                   |
-| `OPENOBSERVE_ROOT_PASSWORD`        | 12 characters or more, with a lowercase and an uppercase letter, a digit and a symbol (OpenObserve refuses to start otherwise). The sign-in is `admin@<DOMAIN>` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`      | `http://openobserve:5080/api/default`, the service by its name inside the stack                                                                                 |
-| `OTEL_EXPORTER_OTLP_AUTHORIZATION` | `Basic ` and the base64 of `admin@<DOMAIN>:<password>`                                                                                                          |
-| `ERROR_VIEWER_TRACE_URL`           | `http://localhost:5080/web/traces?org_identifier=default&trace_id={traceId}`                                                                                    |
+| Setting                       | Value                                                                                                                                                           |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COMPOSE_PROFILES`            | `observability`. Compose reads it from `.env` itself and starts `openobserve`                                                                                   |
+| `OPENOBSERVE_ROOT_PASSWORD`   | 12 characters or more, with a lowercase and an uppercase letter, a digit and a symbol (OpenObserve refuses to start otherwise). The sign-in is `admin@<DOMAIN>` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://openobserve:5080/api/default`, the service by its name inside the stack                                                                                 |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | `Authorization=Basic ` followed by the base64 of `admin@<DOMAIN>:<password>`                                                                                    |
+| `ERROR_VIEWER_TRACE_URL`      | `http://localhost:5080/web/traces?org_identifier=default&trace_id={traceId}`                                                                                    |
 
-Make the authorization with `printf 'admin@example.com:the-password' | base64`. The app reads both `OTEL_*` values when
-it starts (`AppConfig`); with the endpoint empty it exports nothing, whatever the profile says.
+Make the base64 with `printf 'admin@example.com:the-password' | base64`. These are OpenTelemetry's own variables, so
+another OTLP backend (Grafana, SigNoz, a hosted one) is set up the same way, from its own instructions:
+`OTEL_EXPORTER_OTLP_HEADERS` is a comma-separated list of `name=value`. `OTEL_SERVICE_NAME` (default `app`) and
+`OTEL_RESOURCE_ATTRIBUTES` are read too. The app reads them when it starts (`AppConfig`); with the endpoint empty it
+exports nothing, whatever the profile says.
 
 **Opening it.** Like the database browser, OpenObserve listens on the server's loopback only (`127.0.0.1:5080`), and
 Caddy doesn't route to it, so nothing on the internet reaches it. Open a tunnel from your computer and sign in:
@@ -202,13 +205,13 @@ Caddy doesn't route to it, so nothing on the internet reaches it. Open a tunnel 
 ssh -N -L 5080:localhost:5080 you@your-server     # leave it running, then open http://localhost:5080
 ```
 
-**From a report to its trace.** A request's trace ID is its `X-Request-Id`, and the `reqId` of its log lines and its
-error reports. With `ERROR_VIEWER_TRACE_URL` set, the error viewer adds "Open trace" to a report's `reqId`, which opens
+**From a report to its trace.** A request's trace ID is its `X-Request-Id`, the `trace_id` of its log lines and the
+`reqId` of its error reports. With `ERROR_VIEWER_TRACE_URL` set, the error viewer adds "Open trace" to a report's `reqId`, which opens
 the request's trace through the same tunnel. The URL must contain `{traceId}`, where the ID goes, or the error viewer
 refuses to start.
 
 **History.** OpenObserve keeps 7 days (`ZO_COMPACT_DATA_RETENTION_DAYS` in `compose.prod.yaml`), in the
-`openobserve-data` volume. Backups don't include it: losing it loses that week's traces, nothing else.
+`openobserve-data` volume. Backups don't include it: losing it loses that week's traces, metrics and logs, nothing else.
 
 **Turning it off.** Empty `COMPOSE_PROFILES` and `OTEL_EXPORTER_OTLP_ENDPOINT` and apply, then remove the container,
 which a deploy leaves running: `docker compose -f compose.prod.yaml --profile observability rm -sf openobserve`.
