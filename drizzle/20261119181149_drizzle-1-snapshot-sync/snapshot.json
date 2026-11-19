@@ -1,0 +1,39 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "afc22c4f-e96b-497c-b1e6-711490ffbb8a",
+  "prevIds": [
+    "4b3cbc81-8ce9-4744-b377-81e2d1ba6397"
+  ],
+  "footprints": [
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "note",
+        "created_at"
+      ],
+      "writes": [
+        "s|colprop|public.note.created_at.type",
+        "s|colprop|public.note.created_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.note",
+        "n|sch|public",
+        "n|col|public.note.created_at"
+      ],
+      "sqlHash": "905b6f1e980bca37"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"note\",\"created_at\"]",
+      "set": {
+        "type": "timestamp(3) with time zone"
+      }
+    }
+  ]
+}

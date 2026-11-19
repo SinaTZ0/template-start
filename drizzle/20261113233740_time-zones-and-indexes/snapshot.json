@@ -1,0 +1,543 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "4b3cbc81-8ce9-4744-b377-81e2d1ba6397",
+  "prevIds": [
+    "f4092f26-ca16-4888-8b53-674c353770d1"
+  ],
+  "footprints": [
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "account",
+        "access_token_expires_at"
+      ],
+      "writes": [
+        "s|colprop|public.account.access_token_expires_at.type",
+        "s|colprop|public.account.access_token_expires_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.account.access_token_expires_at"
+      ],
+      "sqlHash": "cb5930b20cbf9b4b"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "account",
+        "refresh_token_expires_at"
+      ],
+      "writes": [
+        "s|colprop|public.account.refresh_token_expires_at.type",
+        "s|colprop|public.account.refresh_token_expires_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.account.refresh_token_expires_at"
+      ],
+      "sqlHash": "466467bc09fce37e"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "account",
+        "created_at"
+      ],
+      "writes": [
+        "s|colprop|public.account.created_at.type",
+        "s|colprop|public.account.created_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.account.created_at"
+      ],
+      "sqlHash": "57b377f23f7b3550"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "account",
+        "updated_at"
+      ],
+      "writes": [
+        "s|colprop|public.account.updated_at.type",
+        "s|colprop|public.account.updated_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.account.updated_at"
+      ],
+      "sqlHash": "7de8e5db016e8e4b"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "media",
+        "attached_at"
+      ],
+      "writes": [
+        "s|colprop|public.media.attached_at.type",
+        "s|colprop|public.media.attached_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.media",
+        "n|sch|public",
+        "n|col|public.media.attached_at"
+      ],
+      "sqlHash": "8da40875666533fc"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "media",
+        "created_at"
+      ],
+      "writes": [
+        "s|colprop|public.media.created_at.type",
+        "s|colprop|public.media.created_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.media",
+        "n|sch|public",
+        "n|col|public.media.created_at"
+      ],
+      "sqlHash": "0baf12a4b6815c26"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "note",
+        "created_at"
+      ],
+      "writes": [
+        "s|colprop|public.note.created_at.type",
+        "s|colprop|public.note.created_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.note",
+        "n|sch|public",
+        "n|col|public.note.created_at"
+      ],
+      "sqlHash": "d2fbf511ed399c25"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "session",
+        "expires_at"
+      ],
+      "writes": [
+        "s|colprop|public.session.expires_at.type",
+        "s|colprop|public.session.expires_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.session",
+        "n|sch|public",
+        "n|col|public.session.expires_at"
+      ],
+      "sqlHash": "3f8dbd12bf81c50e"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "session",
+        "created_at"
+      ],
+      "writes": [
+        "s|colprop|public.session.created_at.type",
+        "s|colprop|public.session.created_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.session",
+        "n|sch|public",
+        "n|col|public.session.created_at"
+      ],
+      "sqlHash": "80c6fbd457434b36"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "session",
+        "updated_at"
+      ],
+      "writes": [
+        "s|colprop|public.session.updated_at.type",
+        "s|colprop|public.session.updated_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.session",
+        "n|sch|public",
+        "n|col|public.session.updated_at"
+      ],
+      "sqlHash": "1a4c4784d0f687e2"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "user",
+        "created_at"
+      ],
+      "writes": [
+        "s|colprop|public.user.created_at.type",
+        "s|colprop|public.user.created_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.user.created_at"
+      ],
+      "sqlHash": "905cf6b963a23a2f"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "user",
+        "updated_at"
+      ],
+      "writes": [
+        "s|colprop|public.user.updated_at.type",
+        "s|colprop|public.user.updated_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.user.updated_at"
+      ],
+      "sqlHash": "e8f6e92f6e1a94ec"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "verification",
+        "expires_at"
+      ],
+      "writes": [
+        "s|colprop|public.verification.expires_at.type",
+        "s|colprop|public.verification.expires_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.verification",
+        "n|sch|public",
+        "n|col|public.verification.expires_at"
+      ],
+      "sqlHash": "776542783dd35142"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "verification",
+        "created_at"
+      ],
+      "writes": [
+        "s|colprop|public.verification.created_at.type",
+        "s|colprop|public.verification.created_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.verification",
+        "n|sch|public",
+        "n|col|public.verification.created_at"
+      ],
+      "sqlHash": "0581b8e10bdda68c"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "verification",
+        "updated_at"
+      ],
+      "writes": [
+        "s|colprop|public.verification.updated_at.type",
+        "s|colprop|public.verification.updated_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.verification",
+        "n|sch|public",
+        "n|col|public.verification.updated_at"
+      ],
+      "sqlHash": "1b3b269dcaca5e60"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "deploy_step",
+        "started_at"
+      ],
+      "writes": [
+        "s|colprop|public.deploy_step.started_at.type",
+        "s|colprop|public.deploy_step.started_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.deploy_step",
+        "n|sch|public",
+        "n|col|public.deploy_step.started_at"
+      ],
+      "sqlHash": "82c104de53c72f46"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "deploy_step",
+        "finished_at"
+      ],
+      "writes": [
+        "s|colprop|public.deploy_step.finished_at.type",
+        "s|colprop|public.deploy_step.finished_at.default"
+      ],
+      "reads": [
+        "n|tbl|public.deploy_step",
+        "n|sch|public",
+        "n|col|public.deploy_step.finished_at"
+      ],
+      "sqlHash": "4b5a0e8a3ad81311"
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "media",
+        "media_uploaded_by_idx"
+      ],
+      "writes": [
+        "s|idx|public.media_uploaded_by_idx",
+        "n|idx|public.media_uploaded_by_idx",
+        "e|idx|public.media_uploaded_by_idx",
+        "n|rel|public.media_uploaded_by_idx"
+      ],
+      "reads": [
+        "n|tbl|public.media",
+        "n|sch|public",
+        "n|col|public.media.uploaded_by"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "note",
+        "note_image_media_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.note_image_media_id_idx",
+        "n|idx|public.note_image_media_id_idx",
+        "e|idx|public.note_image_media_id_idx",
+        "n|rel|public.note_image_media_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.note",
+        "n|sch|public",
+        "n|col|public.note.image_media_id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "media",
+        "name": "media_uploaded_by_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "uploaded_by",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "note",
+        "name": "note_image_media_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "image_media_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"account\",\"access_token_expires_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"account\",\"refresh_token_expires_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"account\",\"created_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"account\",\"updated_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"media\",\"attached_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"media\",\"created_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"note\",\"created_at\"]",
+      "set": {
+        "type": "timestamp (3) with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"session\",\"expires_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"session\",\"created_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"session\",\"updated_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"user\",\"created_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"user\",\"updated_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"verification\",\"expires_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"verification\",\"created_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"verification\",\"updated_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"deploy_step\",\"started_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"deploy_step\",\"finished_at\"]",
+      "set": {
+        "type": "timestamp with time zone"
+      }
+    }
+  ]
+}

@@ -5,7 +5,6 @@ import { Pool } from "pg";
 import type { PoolClient } from "pg";
 
 import { env } from "#/env.server";
-import * as schema from "#/db/schema";
 import { createLogger } from "#/lib/logger.server";
 import { currentSpanId, currentTrace, recordSpan } from "#/lib/trace.server";
 
@@ -112,7 +111,7 @@ pool.on("error", (error) => log.error({ err: error }, "idle database connection 
  * Server-only: create one per process and pass it to repositories through their
  * dependency object rather than importing it there directly.
  */
-export const db = drizzle({ client: tracePool(pool), schema });
+export const db = drizzle({ client: tracePool(pool) });
 
 /** A transaction opened with `db.transaction(...)`. */
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
