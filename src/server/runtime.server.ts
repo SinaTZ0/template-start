@@ -61,10 +61,11 @@ export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, unknown>;
 /**
  * The server's one runtime. It builds `AppLayer` on first use (the pool, the queue's table) and keeps it for the
  * process. Boundaries run Effects on it: the oRPC handler (`#/orpc/effect.server`), the job workers (`src/server.ts`).
- *
- * In development a changed server module is loaded again, with a new runtime; the old one is disposed, which closes
- * its pool, so reloads don't pile up connections.
  */
 export const appRuntime = ManagedRuntime.make(AppLayer);
 
-if (import.meta.hot) import.meta.hot.dispose(() => appRuntime.dispose());
+// In development a changed server module is loaded again, with a new runtime. The one it replaces is disposed, which
+// closes its pools: without it, every reload would keep ten more connections open.
+const loaded = globalThis as { appRuntime?: AppRuntime };
+if (loaded.appRuntime) void loaded.appRuntime.dispose();
+loaded.appRuntime = appRuntime;

@@ -1,6 +1,6 @@
 import { createServerEntry, createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
 
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 
 import { jobs } from "#/jobs.server";
 import { defineLocaleHeaderStrategy } from "#/lib/locale.server";
@@ -15,18 +15,36 @@ import { getRouter } from "./router";
 
 /*===== Background Jobs =====*/
 // The server entry is loaded once when the server starts, which makes it the place to start the workers that run the
-// queued and scheduled jobs in this process (docs/backend/jobs.md). They live as long as the runtime: a reload in
-// development disposes it, which stops them.
-// Starting them builds the runtime, so a configuration the server can't run with (a missing variable, a short secret)
-// stops the server here, at startup, with the reason.
-appRuntime
-  .runFork(Effect.scoped(Effect.andThen(runJobWorkers<AppServices>(jobs), Effect.never)))
-  .addObserver((exit) => {
-    if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
-      process.stderr.write(`The server can't start: ${Cause.pretty(exit.cause)}\n`);
-      process.exit(1);
-    }
+// queued and scheduled jobs in this process (docs/backend/jobs.md). Starting them builds the runtime, so a configuration
+// the server can't run with (a missing variable, a short secret) stops the server here, at startup, with the reason.
+const workers = appRuntime.runFork(Effect.scoped(Effect.andThen(runJobWorkers<AppServices>(jobs), Effect.never)));
+workers.addObserver((exit) => {
+  if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
+    process.stderr.write(`The server can't start: ${Cause.pretty(exit.cause)}\n`);
+    process.exit(1);
+  }
+});
+
+/*===== Reloads and Shutdown =====*/
+// Development loads a changed server entry again: the workers it replaces stop, before their runtime closes under them.
+const loaded = globalThis as { jobWorkers?: Fiber.Fiber<unknown, unknown>; shutdownHooked?: boolean };
+if (loaded.jobWorkers) Effect.runFork(Fiber.interrupt(loaded.jobWorkers));
+loaded.jobWorkers = workers;
+
+// On SIGTERM the HTTP server (srvx) stops taking requests and gives open ones `SERVER_SHUTDOWN_TIMEOUT` seconds, but
+// doesn't exit: the process ends once nothing holds it open, and the job workers and the pools do. So the workers stop
+// at once (a run they interrupt is run again by the next process), and the runtime closes after the requests' time.
+if (!loaded.shutdownHooked) {
+  loaded.shutdownHooked = true;
+  process.once("SIGTERM", () => {
+    if (loaded.jobWorkers) Effect.runFork(Fiber.interrupt(loaded.jobWorkers));
+    const drainMs = (Number.parseInt(process.env.SERVER_SHUTDOWN_TIMEOUT ?? "", 10) || 5) * 1000;
+    setTimeout(() => {
+      const runtime = (globalThis as { appRuntime?: { dispose: () => Promise<void> } }).appRuntime;
+      void runtime?.dispose();
+    }, drainMs + 1000).unref();
   });
+}
 
 /*===== Locale =====*/
 // The strategy `/rpc` requests resolve their locale with (`project.inlang/paraglide.config.ts`).
