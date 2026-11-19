@@ -1,10 +1,11 @@
 import { performance } from "node:perf_hooks";
 
-import { Effect } from "effect";
+import { Effect, Metric } from "effect";
 
 import { readClientId } from "#/lib/client-id";
 import { AppConfig } from "#/server/config.server";
 import { writeLog } from "#/server/observability/log.server";
+import { requestDuration } from "#/server/observability/metrics.server";
 import { reportSlowRequest } from "#/server/observability/report.server";
 import { requestScope } from "#/server/observability/request-scope.server";
 import type { RequestScope } from "#/server/observability/request-scope.server";
@@ -85,6 +86,14 @@ export const observeRequest = Effect.fnUntraced(function* ({
   const status = response.status;
   const slow = ms >= log.slowRequestMs;
   const failed = status >= 500;
+  yield* requestDuration.pipe(
+    Metric.withAttributes({
+      "http.request.method": method,
+      "http.route": route,
+      "http.response.status_class": `${Math.floor(status / 100)}xx`,
+    }),
+    Metric.update(ms),
+  );
   if (!(path === "/healthz" && !slow && !failed)) {
     const totals = record?.totals ?? {};
     const breakdown = Object.entries(totals)

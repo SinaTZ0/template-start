@@ -70,6 +70,7 @@
               <th scope="row">{{.Key}}</th>
               <td class="mono">
                 {{if .Link}}<a href="{{.Link}}" title="Every event with this {{.Key}}">{{.Value}}</a>{{else}}{{.Value}}{{end}}
+                {{if .TraceLink}}<a href="{{.TraceLink}}" target="_blank" rel="noopener noreferrer">Open trace</a>{{end}}
                 <button type="button" class="copy" data-copy="{{.Value}}" aria-label="Copy {{.Key}}">Copy</button>
                 {{template "reveal" .Reveal}}
               </td>

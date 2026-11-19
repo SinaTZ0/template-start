@@ -46,6 +46,7 @@ Checks: `go vet ./...`, `gofmt -l .` and `go test ./...` in this folder.
 | `SOURCEMAP_ORIGIN` | (none)     | Where the app serves its client source maps (`http://app:3000`); without it browser stacks stay minified  |
 | `NOTIFY_URL`       | (none)     | A chat webhook that hears of each new kind of error                                                       |
 | `NOTIFY_CHAT_ID`   | (none)     | Sent as `chat_id` with each message, for a bot API in Telegram's style                                    |
+| `TRACE_URL`        | (none)     | A request's trace in the tracing backend, `{traceId}` where its ID goes; adds "Open trace" to a `reqId`   |
 
 ## How It Works
 
@@ -87,9 +88,9 @@ reads. On `SIGTERM` the server stops taking requests and the queue is flushed.
 exception, `message` the rest (`captureMessage` attaches a synthetic exception only to carry a stack). The list shows
 browser events (`platform: javascript`) as `browser`.
 
-**Search.** A bare UUID is an `errorId` and 16 hex characters a `reqId` (8 still work, for events stored before the
-app's reqIds grew to 64 bits). `errorId:`, `reqId:`, `path:`, `route:`, `module:`, `clientId:`, `userId:`, `release:`
-and `group:` match that column exactly (`userId:` and `release:` as typed); anything else is searched in titles. The
+**Search.** A bare UUID is an `errorId` and 32 hex characters a `reqId`: the app's request IDs are its requests'
+trace IDs (16 and 8 still work, for events stored before). `errorId:`, `reqId:`, `path:`, `route:`, `module:`,
+`clientId:`, `userId:`, `release:` and `group:` match that column exactly (`userId:` and `release:` as typed); anything else is searched in titles. The
 user ID is the server's `userId` tag or the browser SDK's `user.id`. The parsing is `listQuery.filter` in `web.go`.
 
 **Groups.** "Group alike" shows one row per kind of event: its newest event, how many are stored and when the first

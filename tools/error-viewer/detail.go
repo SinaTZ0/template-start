@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,7 +45,20 @@ type detailView struct {
 
 type tagView struct {
 	Key, Value, Link string
-	Reveal           []segment
+	// TraceLink opens the request's trace in the tracing backend (TRACE_URL), for a reqId that is a trace ID.
+	TraceLink string
+	Reveal    []segment
+}
+
+// traceIDPattern is the shape of an OpenTelemetry trace ID, which the app's reqIds are.
+var traceIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// traceLink is TRACE_URL with the trace ID in it, or "" when there is no TRACE_URL or the value isn't a trace ID.
+func traceLink(traceURL, value string) string {
+	if traceURL == "" || !traceIDPattern.MatchString(value) {
+		return ""
+	}
+	return strings.ReplaceAll(traceURL, "{traceId}", url.QueryEscape(value))
 }
 
 type field struct {
@@ -172,7 +187,8 @@ var (
 		"browser": true, "os": true}
 )
 
-func buildDetail(row eventRow) detailView {
+// buildDetail turns a stored event into the detail page. traceURL is TRACE_URL, "" when it isn't set.
+func buildDetail(row eventRow, traceURL string) detailView {
 	view := detailView{Event: row, RawJSON: indentJSON(row.Payload)}
 	ev, err := decodeEvent(row.Payload)
 	if err != nil {
@@ -198,6 +214,9 @@ func buildDetail(row eventRow) detailView {
 		tag := tagView{Key: key, Value: value, Reveal: revealHidden(value)}
 		if prefix, ok := tagLinks[key]; ok && value != "" {
 			tag.Link = searchURL(prefix, value)
+		}
+		if key == "reqId" {
+			tag.TraceLink = traceLink(traceURL, value)
 		}
 		view.Tags = append(view.Tags, tag)
 	}

@@ -11,6 +11,7 @@ import { AppConfig } from "#/server/config.server";
 import { Db, PgLive } from "#/server/db.server";
 import { Jobs } from "#/server/jobs.server";
 import { Mailer } from "#/server/mailer.server";
+import { ExportLive } from "#/server/observability/export.server";
 import { LoggerLive } from "#/server/observability/logger.server";
 import { RequestSpansLive } from "#/server/observability/request-spans.server";
 import { Storage } from "#/server/storage.server";
@@ -29,8 +30,12 @@ const PlatformLive = Auth.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(Storage.layer, Mailer.layer, Captcha.layer)),
 );
 
-/** Logging and tracing (docs/backend/logging.md). */
-const ObservabilityLive = Layer.mergeAll(LoggerLive, RequestSpansLive);
+/**
+ * Logging, tracing and export (docs/backend/logging.md), built in this order: the app's loggers, then the OTLP exporter
+ * (when configured), which adds its logger to them and sets its tracer, then the request collector, which wraps
+ * whichever tracer is in place.
+ */
+const ObservabilityLive = RequestSpansLive.pipe(Layer.provideMerge(ExportLive), Layer.provideMerge(LoggerLive));
 
 /** The features' repositories and services. A service may use another feature's service (`note` uses `media`). */
 const FeaturesLive = Layer.mergeAll(NoteService.layer, SessionService.layer).pipe(

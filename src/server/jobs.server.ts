@@ -1,7 +1,9 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Metric } from "effect";
 import { Schedule } from "effect";
 import type { Duration, Schema } from "effect";
 import * as PersistedQueue from "effect/persistence/PersistedQueue";
+
+import { jobRuns } from "#/server/observability/metrics.server";
 
 /*===== Jobs =====*/
 // Background work on Effect's persisted queue, stored in the app's own Postgres (docs/backend/jobs.md). A job is
@@ -133,12 +135,15 @@ export function runJobWorkers<R>(jobs: ReadonlyArray<RunnableJob<R>>) {
       Effect.gen(function* () {
         const queue = yield* Jobs.use((all) => all.queue(job));
         const maxAttempts = job.maxAttempts ?? 10;
+        const runs = (outcome: "success" | "retry" | "failed") =>
+          jobRuns.pipe(Metric.withAttributes({ job: job.name, outcome }), Metric.update(1));
         const runOnce = queue.take((payload, { id, attempts }) =>
           job.run(payload as never).pipe(
+            Effect.tap(() => runs("success")),
             Effect.tapCause((cause) =>
               attempts >= maxAttempts
-                ? Effect.logError("job failed, no attempts left", cause)
-                : Effect.logWarning("job failed, will retry", cause),
+                ? Effect.logError("job failed, no attempts left", cause).pipe(Effect.andThen(runs("failed")))
+                : Effect.logWarning("job failed, will retry", cause).pipe(Effect.andThen(runs("retry"))),
             ),
             Effect.withSpan(`job ${job.name}`, {
               kind: "consumer",

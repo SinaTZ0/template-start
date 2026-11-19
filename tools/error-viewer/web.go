@@ -327,8 +327,8 @@ func (q listQuery) Filtered() bool {
 
 var (
 	uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	// 16 hex characters since the app's reqIds became 64-bit; 8 for the events stored before.
-	reqIDPattern = regexp.MustCompile(`^(?:[0-9a-fA-F]{16}|[0-9a-fA-F]{8})$`)
+	// 32 hex characters since the app's reqId is its request's trace ID; 16 and 8 for the events stored before.
+	reqIDPattern = regexp.MustCompile(`^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{16}|[0-9a-fA-F]{8})$`)
 	// `prefix:value` searches. IDs are matched lowercased, as the app generates them.
 	searchPrefixes = map[string]struct {
 		column string
@@ -349,8 +349,8 @@ var (
 )
 
 // filter turns the URL state into a store filter. The search box understands a bare errorId (a UUID), a bare reqId
-// (16 hex characters, or 8 for older events), `column:value` for the columns in searchPrefixes, and otherwise
-// searches titles.
+// (a 32-character trace ID, or 16 or 8 for older events), `column:value` for the columns in searchPrefixes, and
+// otherwise searches titles.
 func (q listQuery) filter(now time.Time) eventFilter {
 	f := eventFilter{Level: q.Level, Kind: q.Kind, Platform: q.Platform, Environment: q.Env}
 	if d, ok := rangeOptions[q.Range]; ok {
@@ -633,7 +633,7 @@ func (wb *web) detail(w http.ResponseWriter, r *http.Request) {
 		wb.serverError(w, r, err)
 		return
 	}
-	view := buildDetail(row)
+	view := buildDetail(row, wb.cfg.TraceURL)
 	if row.GroupKey != "" {
 		if view.Alike, err = wb.store.countGroup(r.Context(), row.GroupKey); err != nil {
 			wb.serverError(w, r, err)

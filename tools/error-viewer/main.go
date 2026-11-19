@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -37,6 +38,8 @@ type config struct {
 	SourcemapOrigin *url.URL
 	NotifyURL       *url.URL
 	NotifyChatID    string
+	// Optional: a link to a request's trace in the tracing backend, with `{traceId}` where its ID goes.
+	TraceURL string
 }
 
 // loadConfig reads the environment. Every problem is collected, so one start shows all of them.
@@ -93,6 +96,13 @@ func loadConfig() (config, error) {
 		return u
 	}
 	cfg.SourcemapOrigin = optionalURL("SOURCEMAP_ORIGIN")
+	if traceURL := os.Getenv("TRACE_URL"); traceURL != "" {
+		if u := optionalURL("TRACE_URL"); u != nil && !strings.Contains(traceURL, "{traceId}") {
+			problems = append(problems, errors.New("TRACE_URL must contain {traceId}, where the trace's ID goes"))
+		} else if u != nil {
+			cfg.TraceURL = traceURL
+		}
+	}
 	cfg.NotifyURL = optionalURL("NOTIFY_URL")
 
 	if baseURL := required("BASE_URL"); baseURL != "" {
