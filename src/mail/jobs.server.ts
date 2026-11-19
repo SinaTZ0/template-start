@@ -1,4 +1,4 @@
-import { Effect, Schedule, Schema } from "effect";
+import { Cause, Effect, Schedule, Schema } from "effect";
 
 import { MAIL_TEMPLATES, renderMail } from "#/mail/render.server";
 import { locales } from "#/paraglide/runtime";
@@ -41,11 +41,14 @@ export const SendMail = defineJob({
       // why: an unknown address, a rejected login (`SMTP_USER`, `SMTP_PASSWORD`), a daily limit.
       Effect.catchIf(
         (error) => error.permanent,
-        (error) => Effect.logError("the mail server refused the email", error).pipe(Effect.as({ messageId: "" })),
+        // As a cause, so the line carries the error and it is reported to the error viewer.
+        (error) =>
+          Effect.logError("the mail server refused the email", Cause.fail(error)).pipe(Effect.as({ messageId: "" })),
       ),
     );
     // Never the address or the link: the log keeps what was sent, not to whom.
-    if (messageId)
+    if (messageId) {
       yield* Effect.logInfo("email sent").pipe(Effect.annotateLogs({ template: mail.template, messageId }));
+    }
   }),
 });
