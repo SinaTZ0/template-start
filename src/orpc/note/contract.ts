@@ -1,58 +1,59 @@
 import { oc } from "@orpc/contract";
-import { z } from "zod";
+import { Schema } from "effect";
 
+import { standardSchema } from "#/lib/schema";
 import { commonErrors, errorDataSchema } from "#/orpc/errors";
-import { mediaSchema } from "#/orpc/media/contract";
+import { MediaSchema } from "#/orpc/media/contract";
 import { authErrors, roleErrors } from "#/orpc/middleware/auth/auth.errors";
 
 /*===== Schemas =====*/
-export const noteSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  body: z.string(),
-  image: mediaSchema.nullable(),
-  createdAt: z.date(),
+export const NoteSchema = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  body: Schema.String,
+  image: Schema.NullOr(MediaSchema),
+  createdAt: Schema.Date,
 });
 
-export type Note = z.infer<typeof noteSchema>;
+export type Note = typeof NoteSchema.Type;
 
-const listNotesInputSchema = z.strictObject({
+const ListNotesInput = Schema.Struct({
   /** `nextCursor` of the page before. Left out, or one the server can't read, gives the newest notes. */
-  cursor: z.string().optional(),
+  cursor: Schema.optional(Schema.String),
 });
 
-const notePageSchema = z.object({
-  notes: z.array(noteSchema),
+const NotePageSchema = Schema.Struct({
+  notes: Schema.Array(NoteSchema),
   /** Where the next, older page starts. Null on the last page. */
-  nextCursor: z.string().nullable(),
+  nextCursor: Schema.NullOr(Schema.String),
 });
 
-export type NotePage = z.infer<typeof notePageSchema>;
+export type NotePage = typeof NotePageSchema.Type;
 
-const noteIdInputSchema = z.strictObject({ id: z.string() });
+const NoteIdInput = Schema.Struct({ id: Schema.String });
 
-// Structure only. Trimming and limits are checked by `validation.ts`.
-const noteFieldsShape = {
-  title: z.string(),
-  body: z.string().optional(),
+// Structure only. Normalizing and limits are checked by `validation.ts`.
+const noteFields = {
+  title: Schema.String,
+  body: Schema.optional(Schema.String),
   /** From `media.upload` (kind `image`), uploaded by the same user. */
-  imageMediaId: z.string().optional(),
+  imageMediaId: Schema.optional(Schema.String),
 };
 
-const createNoteInputSchema = z.strictObject(noteFieldsShape);
+const CreateNoteInput = Schema.Struct(noteFields);
 
 // The whole note as it should be after the call: an `imageMediaId` left out removes the image, the one the note
 // already has keeps it, and another one replaces it.
-const updateNoteInputSchema = z.strictObject({ id: z.string(), ...noteFieldsShape });
+const UpdateNoteInput = Schema.Struct({ id: Schema.String, ...noteFields });
 
-const noteStatsSchema = z.object({
+const NoteStatsSchema = Schema.Struct({
   /** Every user's notes. */
-  notes: z.number().int(),
+  notes: Schema.Int,
   /** How many users have at least one. */
-  owners: z.number().int(),
+  owners: Schema.Int,
 });
 
-export type NoteStats = z.infer<typeof noteStatsSchema>;
+export type NoteStats = typeof NoteStatsSchema.Type;
 
 /*===== Errors =====*/
 const notFoundErrors = {
@@ -62,31 +63,33 @@ const notFoundErrors = {
 /*===== Procedures =====*/
 export const listNotesContract = oc
   .errors({ ...commonErrors, ...authErrors })
-  .input(listNotesInputSchema)
-  .output(notePageSchema);
+  .input(standardSchema(ListNotesInput))
+  .output(standardSchema(NotePageSchema));
 
 export const getNoteContract = oc
   .errors({ ...commonErrors, ...authErrors, ...notFoundErrors })
-  .input(noteIdInputSchema)
-  .output(noteSchema);
+  .input(standardSchema(NoteIdInput))
+  .output(standardSchema(NoteSchema));
 
 export const createNoteContract = oc
   .errors({ ...commonErrors, ...authErrors })
-  .input(createNoteInputSchema)
-  .output(noteSchema);
+  .input(standardSchema(CreateNoteInput))
+  .output(standardSchema(NoteSchema));
 
 export const updateNoteContract = oc
   .errors({ ...commonErrors, ...authErrors, ...notFoundErrors })
-  .input(updateNoteInputSchema)
-  .output(noteSchema);
+  .input(standardSchema(UpdateNoteInput))
+  .output(standardSchema(NoteSchema));
 
 export const deleteNoteContract = oc
   .errors({ ...commonErrors, ...authErrors, ...notFoundErrors })
-  .input(noteIdInputSchema)
-  .output(z.void());
+  .input(standardSchema(NoteIdInput))
+  .output(standardSchema(Schema.Void));
 
-// Admins only: the example of a procedure behind `requireRoleMiddleware`.
-export const noteStatsContract = oc.errors({ ...commonErrors, ...authErrors, ...roleErrors }).output(noteStatsSchema);
+// Admins only: the example of a procedure that requires a role.
+export const noteStatsContract = oc
+  .errors({ ...commonErrors, ...authErrors, ...roleErrors })
+  .output(standardSchema(NoteStatsSchema));
 
 export const noteContract = {
   list: listNotesContract,

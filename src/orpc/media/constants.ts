@@ -77,3 +77,13 @@ export const MEDIA_UPLOAD_KINDS_BY_ROLE: Record<UserRole, readonly MediaKind[]> 
   user: ["avatar", "image"],
   admin: MEDIA_KINDS,
 };
+
+/*===== Lifetimes =====*/
+/** How long an upload can still be attached: a form must be saved within this time of picking its image. */
+export const MEDIA_ATTACH_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How old an unattached upload must be before the cleanup deletes it. The hour past the attach window means the cleanup
+ * never races a save: by the time a media qualifies, `MediaService.attach` has refused it for an hour.
+ */
+export const ORPHANED_MEDIA_AGE_MS = MEDIA_ATTACH_WINDOW_MS + 60 * 60 * 1000;

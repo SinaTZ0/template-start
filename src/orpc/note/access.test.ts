@@ -5,8 +5,8 @@ import type { AuthSession } from "#/lib/auth.server";
 import { router } from "#/orpc/router";
 
 /*===== Note Access =====*/
-// Who gets past the middleware, called the way a loader calls the API (`createRouterClient`). Only the session is
-// faked: every call here is turned away before it reaches the database.
+// Who gets past the boundary, called the way a loader calls the API (`createRouterClient`). Only the session is
+// faked; the one call let through reads a user who has no notes.
 
 const session = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -32,6 +32,11 @@ describe("note access", () => {
   it("turns away a blocked account that still holds a session", async () => {
     signedInAs({ role: "user", status: "blocked" });
     await expect(client.note.list({})).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("accepts optional fields set to undefined, the way loaders pass them", async () => {
+    signedInAs({ role: "user", status: "active" });
+    await expect(client.note.list({ cursor: undefined })).resolves.toMatchObject({ notes: [] });
   });
 
   it("keeps the admin's numbers from other roles", async () => {

@@ -18,10 +18,12 @@
   },
   "rules": {
     "react/react-in-jsx-scope": "off",
+    // `_tag` is how Effect tells errors and other tagged values apart.
+    "no-underscore-dangle": ["warn", { "allow": ["_tag"] }],
     "import/no-unassigned-import": [
       "warn",
       {
-        "allow": ["**/*.css"]
+        "allow": ["**/*.css", "#/env.server"]
       }
     ],
     "shadcn/no-restyle": [

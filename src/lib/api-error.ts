@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/client";
+import { Option, Schema } from "effect";
 
-import { errorDataSchema } from "#/orpc/errors";
+import { ErrorData } from "#/orpc/errors";
 import { m } from "#/paraglide/messages";
 
 /*===== API Failure =====*/
@@ -26,17 +27,17 @@ export function describeApiFailure({ error, fallback }: { error: unknown; fallba
     return { message: m.common_error_forbidden(), fields: {} };
   }
 
-  const parsed = errorDataSchema.safeParse(error.data);
+  const parsed = Schema.decodeUnknownOption(ErrorData)(error.data);
   if (error.code === "INTERNAL_SERVER_ERROR") {
     const errorId = typeof error.data?.errorId === "string" ? error.data.errorId : null;
     return { message: errorId ? m.common_error_with_reference({ message: fallback, errorId }) : fallback, fields: {} };
   }
 
-  if (parsed.success) {
-    const [first] = parsed.data.errors;
-    const hasFields = Object.keys(parsed.data.fields).length > 0;
+  if (Option.isSome(parsed)) {
+    const { errors, fields } = parsed.value;
+    const hasFields = Object.keys(fields).length > 0;
     // A field-only failure is shown next to its inputs; the alert stays empty unless nothing else says what happened.
-    return { message: first ?? (hasFields ? null : fallback), fields: parsed.data.fields };
+    return { message: errors[0] ?? (hasFields ? null : fallback), fields: { ...fields } };
   }
 
   return { message: fallback, fields: {} };

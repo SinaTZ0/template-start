@@ -15,10 +15,15 @@ const WEBP_QUALITY = 80;
 const WEBP_THUMB_QUALITY = 72;
 const WEBP_EFFORT = 4;
 
-/*===== Messages =====*/
-// User-facing: they surface as the `file` field error. Message functions, called per upload, so each is in that
-// request's locale.
-const MESSAGES = {
+/*===== Rejections =====*/
+/** Why an upload was refused. */
+export type ImageRejection = "tooBig" | "tooManyPixels" | "unsupported" | "unreadable";
+
+/**
+ * The user-facing message for a rejection, shown as the `file` field error. Called by the procedure that maps the
+ * rejection, so it is in that request's locale.
+ */
+export const IMAGE_REJECTION_TEXT: Record<ImageRejection, () => string> = {
   tooBig: () => m.media_error_too_big({ max: MEDIA_MAX_BYTES / 1024 / 1024 }),
   tooManyPixels: m.media_error_too_many_pixels,
   unsupported: m.media_error_unsupported,
@@ -37,7 +42,8 @@ export type ProcessedImage = {
   variants: ProcessedVariant[];
 };
 
-export type ProcessImageResult = { kind: "success"; image: ProcessedImage } | { kind: "invalid"; message: string };
+export type ProcessImageResult =
+  { kind: "success"; image: ProcessedImage } | { kind: "invalid"; reason: ImageRejection };
 
 /*===== Process =====*/
 /**
@@ -47,12 +53,12 @@ export type ProcessImageResult = { kind: "success"; image: ProcessedImage } | { 
  * orientation and every piece of metadata is dropped (phone photos carry GPS), converted to sRGB and, except for
  * avatars, flattened onto `FLATTEN_BACKGROUND`.
  *
- * @returns `invalid` with a message in the request's language when the file is too big, not a JPEG, PNG or WebP (HEIC included), or
- * can't be decoded.
+ * @returns `invalid` with the reason when the file is too big, not a JPEG, PNG or WebP (HEIC included), or can't be
+ * decoded.
  */
 export async function processImage({ file, kind }: { file: File; kind: MediaKind }): Promise<ProcessImageResult> {
   /*------ Size, Before Decoding ------*/
-  if (file.size > MEDIA_MAX_BYTES) return { kind: "invalid", message: MESSAGES.tooBig() };
+  if (file.size > MEDIA_MAX_BYTES) return { kind: "invalid", reason: "tooBig" };
 
   const input = Buffer.from(await file.arrayBuffer());
 
@@ -63,10 +69,10 @@ export async function processImage({ file, kind }: { file: File; kind: MediaKind
     const metadata = await sharp(input, options).metadata();
 
     if (!metadata.format || !ACCEPTED_FORMATS.includes(metadata.format)) {
-      return { kind: "invalid", message: MESSAGES.unsupported() };
+      return { kind: "invalid", reason: "unsupported" };
     }
-    if (!metadata.width || !metadata.height) return { kind: "invalid", message: MESSAGES.unreadable() };
-    if (metadata.width * metadata.height > MAX_PIXELS) return { kind: "invalid", message: MESSAGES.tooManyPixels() };
+    if (!metadata.width || !metadata.height) return { kind: "invalid", reason: "unreadable" };
+    if (metadata.width * metadata.height > MAX_PIXELS) return { kind: "invalid", reason: "tooManyPixels" };
 
     // EXIF orientations 5 to 8 turn the image by a quarter, which swaps its sides.
     const turned = (metadata.orientation ?? 1) >= 5;
@@ -108,12 +114,12 @@ export async function processImage({ file, kind }: { file: File; kind: MediaKind
   } catch (error) {
     // A file sharp can't decode (truncated, not an image at all, over the pixel limit) is the uploader's problem.
     const reason = error instanceof Error ? error.message : "";
-    if (/pixel limit/i.test(reason)) return { kind: "invalid", message: MESSAGES.tooManyPixels() };
+    if (/pixel limit/i.test(reason)) return { kind: "invalid", reason: "tooManyPixels" };
     // A format libvips has no loader for. HEIC from a phone is an ISO media file (`ftyp` box) that it may not even name.
     const isIsoMedia = input.subarray(4, 8).toString("latin1") === "ftyp";
     if (isIsoMedia || /unsupported image format/i.test(reason)) {
-      return { kind: "invalid", message: MESSAGES.unsupported() };
+      return { kind: "invalid", reason: "unsupported" };
     }
-    return { kind: "invalid", message: MESSAGES.unreadable() };
+    return { kind: "invalid", reason: "unreadable" };
   }
 }

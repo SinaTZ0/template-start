@@ -1,25 +1,29 @@
-import { z } from "zod";
+import { Schema } from "effect";
 
-import { persianText } from "#/lib/persian-text";
+import { PersianText } from "#/lib/schema";
 import { NOTE_BODY_MAX_LENGTH, NOTE_TITLE_MAX_LENGTH } from "#/orpc/note/constants";
 import { m } from "#/paraglide/messages";
 
 /*===== Note Fields =====*/
-// Domain rules for a note, the same for a new one and an edited one. Messages are user-facing because they surface as
-// field errors, so each is a function zod calls when the check fails, in the request's locale. Free text is normalized
-// (`persianText`) before its limits are checked.
-export const noteFieldsSchema = z.object({
-  title: persianText()
-    .min(1, { error: () => m.note_error_title_required() })
-    .max(NOTE_TITLE_MAX_LENGTH, { error: () => m.note_error_title_too_long({ max: NOTE_TITLE_MAX_LENGTH }) }),
-  body: persianText()
-    .max(NOTE_BODY_MAX_LENGTH, { error: () => m.note_error_body_too_long({ max: NOTE_BODY_MAX_LENGTH }) })
-    .default(""),
-  // Empty text means "no image".
-  imageMediaId: z
-    .string()
-    .optional()
-    .transform((value) => value || null),
+// Domain rules for a note, the same for a new one and an edited one. Free text is normalized (`PersianText`) before its
+// limits are checked. Each message is a function (`text`), called when the issue is formatted at the API boundary, in
+// the request's locale: the service only learns that the input is invalid, never in which words.
+export const NoteFields = Schema.Struct({
+  title: PersianText.check(
+    Schema.isMinLength(1, { text: () => m.note_error_title_required() }),
+    Schema.isMaxLength(NOTE_TITLE_MAX_LENGTH, {
+      text: () => m.note_error_title_too_long({ max: NOTE_TITLE_MAX_LENGTH }),
+    }),
+  ),
+  body: Schema.optional(
+    PersianText.check(
+      Schema.isMaxLength(NOTE_BODY_MAX_LENGTH, {
+        text: () => m.note_error_body_too_long({ max: NOTE_BODY_MAX_LENGTH }),
+      }),
+    ),
+  ),
+  /** Left out or empty: no image. */
+  imageMediaId: Schema.optional(Schema.String),
 });
 
-export type NoteFields = z.output<typeof noteFieldsSchema>;
+export type NoteFields = typeof NoteFields.Type;

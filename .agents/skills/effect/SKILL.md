@@ -73,5 +73,8 @@ using it.
 - **`Effect.catch` doesn't catch defects.** A thrown exception inside `Effect.sync` / `Effect.promise` is a defect;
   use `Effect.try` / `Effect.tryPromise` with a `catch` that builds a tagged error when the failure is expected.
 - **Wrapping `Effect.gen` in a function that only returns it.** Use `Effect.fn` instead.
+- **`Schema.optionalKey` in input schemas.** It means "the key may be missing", and it rejects a key present with
+  `undefined`, which loaders and forms pass (`{ cursor: undefined }`), though JSON never shows it. Use
+  `Schema.optional` for optional input fields; `optionalKey` only where `undefined` must be refused.
 - **Reading `AsyncLocalStorage` inside a fiber.** Request facts reach Effect code through the `RequestContext`
   service, read once at the boundary.

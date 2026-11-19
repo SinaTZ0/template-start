@@ -1,6 +1,8 @@
 import { createServerEntry, createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
 
-import { jobs } from "#/jobs.server";
+import { Effect } from "effect";
+
+import { jobs, legacyJobs } from "#/jobs.server";
 import { readClientId } from "#/lib/client-id";
 import { startJobs } from "#/lib/jobs.server";
 import { defineLocaleHeaderStrategy } from "#/lib/locale.server";
@@ -9,6 +11,8 @@ import { logRequest } from "#/lib/request-log.server";
 import { runWithTrace } from "#/lib/trace.server";
 import { deLocalizeHref } from "#/paraglide/runtime";
 import { paraglideMiddleware } from "#/paraglide/server";
+import { runJobWorkers } from "#/server/jobs.server";
+import { appRuntime } from "#/server/runtime.server";
 
 import { getRouter } from "./router";
 
@@ -17,7 +21,9 @@ const log = createLogger("http");
 /*===== Background Jobs =====*/
 // The server entry is loaded once when the server starts, which makes it the place to start the workers that run the
 // queued and scheduled jobs in this process (docs/backend/jobs.md).
-startJobs({ jobs });
+startJobs({ jobs: legacyJobs });
+// The Effect jobs' workers live as long as the runtime: a reload in development disposes it, which stops them.
+appRuntime.runFork(Effect.scoped(Effect.andThen(runJobWorkers(jobs), Effect.never)));
 
 /*===== Locale =====*/
 // The strategy `/rpc` requests resolve their locale with (`project.inlang/paraglide.config.ts`).

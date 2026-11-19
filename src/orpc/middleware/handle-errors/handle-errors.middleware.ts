@@ -33,6 +33,12 @@ export const handleErrorsMiddleware = os.middleware(async ({ next, path }) => {
     /*------ Intentional Client Errors ------*/
     if (error instanceof ORPCError && error.code !== "INTERNAL_SERVER_ERROR") throw error;
 
+    /*------ Already Reported ------*/
+    // An Effect procedure logs its defects with an `errorId` itself (`#/orpc/effect.server`).
+    if (error instanceof ORPCError && typeof (error.data as { errorId?: unknown } | undefined)?.errorId === "string") {
+      throw error;
+    }
+
     /*------ Unexpected Failures ------*/
     const errorId = crypto.randomUUID();
     log.error({ err: error, errorId, path: path.join(".") }, "procedure failed");

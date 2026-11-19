@@ -1,38 +1,19 @@
 import { randomUUID } from "node:crypto";
 
-import { z } from "zod";
+import { Clock, Context, Effect, Layer, Option } from "effect";
 
-import type { Database } from "#/db/client.server";
-import { createLogger } from "#/lib/logger.server";
-import { deleteObjects, mediaKey, putObject } from "#/lib/storage.server";
-import { span } from "#/lib/trace.server";
+import { mediaKey } from "#/lib/storage.server";
 import type { UserRole } from "#/lib/user-constants";
-import { MEDIA_UPLOAD_KINDS_BY_ROLE, MEDIA_VARIANTS } from "#/orpc/media/constants";
+import { MEDIA_ATTACH_WINDOW_MS, MEDIA_UPLOAD_KINDS_BY_ROLE } from "#/orpc/media/constants";
 import type { MediaKind } from "#/orpc/media/constants";
 import type { Media } from "#/orpc/media/contract";
-import { isMediaKind, toPublicMedia } from "#/orpc/media/mapper";
+import { ImageRejected, MediaKindNotAllowed, MediaUnusable, TooManyWaitingUploads } from "#/orpc/media/errors";
+import { DiscardMedia } from "#/orpc/media/jobs.server";
+import { isMediaId, isMediaKind, toPublicMedia, variantKeys } from "#/orpc/media/mapper";
 import { processImage } from "#/orpc/media/processing.server";
-import { m } from "#/paraglide/messages";
-import {
-  claimMedia,
-  countUnattachedMedia,
-  deleteMediaRow,
-  findMediaById,
-  findOrphanedMediaIds,
-  insertMedia,
-} from "#/orpc/media/repository";
-
-const log = createLogger("media");
-
-/*===== Lifetimes =====*/
-/** How long an upload can still be attached: a form must be saved within this time of picking its image. */
-export const MEDIA_ATTACH_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-/**
- * How old an unattached upload must be before the cleanup deletes it. The hour past the attach window means the cleanup
- * never races a save: by the time a media qualifies, `attachMedia` has refused it for an hour.
- */
-export const ORPHANED_MEDIA_AGE_MS = MEDIA_ATTACH_WINDOW_MS + 60 * 60 * 1000;
+import { MediaRepo } from "#/orpc/media/repository";
+import { Jobs } from "#/server/jobs.server";
+import { Storage } from "#/server/storage.server";
 
 /*===== Quota =====*/
 /**
@@ -41,221 +22,136 @@ export const ORPHANED_MEDIA_AGE_MS = MEDIA_ATTACH_WINDOW_MS + 60 * 60 * 1000;
  */
 export const MAX_UNATTACHED_MEDIA_PER_USER = 30;
 
-/*===== Keys =====*/
-function variantKeys({ kind, mediaId }: { kind: MediaKind; mediaId: string }): string[] {
-  return Object.keys(MEDIA_VARIANTS[kind]).map((variant) => mediaKey({ kind, mediaId, variant }));
-}
-
-/*===== Upload =====*/
-type UploadMediaResult =
-  { kind: "success"; media: Media } | { kind: "forbidden" } | { kind: "invalid"; fields: Record<string, string> };
-
-/**
- * Processes an image and stores it: every variant goes to the bucket first and the row is inserted last, so a row only
- * exists when all its variants do.
- *
- * Nothing attaches the media to anything yet; the entity that uses it calls `attachMedia` when its form is saved.
- *
- * @returns `forbidden` when the role doesn't use this kind of image, `invalid` with a `file` message when the image is
- * rejected or the user already has `MAX_UNATTACHED_MEDIA_PER_USER` uploads waiting to be attached.
- * @throws When the bucket or the database fails. Variants already written are deleted first.
- */
-export async function uploadMedia({
-  db,
-  user,
-  kind,
-  file,
-}: {
-  db: Database;
-  user: { id: string; role: UserRole };
-  kind: MediaKind;
-  file: File;
-}): Promise<UploadMediaResult> {
-  if (!MEDIA_UPLOAD_KINDS_BY_ROLE[user.role]?.includes(kind)) return { kind: "forbidden" };
-
-  // Before the image is decoded, so an account at its quota costs one count query. Two uploads racing past the last
-  // free place overshoot by one, which the quota can afford.
-  const waiting = await countUnattachedMedia({ db, userId: user.id });
-  if (waiting >= MAX_UNATTACHED_MEDIA_PER_USER) {
-    return { kind: "invalid", fields: { file: m.media_error_too_many_waiting() } };
+/*===== Media Service =====*/
+export class MediaService extends Context.Service<
+  MediaService,
+  {
+    /**
+     * Processes an image and stores it: every variant goes to the bucket first and the row is inserted last, so a row
+     * only exists when all its variants do. Nothing attaches it yet; the entity that uses it calls `attach` when its
+     * form is saved.
+     */
+    readonly upload: (args: {
+      user: { id: string; role: UserRole };
+      kind: MediaKind;
+      file: File;
+    }) => Effect.Effect<Media, MediaKindNotAllowed | TooManyWaitingUploads | ImageRejected>;
+    /**
+     * Claims an upload for the entity being saved, so the cleanup leaves it alone. Call it inside the transaction that
+     * writes the entity: if that write fails, the claim is rolled back with it and the cleanup still finds the upload.
+     *
+     * A media belongs to one entity, so one that is already attached is refused: two entities sharing an image would
+     * lose it together when either is deleted. An entity whose image didn't change doesn't attach it again.
+     */
+    readonly attach: (args: { mediaId: string; kind: MediaKind; userId: string }) => Effect.Effect<void, MediaUnusable>;
+    /**
+     * Lets go of a media its entity no longer uses: the entity was deleted, or its image replaced. Call it inside the
+     * transaction that changes the entity. The media is marked unattached and its deletion is queued in that same
+     * transaction, so both happen if it commits and neither if it rolls back.
+     */
+    readonly release: (mediaId: string) => Effect.Effect<void>;
   }
+>()("app/orpc/media/MediaService") {
+  static readonly layer = Layer.effect(
+    MediaService,
+    Effect.gen(function* () {
+      const repo = yield* MediaRepo;
+      const storage = yield* Storage;
+      const jobs = yield* Jobs;
 
-  // Resizing and encoding is CPU work no other span covers.
-  const processed = await span({ kind: "task", name: "media.processImage" }, () => processImage({ file, kind }));
-  if (processed.kind === "invalid") return { kind: "invalid", fields: { file: processed.message } };
-  const { image } = processed;
-
-  const mediaId = randomUUID();
-  const keys = variantKeys({ kind, mediaId });
-
-  try {
-    /*------ Variants ------*/
-    // Every write is awaited before anything is cleaned up, so no write can land after the cleanup and be left behind.
-    const writes = await Promise.allSettled(
-      image.variants.map((variant) =>
-        putObject({
-          key: mediaKey({ kind, mediaId, variant: variant.name }),
-          body: variant.body,
-          contentType: "image/webp",
-        }),
-      ),
-    );
-    const failed = writes.find((write) => write.status === "rejected");
-    if (failed) throw failed.reason;
-
-    /*------ Row ------*/
-    const record = await insertMedia({
-      db,
-      values: {
-        id: mediaId,
+      /*------ Upload ------*/
+      const upload = Effect.fn("MediaService.upload")(function* ({
+        user,
         kind,
-        uploadedBy: user.id,
-        width: image.width,
-        height: image.height,
-        placeholder: image.placeholder,
-      },
-    });
+        file,
+      }: {
+        user: { id: string; role: UserRole };
+        kind: MediaKind;
+        file: File;
+      }) {
+        if (!MEDIA_UPLOAD_KINDS_BY_ROLE[user.role]?.includes(kind)) return yield* new MediaKindNotAllowed({ kind });
 
-    return { kind: "success", media: toPublicMedia(record) };
-  } catch (error) {
-    // Deleting a key that was never written is fine, so all of them are removed. A failing cleanup must not hide the
-    // original error.
-    await deleteObjects({ keys }).catch((cleanupError: unknown) =>
-      log.error({ err: cleanupError, mediaId }, "could not clean up the variants"),
-    );
-    throw error;
-  }
-}
+        // Before the image is decoded, so an account at its quota costs one count query. Two uploads racing past the
+        // last free place overshoot by one, which the quota can afford.
+        const waiting = yield* repo.countUnattached(user.id);
+        if (waiting >= MAX_UNATTACHED_MEDIA_PER_USER) return yield* new TooManyWaitingUploads();
 
-/*===== Attach =====*/
-const mediaIdSchema = z.guid();
+        // Resizing and encoding is CPU work no other span covers.
+        const processed = yield* Effect.promise(() => processImage({ file, kind })).pipe(
+          Effect.withSpan("media.processImage"),
+        );
+        if (processed.kind === "invalid") return yield* new ImageRejected({ reason: processed.reason });
+        const { image } = processed;
 
-/** Whether the text can be a media ID. A malformed one would make Postgres throw, so callers treat it as unknown. */
-export function isMediaId(value: string): boolean {
-  return mediaIdSchema.safeParse(value).success;
-}
+        const mediaId = randomUUID();
+        const stored = Effect.gen(function* () {
+          // Every write finishes before anything is cleaned up, so no write can land after the cleanup and be left behind.
+          yield* Effect.forEach(
+            image.variants,
+            (variant) =>
+              storage.put({
+                key: mediaKey({ kind, mediaId, variant: variant.name }),
+                body: variant.body,
+                contentType: "image/webp",
+              }),
+            { concurrency: "unbounded", discard: true },
+          );
+          return yield* repo.insert({
+            id: mediaId,
+            kind,
+            uploadedBy: user.id,
+            width: image.width,
+            height: image.height,
+            placeholder: image.placeholder,
+          });
+        });
+        const record = yield* stored.pipe(
+          // Deleting a key that was never written is fine, so all of them are removed. A failing cleanup must not hide
+          // the original failure: it is logged, and the orphan scan can't see files without a row, so it is reported.
+          Effect.onError(() =>
+            storage
+              .deleteMany(variantKeys({ kind, mediaId }))
+              .pipe(Effect.catchCause((cause) => Effect.logError("could not clean up the variants", cause))),
+          ),
+        );
+        return toPublicMedia(record);
+      });
 
-type AttachMediaResult = { kind: "ok" } | { kind: "invalid" };
+      /*------ Attach ------*/
+      const attach = Effect.fn("MediaService.attach")(function* ({
+        mediaId,
+        kind,
+        userId,
+      }: {
+        mediaId: string;
+        kind: MediaKind;
+        userId: string;
+      }) {
+        const unusable = new MediaUnusable({ mediaId });
+        if (!isMediaId(mediaId)) return yield* unusable;
 
-/**
- * Claims an upload for the entity being saved, so the cleanup job leaves it alone. Call it with the transaction that
- * writes the entity: if that write fails, the claim is rolled back with it and the cleanup still finds the upload.
- *
- * A media belongs to one entity, so one that is already attached is refused: two entities sharing an image would lose
- * it together when either is deleted. An entity whose image didn't change doesn't attach it again.
- *
- * @returns `invalid` when the ID is unknown or malformed, the media is another kind, someone else uploaded it, it is
- * already attached, or it is still unattached past `MEDIA_ATTACH_WINDOW_MS` (the cleanup is about to delete it).
- */
-export async function attachMedia({
-  db,
-  mediaId,
-  kind,
-  userId,
-  now = new Date(),
-}: {
-  db: Database;
-  mediaId: string;
-  kind: MediaKind;
-  userId: string;
-  now?: Date;
-}): Promise<AttachMediaResult> {
-  if (!isMediaId(mediaId)) return { kind: "invalid" };
+        const found = yield* repo.findById(mediaId);
+        if (Option.isNone(found)) return yield* unusable;
+        const record = found.value;
+        if (!isMediaKind(record.kind) || record.kind !== kind || record.uploadedBy !== userId) return yield* unusable;
+        if (record.attachedAt) return yield* unusable;
 
-  const record = await findMediaById({ db, id: mediaId });
-  if (!record || !isMediaKind(record.kind) || record.kind !== kind || record.uploadedBy !== userId) {
-    return { kind: "invalid" };
-  }
+        // Past the window, the cleanup is about to delete it.
+        const now = yield* Clock.currentTimeMillis;
+        if (now - record.createdAt.getTime() > MEDIA_ATTACH_WINDOW_MS) return yield* unusable;
 
-  if (record.attachedAt) return { kind: "invalid" };
-  if (now.getTime() - record.createdAt.getTime() > MEDIA_ATTACH_WINDOW_MS) return { kind: "invalid" };
+        // Checked again by the update itself: another save may have claimed it since the read.
+        if (!(yield* repo.claim(mediaId))) return yield* unusable;
+      });
 
-  // Checked again by the update itself: another save may have claimed it since the read.
-  const claimed = await claimMedia({ db, id: mediaId });
-  return claimed ? { kind: "ok" } : { kind: "invalid" };
-}
+      /*------ Release ------*/
+      const release = Effect.fn("MediaService.release")(function* (mediaId: string) {
+        if (!isMediaId(mediaId)) return;
+        yield* repo.markDetached(mediaId);
+        yield* DiscardMedia.enqueue({ mediaId }).pipe(Effect.provideService(Jobs, jobs));
+      });
 
-/*===== Release =====*/
-// `releaseMedia` is in `jobs.server.ts`, beside the job it queues: it lets go of a media its entity no longer uses.
-
-/**
- * Deletes a media that was released, unless something attached it again since. Run by the `media.discard` job.
- *
- * @throws When the bucket or the database fails, so the job is retried.
- */
-export async function deleteReleasedMedia({ db, mediaId }: { db: Database; mediaId: string }): Promise<void> {
-  if (!isMediaId(mediaId)) return;
-  const record = await findMediaById({ db, id: mediaId });
-  if (!record || record.attachedAt) return;
-  await deleteMedia({ db, mediaId });
-}
-
-/*===== Delete =====*/
-/**
- * Deletes every variant from the bucket, then the row. A media that is already gone is a no-op.
- *
- * The bucket goes first: if it fails, the row stays and the delete can be retried; the other order could leave files
- * nothing points to. Entities still pointing at the row are cleared by the foreign key.
- *
- * @throws When the bucket or the database fails.
- */
-export async function deleteMedia({ db, mediaId }: { db: Database; mediaId: string }): Promise<void> {
-  if (!isMediaId(mediaId)) return;
-
-  const record = await findMediaById({ db, id: mediaId });
-  if (!record) return;
-
-  // A row of an unknown kind can't be mapped to keys; leave it for a person to look at instead of guessing.
-  if (!isMediaKind(record.kind)) throw new Error(`Media ${record.id} has an unknown kind: ${record.kind}`);
-
-  await deleteObjects({ keys: variantKeys({ kind: record.kind, mediaId }) });
-  await deleteMediaRow({ db, id: mediaId });
-}
-
-/*===== Orphan Cleanup =====*/
-const ORPHAN_BATCH_SIZE = 200;
-/** Ends a run that keeps finding work, so one pass never occupies the process for hours. The next run goes on. */
-const ORPHAN_MAX_BATCHES = 50;
-
-/**
- * Deletes the uploads that were never attached (forms that were never saved) and are older than
- * `ORPHANED_MEDIA_AGE_MS`, a batch at a time until none are left. Run every hour by the `media.cleanup` job.
- *
- * A media that fails to delete is logged and skipped, so one broken row can't block the rest. It stays unattached and
- * is retried on the next run.
- *
- * @returns How many were deleted and how many failed.
- */
-export async function deleteOrphanedMedia({
-  db,
-  now = new Date(),
-}: {
-  db: Database;
-  now?: Date;
-}): Promise<{ deleted: number; failed: number }> {
-  const uploadedBefore = new Date(now.getTime() - ORPHANED_MEDIA_AGE_MS);
-  // Skipped in later batches: a media that failed is still unattached, so the query returns it again.
-  const failedIds = new Set<string>();
-  let deleted = 0;
-
-  for (let batch = 0; batch < ORPHAN_MAX_BATCHES; batch++) {
-    const ids = await findOrphanedMediaIds({ db, uploadedBefore, limit: ORPHAN_BATCH_SIZE });
-    const pending = ids.filter((id) => !failedIds.has(id));
-    // Nothing new: the backlog is empty, or the oldest batch is all failures and the next run retries them.
-    if (pending.length === 0) break;
-
-    // One at a time: the job runs in the app's process and shouldn't compete with requests for the pool or the bucket.
-    for (const mediaId of pending) {
-      try {
-        await deleteMedia({ db, mediaId });
-        deleted += 1;
-      } catch (error) {
-        failedIds.add(mediaId);
-        log.error({ err: error, mediaId }, "could not delete an orphaned media");
-      }
-    }
-
-    if (ids.length < ORPHAN_BATCH_SIZE) break;
-  }
-  return { deleted, failed: failedIds.size };
+      return MediaService.of({ upload, attach, release });
+    }),
+  );
 }

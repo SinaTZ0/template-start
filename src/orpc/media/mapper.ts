@@ -1,8 +1,10 @@
+import { Schema } from "effect";
+
 import { MEDIA_KINDS, MEDIA_VARIANTS } from "#/orpc/media/constants";
 import type { MediaKind } from "#/orpc/media/constants";
 import type { Media } from "#/orpc/media/contract";
 import type { MediaRecord } from "#/orpc/media/repository";
-import { mediaUrl } from "#/lib/storage.server";
+import { mediaKey, mediaUrl } from "#/lib/storage.server";
 
 /*===== Public Media =====*/
 /**
@@ -31,4 +33,13 @@ export function toPublicMedia(record: MediaRecord): Media {
 /*===== Type Guards =====*/
 export function isMediaKind(value: string): value is MediaKind {
   return (MEDIA_KINDS as readonly string[]).includes(value);
+}
+
+/*===== IDs and Keys =====*/
+/** Whether the text can be a media ID. A malformed one would make Postgres throw, so callers treat it as unknown. */
+export const isMediaId = Schema.is(Schema.String.check(Schema.isUUID()));
+
+/** Every bucket key of a media's variants. */
+export function variantKeys({ kind, mediaId }: { kind: MediaKind; mediaId: string }): string[] {
+  return Object.keys(MEDIA_VARIANTS[kind]).map((variant) => mediaKey({ kind, mediaId, variant }));
 }
