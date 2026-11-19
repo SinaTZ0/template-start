@@ -1,4 +1,4 @@
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useMutation } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -29,7 +29,7 @@ export function NoteForm({ note, onSaved }: { note?: Note; onSaved: (saved: Note
   const id = useId();
   const [image, setImage] = useState<Media | null>(note?.image ?? null);
   const form = useForm<NoteFormValues>({
-    resolver: zodResolver(noteFormSchema),
+    resolver: standardSchemaResolver(noteFormSchema),
     defaultValues: { title: note?.title ?? "", body: note?.body ?? "" },
   });
 
