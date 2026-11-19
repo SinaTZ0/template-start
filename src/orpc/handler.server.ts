@@ -2,7 +2,7 @@ import { COMMON_ERROR_STATUS_MAP, ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { RequestLimitHandlerPlugin } from "@orpc/server/plugins";
 
-import { createLogger } from "#/lib/logger.server";
+import { createLogger } from "#/server/observability/log.server";
 import { limitRequest, rateLimitedMessage } from "#/lib/rate-limit.server";
 import type { RateLimitPolicy } from "#/lib/rate-limit.server";
 import { ERROR_STATUS_MAP } from "#/orpc/errors";

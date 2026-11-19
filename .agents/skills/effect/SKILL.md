@@ -76,5 +76,8 @@ using it.
 - **`Schema.optionalKey` in input schemas.** It means "the key may be missing", and it rejects a key present with
   `undefined`, which loaders and forms pass (`{ cursor: undefined }`), though JSON never shows it. Use
   `Schema.optional` for optional input fields; `optionalKey` only where `undefined` must be refused.
+- **Effect's default `ConfigProvider` in a Vite build.** It merges `import.meta.env` over `process.env`, and Vite
+  freezes `import.meta.env` at build time. Settings are read through `serverEnv` (`#/server/config.server`), which
+  reads the process's environment only.
 - **Reading `AsyncLocalStorage` inside a fiber.** Request facts reach Effect code through the `RequestContext`
   service, read once at the boundary.

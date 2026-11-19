@@ -1,6 +1,14 @@
 import "#/server/load-env.server";
 
-import { Config, Context, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted, Schema } from "effect";
+
+/*===== Source =====*/
+/**
+ * Where every setting is read from: the process's environment, and nothing else. Effect's default provider also reads
+ * `import.meta.env`, which a Vite build freezes when it builds, and which holds `SENTRY_DSN` (the browser needs it,
+ * `vite.config.ts`): the build's value would win over the one the server is started with.
+ */
+export const serverEnv = ConfigProvider.fromEnv({ env: process.env as Record<string, string> });
 
 /*===== Checks =====*/
 /** A secret long enough to sign with: shorter ones are refused at startup rather than weakening every token. */
@@ -113,5 +121,5 @@ export class AppConfig extends Context.Service<
         },
       });
     }),
-  );
+  ).pipe(Layer.provide(ConfigProvider.layer(serverEnv)));
 }

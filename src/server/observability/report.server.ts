@@ -1,11 +1,10 @@
 import * as Sentry from "@sentry/node";
 import type { ErrorEvent } from "@sentry/node";
 
-import { env } from "#/env.server";
 import { redactText, redactUrl } from "#/lib/redact.server";
 import { createReportThrottle, errorThrottleKey } from "#/lib/report-throttle.server";
-import { currentTrace } from "#/lib/trace.server";
-import type { SpanKind, Timeline } from "#/lib/trace.server";
+import { observabilitySettings } from "#/server/observability/settings.server";
+import type { SpanKind, Timeline } from "#/server/observability/timeline";
 
 /*===== Query Parameters =====*/
 /**
@@ -13,7 +12,7 @@ import type { SpanKind, Timeline } from "#/lib/trace.server";
  * with `(hidden)` in logs and error reports unless `LOG_QUERY_PARAMS` is on.
  */
 export function hideQueryParams(text: string): string {
-  if (env.LOG_QUERY_PARAMS) return text;
+  if (observabilitySettings.queryParams) return text;
   return text.replace(/\nparams: [\s\S]*$/, "\nparams: (hidden)");
 }
 
@@ -36,10 +35,10 @@ function scrubEvent(event: ErrorEvent): ErrorEvent {
 // is sent and every function below is a no-op, so development and tests need no tracker. Only errors and messages are
 // sent: tracing stays off (no `tracesSampleRate`), since the viewer ignores it. The dev server re-evaluates this module
 // on reload, hence the guard.
-if (env.SENTRY_DSN && !Sentry.isInitialized()) {
+if (observabilitySettings.sentryDsn && !Sentry.isInitialized()) {
   Sentry.init({
-    dsn: env.SENTRY_DSN,
-    environment: env.NODE_ENV,
+    dsn: observabilitySettings.sentryDsn,
+    environment: observabilitySettings.environment,
     // The build's commit (`vite.config.ts`), so the viewer can say which build an error came from. Only Vite defines
     // `import.meta.env`: a seed run by tsx, or bundled by esbuild for the server, imports this module without it.
     release: import.meta.env?.APP_RELEASE || undefined,
@@ -51,7 +50,7 @@ if (env.SENTRY_DSN && !Sentry.isInitialized()) {
       httpHeaders: false,
       httpBodies: [],
       urlQueryParams: false,
-      databaseQueryData: env.LOG_QUERY_PARAMS,
+      databaseQueryData: observabilitySettings.queryParams,
       stackFrameVariables: false,
     },
     // The SDK cuts contexts off below this depth. 4 keeps the timeline's rows: contexts → timeline → rows → row.
@@ -68,25 +67,32 @@ const throttleError = createReportThrottle({ limit: 5 });
 const throttleSlowRequest = createReportThrottle({ limit: 1 });
 
 /*===== Reporting =====*/
+/** What a report knows about the request it came from. */
+export type ReportContext = {
+  readonly traceId?: string | undefined;
+  readonly method?: string | undefined;
+  readonly path?: string | undefined;
+  readonly clientId?: string | undefined;
+  readonly userId?: string | undefined;
+};
+
 /**
- * Tags every report with the request it came from, so its log lines can be found by `reqId`, with the browser's
- * `clientId`, so the viewer can group it with that browser's own errors, and with the signed-in user's `userId`.
+ * Tags every report with the request it came from, so its log lines and trace can be found by `reqId` (the trace ID),
+ * with the browser's `clientId`, so the viewer can group it with that browser's own errors, and with the signed-in
+ * user's `userId`.
  */
-function requestTags(): Record<string, string> {
-  const trace = currentTrace();
-  if (!trace) return {};
-  const { method, path, clientId } = trace.request ?? {};
+function requestTags({ traceId, method, path, clientId, userId }: ReportContext): Record<string, string> {
   return {
-    reqId: trace.id,
+    ...(traceId && { reqId: traceId }),
     ...(method && path && { method, path }),
     ...(clientId && { clientId }),
-    ...(trace.userId && { userId: trace.userId }),
+    ...(userId && { userId }),
   };
 }
 
 /**
- * Sends an error to the tracker. The logger calls it for every `log.error({ err }, …)`, so app code logs errors and
- * never calls this directly. At most 5 alike errors a minute are sent (`errorThrottleKey`); the next one sent carries
+ * Sends an error to the tracker. The log writer calls it for every error-level line with an error
+ * (`#/server/observability/log.server`), so app code logs errors and never calls this directly. At most 5 alike errors a minute are sent (`errorThrottleKey`); the next one sent carries
  * how many were left out as `throttle.suppressed`.
  *
  * @param fields The log line's other fields. `errorId` (the ID a client receives for a 500) and `module` become
@@ -96,10 +102,12 @@ export function reportError({
   err,
   message,
   fields,
+  context,
 }: {
   err: unknown;
   message: string | undefined;
   fields: Record<string, unknown>;
+  context: ReportContext;
 }) {
   if (!Sentry.isEnabled()) return;
   const suppressed = throttleError(errorThrottleKey(err));
@@ -108,7 +116,7 @@ export function reportError({
   const { errorId, module, ...rest } = fields;
   Sentry.captureException(err, {
     tags: {
-      ...requestTags(),
+      ...requestTags(context),
       ...(typeof errorId === "string" && { errorId }),
       ...(typeof module === "string" && { module }),
     },
@@ -131,12 +139,14 @@ export function reportSlowRequest({
   ms,
   kinds,
   timeline,
+  context,
 }: {
   method: string;
   route: string;
   ms: number;
   kinds: Partial<Record<SpanKind, { count: number; ms: number }>>;
   timeline: Timeline;
+  context: ReportContext;
 }) {
   if (!Sentry.isEnabled()) return;
   const skipped = throttleSlowRequest(`${method} ${route}`);
@@ -149,7 +159,7 @@ export function reportSlowRequest({
     message: `Slow request: ${method} ${route} (${ms}ms)`,
     level: "warning",
     fingerprint: ["slow-request", method, route],
-    tags: { ...requestTags(), route },
+    tags: { ...requestTags(context), route },
     contexts: {
       timeline: {
         ...timeline,

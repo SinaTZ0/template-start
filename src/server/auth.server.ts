@@ -2,15 +2,13 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
 import { Pool } from "pg";
 
-import { createLogger } from "#/lib/logger.server";
-import { setTraceUser } from "#/lib/trace.server";
 import { SendMail } from "#/mail/jobs.server";
 import { createBetterAuth } from "#/server/better-auth.server";
 import { Captcha } from "#/server/captcha.server";
 import type { AuthSession, BetterAuth } from "#/server/better-auth.server";
 import { AppConfig } from "#/server/config.server";
 import { Jobs } from "#/server/jobs.server";
-import { tracePool } from "#/server/observability/traced-pool.server";
+import { createLogger } from "#/server/observability/log.server";
 
 const log = createLogger("auth");
 
@@ -24,7 +22,7 @@ export class Auth extends Context.Service<
   {
     /** The Better-Auth server itself, for `/api/auth/*` and the seed. */
     readonly betterAuth: BetterAuth;
-    /** The session the request's cookies belong to, if any. Reading it tags the request's reports with the user. */
+    /** The session the request's cookies belong to, if any. Its queries are this span's: the pool isn't traced. */
     readonly session: (headers: Headers) => Effect.Effect<Option.Option<AuthSession>>;
     /** Signs a user out everywhere by deleting all their sessions, e.g. once they are blocked. */
     readonly revokeSessions: (userId: string) => Effect.Effect<void>;
@@ -60,7 +58,7 @@ export class Auth extends Context.Service<
 
       const betterAuth = createBetterAuth({
         config,
-        db: drizzle({ client: tracePool(pool) }),
+        db: drizzle({ client: pool }),
         queueMail: (mail) => Effect.runPromiseWith(context)(SendMail.enqueue(mail)),
         verifyCaptcha: (payload) =>
           Effect.runPromise(
@@ -75,7 +73,6 @@ export class Auth extends Context.Service<
         betterAuth,
         session: (headers) =>
           Effect.promise(() => betterAuth.api.getSession({ headers })).pipe(
-            Effect.tap((session) => Effect.sync(() => session && setTraceUser(session.user.id))),
             Effect.map(Option.fromNullishOr),
             Effect.withSpan("Auth.session"),
           ),

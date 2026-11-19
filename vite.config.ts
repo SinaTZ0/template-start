@@ -8,8 +8,6 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 
-import { traceLayers } from "./vite-plugins/trace-layers.ts";
-
 /**
  * The build's release: the commit it was built from, which error reports carry so the viewer can say which build
  * failed. The deploy tool passes it as `APP_RELEASE` (the image build has no `.git`); a build on a developer's machine
@@ -49,8 +47,6 @@ export default defineConfig(({ command }) => {
       // Builds the Node server (`.output/server/index.mjs`) that serves the app and its static assets.
       nitro(),
       viteReact(),
-      // `traceLayers` times feature services and repositories (docs/backend/logging.md → Request Timing).
-      traceLayers(),
     ],
     resolve: {
       tsconfigPaths: true,

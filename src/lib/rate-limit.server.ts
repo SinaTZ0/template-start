@@ -1,4 +1,5 @@
-import { createLogger } from "#/lib/logger.server";
+import { createLogger } from "#/server/observability/log.server";
+import { observabilitySettings } from "#/server/observability/settings.server";
 import { m } from "#/paraglide/messages";
 
 const log = createLogger("rate-limit");
@@ -93,8 +94,7 @@ export function clientAddress(headers: Headers): string | null {
     return addressKey(address);
   }
   // Development and tests have no proxy in front. One shared key keeps the limits working, and testable, locally.
-  // A production build always runs behind Caddy (`import.meta.env.PROD` is Vite's, fixed when it builds).
-  if (!import.meta.env?.PROD) return "local";
+  if (observabilitySettings.environment !== "production") return "local";
   noteAddressMissing(Date.now());
   return null;
 }

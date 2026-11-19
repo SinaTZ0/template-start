@@ -1,28 +1,32 @@
 import { createServerEntry, createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
 
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 
 import { jobs } from "#/jobs.server";
-import { readClientId } from "#/lib/client-id";
 import { defineLocaleHeaderStrategy } from "#/lib/locale.server";
-import { createLogger } from "#/lib/logger.server";
-import { logRequest } from "#/lib/request-log.server";
-import { runWithTrace } from "#/lib/trace.server";
 import { deLocalizeHref } from "#/paraglide/runtime";
 import { paraglideMiddleware } from "#/paraglide/server";
 import { runJobWorkers } from "#/server/jobs.server";
+import { observeRequest } from "#/server/observability/http.server";
 import { appRuntime } from "#/server/runtime.server";
 import type { AppServices } from "#/server/runtime.server";
 
 import { getRouter } from "./router";
 
-const log = createLogger("http");
-
 /*===== Background Jobs =====*/
 // The server entry is loaded once when the server starts, which makes it the place to start the workers that run the
 // queued and scheduled jobs in this process (docs/backend/jobs.md). They live as long as the runtime: a reload in
 // development disposes it, which stops them.
-appRuntime.runFork(Effect.scoped(Effect.andThen(runJobWorkers<AppServices>(jobs), Effect.never)));
+// Starting them builds the runtime, so a configuration the server can't run with (a missing variable, a short secret)
+// stops the server here, at startup, with the reason.
+appRuntime
+  .runFork(Effect.scoped(Effect.andThen(runJobWorkers<AppServices>(jobs), Effect.never)))
+  .addObserver((exit) => {
+    if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
+      process.stderr.write(`The server can't start: ${Cause.pretty(exit.cause)}\n`);
+      process.exit(1);
+    }
+  });
 
 /*===== Locale =====*/
 // The strategy `/rpc` requests resolve their locale with (`project.inlang/paraglide.config.ts`).
@@ -43,50 +47,32 @@ function routePattern(path: string): string {
 }
 
 /*===== Request Handling =====*/
-/** Sets a header, copying the response first when its headers are immutable (`Response.redirect`, a proxied fetch). */
-function withHeader({ response, name, value }: { response: Response; name: string; value: string }): Response {
-  try {
-    response.headers.set(name, value);
-    return response;
-  } catch {
-    const copy = new Response(response.body, response);
-    copy.headers.set(name, value);
-    return copy;
-  }
-}
-
 const handleRequest = createStartHandler(defaultStreamHandler);
 
 /**
- * Start's handler, wrapped so every request (pages, `/rpc/*`, `/api/auth/*`, 404s) runs inside its
- * own trace. Everything it does, down to its queries, records into that trace, and log lines carry its `reqId`
- * (docs/backend/logging.md). The time ends when the response starts: streamed content that resolves later isn't counted.
+ * Start's handler, wrapped so every request (pages, `/rpc/*`, `/api/auth/*`, 404s) runs inside its own trace, with
+ * one log line and an `X-Request-Id` (`observeRequest`, docs/backend/logging.md).
  *
- * Inside the trace, `paraglideMiddleware` resolves the request's locale and keeps it for everything the request runs,
- * so `getLocale()` and every message follow it (docs/frontend/i18n.md). Start gets the request as it came, prefix
+ * Inside it, `paraglideMiddleware` resolves the request's locale and keeps it for everything the request runs, so
+ * `getLocale()` and every message follow it (docs/frontend/i18n.md). Start gets the request as it came, prefix
  * included: the router's `rewrite` (`src/router.tsx`) removes it, so the server's router sees the same URL as the
  * browser's.
  */
 export default createServerEntry({
   fetch(request, opts) {
-    // The path without its query string, which can carry tokens.
-    const line = { method: request.method, path: new URL(request.url).pathname };
-    const clientId = readClientId(request.headers.get("cookie"));
-
-    return runWithTrace({ ...line, clientId }, async (trace) => {
-      let response: Response;
-      try {
-        response = await paraglideMiddleware(request, () => handleRequest(request, opts));
-      } catch (error) {
-        // Start turns route and render errors into responses; only a failure of the handler itself lands here.
-        log.error({ err: error }, "unhandled request error");
-        response = new Response("Internal Server Error", { status: 500 });
-      }
-
-      // Shows in the browser's devtools, so a bug report can quote the ID its log lines carry.
-      response = withHeader({ response, name: "X-Request-Id", value: trace.id });
-      logRequest({ request: line, status: response.status, route: routePattern(line.path), trace });
-      return response;
-    });
+    const route = routePattern(new URL(request.url).pathname);
+    return appRuntime
+      .runPromise(
+        observeRequest({
+          request,
+          route,
+          handle: () => paraglideMiddleware(request, () => handleRequest(request, opts)),
+        }),
+      )
+      .catch((error: unknown) => {
+        // Only when the runtime itself is broken: every failure inside a request is answered by `observeRequest`.
+        process.stderr.write(`request handling failed: ${String(error)}\n`);
+        return new Response("Internal Server Error", { status: 500 });
+      });
   },
 });

@@ -18,7 +18,7 @@ import {
   VERIFY_EMAIL_LINK_HOURS,
 } from "#/lib/auth-constants";
 import { LOCALE_HEADER } from "#/lib/locale";
-import { createLogger } from "#/lib/logger.server";
+import { createLogger } from "#/server/observability/log.server";
 import { normalizePersianText } from "#/lib/persian-text";
 import { CLIENT_ADDRESS_HEADER } from "#/lib/rate-limit.server";
 import type { MailPayload } from "#/mail/jobs.server";

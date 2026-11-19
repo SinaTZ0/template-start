@@ -1,7 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { Cause, Effect, Exit, Result } from "effect";
 
-import { createLogger } from "#/lib/logger.server";
 import { rateLimitedMessage } from "#/lib/rate-limit.server";
 import type { RateLimitPolicy } from "#/lib/rate-limit.server";
 import { issueToErrorData } from "#/lib/schema";
@@ -10,6 +9,8 @@ import { noErrorData } from "#/orpc/errors";
 import { m } from "#/paraglide/messages";
 import { Captcha } from "#/server/captcha.server";
 import type { CaptchaFailed, Forbidden, InvalidInput, RateLimited, Unauthorized } from "#/server/errors";
+import { createLogger } from "#/server/observability/log.server";
+import { requestScope } from "#/server/observability/request-scope.server";
 import { checkRateLimit } from "#/server/rate-limit.server";
 import { CurrentUser, RequestContext, requireRole, requireUser } from "#/server/request-context.server";
 import { appRuntime } from "#/server/runtime.server";
@@ -169,6 +170,8 @@ export function effectProcedure(
   }) => {
     /*------ Run ------*/
     const { access, rateLimit, captcha } = spec;
+    // Read here, outside the fiber: the request this call belongs to, whose trace it joins.
+    const scope = requestScope.current();
     const program = Effect.gen(function* () {
       yield* checkRateLimit(API_RATE_LIMIT);
       if (rateLimit) yield* checkRateLimit(rateLimit);
@@ -176,9 +179,16 @@ export function effectProcedure(
       // A public procedure's Effect can't require `CurrentUser` (the overloads above), so this never runs.
       if (!access) return yield* spec.run({ input }).pipe(Effect.provideService(CurrentUser, noUser));
       const user = yield* access === "user" ? requireUser : requireRole(access);
-      return yield* spec.run({ input }).pipe(Effect.provideService(CurrentUser, user));
+      // The rest of the request's lines and reports carry the user's ID (never the email or name).
+      if (scope) scope.userId = user.id;
+      yield* Effect.annotateCurrentSpan("user.id", user.id);
+      return yield* spec
+        .run({ input })
+        .pipe(Effect.provideService(CurrentUser, user), Effect.annotateLogs({ userId: user.id }));
     }).pipe(
-      Effect.withSpan(`rpc.${path.join(".")}`, { kind: "server" }),
+      Effect.withSpan(`rpc.${path.join(".")}`, { kind: "internal" }),
+      Effect.annotateLogs({ module: "orpc", ...(scope?.clientId && { clientId: scope.clientId }) }),
+      scope ? Effect.withParentSpan(scope.span) : (self) => self,
       Effect.provideService(RequestContext, { headers: context.headers }),
     );
 

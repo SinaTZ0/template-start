@@ -1,10 +1,11 @@
 import { Cause, Layer, Logger, References } from "effect";
-import type { LogLevel } from "effect";
+import type { LogLevel as EffectLogLevel } from "effect";
 
-import { createLogger } from "#/lib/logger.server";
+import { writeLog } from "#/server/observability/log.server";
+import type { LogLevel } from "#/server/observability/log.server";
 
 /*===== Levels =====*/
-const PINO_LEVEL: Record<LogLevel.LogLevel, "fatal" | "error" | "warn" | "info" | "debug" | "trace" | undefined> = {
+const LEVEL: Record<EffectLogLevel.LogLevel, LogLevel | undefined> = {
   All: "trace",
   Trace: "trace",
   Debug: "debug",
@@ -16,39 +17,41 @@ const PINO_LEVEL: Record<LogLevel.LogLevel, "fatal" | "error" | "warn" | "info" 
 };
 
 /*===== Logger =====*/
-const moduleLoggers = new Map<string, ReturnType<typeof createLogger>>();
-
-/** One child logger per module, made on first use. */
-function moduleLogger(module: string) {
-  let log = moduleLoggers.get(module);
-  if (!log) moduleLoggers.set(module, (log = createLogger(module)));
-  return log;
-}
-
 /**
- * Writes Effect's log entries through the server's logger (`#/lib/logger.server`), so they look like every other line,
- * carry the request's `reqId`, are redacted, and an error-level entry with a cause is reported to the error viewer.
+ * Effect's log entries as the server's log lines (`writeLog`), so they look like every other line.
  *
- * The `module` annotation picks the child logger (`Effect.annotateLogs({ module: "media" })`); the other annotations
- * become fields. A failure's cause is logged under `err`.
+ * - The `module` annotation names the line's module (`Effect.annotateLogs({ module: "media" })`); `userId` and
+ *   `clientId` tag the line and its report; every other annotation is a field.
+ * - The line carries the trace and span it was written in (`reqId`, `spanId`), so a request's lines and its trace are
+ *   found by one ID.
+ * - A logged cause is the line's `err`, so `Effect.logError("…", cause)` is reported to the error viewer.
  */
 const appLogger = Logger.make((options) => {
-  const level = PINO_LEVEL[options.logLevel];
+  const level = LEVEL[options.logLevel];
   if (!level) return;
-  const { module, ...fields } = options.fiber.getRef(References.CurrentLogAnnotations);
+  const { module, userId, clientId, ...fields } = options.fiber.getRef(References.CurrentLogAnnotations);
   // `Effect.log("a", value)` logs its arguments as one array.
   const parts: ReadonlyArray<unknown> = Array.isArray(options.message) ? options.message : [options.message];
   const message = parts.map((part) => (typeof part === "string" ? part : JSON.stringify(part))).join(" ");
-  const err = options.cause.reasons.length > 0 ? Cause.squash(options.cause) : undefined;
-  moduleLogger(typeof module === "string" ? module : "app")[level](
-    err === undefined ? fields : { ...fields, err },
+  const span = options.fiber.cache.span;
+  writeLog({
+    level,
+    module: typeof module === "string" ? module : "app",
     message,
-  );
+    fields,
+    err: options.cause.reasons.length > 0 ? Cause.squash(options.cause) : undefined,
+    context: {
+      traceId: span?.traceId,
+      spanId: span?.spanId,
+      userId: typeof userId === "string" ? userId : undefined,
+      clientId: typeof clientId === "string" ? clientId : undefined,
+    },
+  });
 });
 
 /**
- * The server's Effect loggers: the app's logger, and the tracer's, which adds each entry to the current span as an
- * event. The level filter is pino's (`LOG_LEVEL`), so Effect passes everything on.
+ * The server's Effect loggers: the app's, and the tracer's, which adds each entry to the current span as an event. The
+ * level filter is the writer's (`LOG_LEVEL`), so Effect passes everything on.
  */
 export const LoggerLive = Layer.mergeAll(
   Logger.layer([appLogger, Logger.tracerLogger]),

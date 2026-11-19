@@ -12,7 +12,7 @@ import { Db, PgLive } from "#/server/db.server";
 import { Jobs } from "#/server/jobs.server";
 import { Mailer } from "#/server/mailer.server";
 import { LoggerLive } from "#/server/observability/logger.server";
-import { TracerLive } from "#/server/observability/request-trace.server";
+import { RequestSpansLive } from "#/server/observability/request-spans.server";
 import { Storage } from "#/server/storage.server";
 
 /*===== Layers =====*/
@@ -27,8 +27,10 @@ const PlatformLive = Auth.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(Db.layer, Jobs.layer)),
   Layer.provideMerge(PgLive),
   Layer.provideMerge(Layer.mergeAll(Storage.layer, Mailer.layer, Captcha.layer)),
-  Layer.provideMerge(AppConfig.layer),
 );
+
+/** Logging and tracing (docs/backend/logging.md). */
+const ObservabilityLive = Layer.mergeAll(LoggerLive, RequestSpansLive);
 
 /** The features' repositories and services. A service may use another feature's service (`note` uses `media`). */
 const FeaturesLive = Layer.mergeAll(NoteService.layer, SessionService.layer).pipe(
@@ -36,10 +38,14 @@ const FeaturesLive = Layer.mergeAll(NoteService.layer, SessionService.layer).pip
   Layer.provideMerge(Layer.mergeAll(NoteRepo.layer, MediaRepo.layer)),
 );
 
-/** Everything Effect code on the server can require. Logging and tracing wrap it all, layer construction included. */
+/**
+ * Everything Effect code on the server can require. Logging and tracing wrap it all, layer construction included, and
+ * the configuration wraps them.
+ */
 export const AppLayer = FeaturesLive.pipe(
   Layer.provideMerge(PlatformLive),
-  Layer.provideMerge(Layer.mergeAll(LoggerLive, TracerLive)),
+  Layer.provideMerge(ObservabilityLive),
+  Layer.provideMerge(AppConfig.layer),
 );
 
 export type AppServices = Layer.Success<typeof AppLayer>;

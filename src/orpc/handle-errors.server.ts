@@ -1,6 +1,6 @@
 import { ORPCError, os, ValidationError } from "@orpc/server";
 
-import { createLogger } from "#/lib/logger.server";
+import { createLogger } from "#/server/observability/log.server";
 import { issuesToErrorData } from "#/lib/schema-issues";
 
 const log = createLogger("orpc");
