@@ -66,6 +66,12 @@ var Registry = []Setting{
 	{"ERROR_VIEWER_SESSION_SECRET", "secret:32:32", Stack},
 	{"ERROR_VIEWER_NOTIFY_URL", "optional", Stack},
 	{"ERROR_VIEWER_NOTIFY_CHAT_ID", "optional", Stack},
+	// Traces (OpenObserve): all optional, off unless COMPOSE_PROFILES names `observability`.
+	{"COMPOSE_PROFILES", "optional", Stack},
+	{"OPENOBSERVE_ROOT_PASSWORD", "optional", Stack},
+	{"OTEL_EXPORTER_OTLP_ENDPOINT", "optional", Stack},
+	{"OTEL_EXPORTER_OTLP_AUTHORIZATION", "optional", Stack},
+	{"ERROR_VIEWER_TRACE_URL", "optional", Stack},
 	{"SENTRY_DSN", "derived", Stack},
 	{"GOPROXY", "optional", Stack},
 	{"NPM_REGISTRY", "registry", Stack},

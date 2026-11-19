@@ -64,8 +64,9 @@ services:
         NPM_REGISTRY: ${NPM_REGISTRY:-}
     restart: unless-stopped
     # Listed one by one, so each container gets only its own secrets (never the store's admin key). A variable added to
-    # `src/env.server.ts` must be added here too, and one read from `.env` also to `.env.production.example` and the
-    # settings registry in `tools/deploy/internal/settings` (docs/deployment.md → Adding a Variable).
+    # `AppConfig` (`src/server/config.server.ts`) must be added here too, and one read from `.env` also to
+    # `.env.production.example` and the settings registry in `tools/deploy/internal/settings` (docs/deployment.md →
+    # Adding a Variable).
     environment:
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -74,6 +75,9 @@ services:
       LOG_QUERY_PARAMS: ${LOG_QUERY_PARAMS:-false}
       # The error viewer's DSN (docs/deployment.md → Error Tracking). Empty turns reporting off.
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Optional OpenTelemetry export (docs/deployment.md → Traces). Empty sends nothing.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_AUTHORIZATION: ${OTEL_EXPORTER_OTLP_AUTHORIZATION:-}
       DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/app
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
       BETTER_AUTH_URL: https://${DOMAIN}
@@ -196,8 +200,31 @@ services:
       NOTIFY_CHAT_ID: ${ERROR_VIEWER_NOTIFY_CHAT_ID:-}
       # The most the viewer's database may take of the disk, in MB; the oldest events go first.
       MAX_DB_MB: ${ERROR_VIEWER_MAX_DB_MB:-1024}
+      # Optional: a report's request in the tracing backend, `{traceId}` where its ID goes (docs/deployment.md → Traces).
+      TRACE_URL: ${ERROR_VIEWER_TRACE_URL:-}
     volumes:
       - error-viewer-data:/data
+    logging: *logging
+
+  # ------ Traces ------
+  # OpenObserve, which keeps the app's traces, logs and metrics (docs/deployment.md → Traces). Off unless the server's
+  # `.env` has `COMPOSE_PROFILES=observability`, which Compose reads itself: it needs a few hundred MB of memory, more
+  # than a small server spares. Bound to the server's loopback, so it's reached through an SSH tunnel only, like pgweb.
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v1.1.2
+    profiles: [observability]
+    restart: unless-stopped
+    environment:
+      ZO_ROOT_USER_EMAIL: admin@${DOMAIN}
+      ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_ROOT_PASSWORD:-}
+      ZO_DATA_DIR: /data
+      # A week of history: enough to look into last week's slowness, small enough for the server's disk.
+      ZO_COMPACT_DATA_RETENTION_DAYS: 7
+    mem_limit: 768m
+    ports:
+      - "127.0.0.1:5080:5080"
+    volumes:
+      - openobserve-data:/data
     logging: *logging
 
   # ------ Database Browser ------
@@ -261,5 +288,6 @@ volumes:
   pgdata:
   seaweedfs:
   error-viewer-data:
+  openobserve-data:
   caddy_data:
   caddy_config:
