@@ -1,8 +1,11 @@
-import { z } from "zod";
+import { Schema } from "effect";
 
-import { emailField } from "#/lib/auth-form-fields";
+import { EmailField } from "#/lib/auth-form-fields";
+import { standardSchema } from "#/lib/schema";
 
 /*===== Forgot Password =====*/
-export const forgotPasswordSchema = z.object({ email: emailField() });
+const ForgotPasswordFields = Schema.Struct({ email: EmailField });
 
-export type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
+export const forgotPasswordSchema = standardSchema(ForgotPasswordFields);
+
+export type ForgotPasswordValues = typeof ForgotPasswordFields.Type;

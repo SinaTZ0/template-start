@@ -1,4 +1,6 @@
-import { z } from "zod";
+import { Schema, SchemaTransformation } from "effect";
+
+import { optionalSearchParam, searchParam } from "#/lib/schema";
 
 /*===== Redirect Target =====*/
 // Any origin works as the base: it only shows whether the value leaves it.
@@ -29,7 +31,14 @@ export function sameSitePath(value: string | undefined): string | undefined {
  *
  * Missing stays `undefined` rather than a default: the router writes validated defaults back into the URL.
  */
-export const redirectToParam = z.string().optional().catch(undefined).transform(sameSitePath);
+export const redirectToParam = optionalSearchParam(
+  Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.UndefinedOr(Schema.String),
+      SchemaTransformation.transform({ decode: sameSitePath, encode: (path) => path ?? "" }),
+    ),
+  ),
+);
 
 /*===== List Filters =====*/
 // A list page's search text (`?q=`) and one-of filter (`?group=`), for lists filtered in the page (`matchesSearch` in
@@ -37,7 +46,7 @@ export const redirectToParam = z.string().optional().catch(undefined).transform(
 
 export const listSearchDefaults = { q: "", group: "all" } as const;
 
-export const listSearchSchema = z.object({
-  q: z.string().trim().max(100).default(listSearchDefaults.q).catch(listSearchDefaults.q),
-  group: z.string().max(40).default(listSearchDefaults.group).catch(listSearchDefaults.group),
+export const ListSearch = Schema.Struct({
+  q: searchParam(Schema.Trimmed.check(Schema.isMaxLength(100)), listSearchDefaults.q),
+  group: searchParam(Schema.String.check(Schema.isMaxLength(40)), listSearchDefaults.group),
 });

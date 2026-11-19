@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { m } from "#/paraglide/messages";
 
@@ -10,12 +10,15 @@ import { m } from "#/paraglide/messages";
 export const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
 
+// The shape of an address a mailbox accepts: a local part without leading, trailing or doubled dots, then a domain with
+// a dot and a top-level part of two letters or more.
+const EMAIL = /^(?!\.)(?!.*\.\.)[A-Za-z0-9_'+\-.]*[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
+
 /** An email address, sent exactly as typed. */
-export const emailField = () => z.email({ error: () => m.auth_form_email_invalid() });
+export const EmailField = Schema.String.check(Schema.isPattern(EMAIL, { text: () => m.auth_form_email_invalid() }));
 
 /** A password being chosen, on sign-up or a reset. Never normalized: it's sent exactly as typed. */
-export const newPasswordField = () =>
-  z
-    .string()
-    .min(PASSWORD_MIN_LENGTH, { error: () => m.auth_form_password_too_short({ min: PASSWORD_MIN_LENGTH }) })
-    .max(PASSWORD_MAX_LENGTH, { error: () => m.auth_form_password_too_long({ max: PASSWORD_MAX_LENGTH }) });
+export const NewPasswordField = Schema.String.check(
+  Schema.isMinLength(PASSWORD_MIN_LENGTH, { text: () => m.auth_form_password_too_short({ min: PASSWORD_MIN_LENGTH }) }),
+  Schema.isMaxLength(PASSWORD_MAX_LENGTH, { text: () => m.auth_form_password_too_long({ max: PASSWORD_MAX_LENGTH }) }),
+);

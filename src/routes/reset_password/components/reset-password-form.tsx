@@ -1,4 +1,4 @@
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -32,7 +32,7 @@ export function ResetPasswordForm({
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string>();
   const form = useForm<ResetPasswordValues>({
-    resolver: zodResolver(resetPasswordSchema),
+    resolver: standardSchemaResolver(resetPasswordSchema),
     defaultValues: { password: "" },
   });
   const { errors, isSubmitting } = form.formState;

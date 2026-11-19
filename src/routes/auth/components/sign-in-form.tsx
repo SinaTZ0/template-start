@@ -1,4 +1,4 @@
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -18,7 +18,7 @@ import { signInSchema, type SignInValues } from "#/routes/auth/schema";
 export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
   const [formError, setFormError] = useState<string>();
   const form = useForm<SignInValues>({
-    resolver: zodResolver(signInSchema),
+    resolver: standardSchemaResolver(signInSchema),
     defaultValues: { email: "", password: "" },
   });
   const { errors, isSubmitting } = form.formState;

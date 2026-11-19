@@ -1,13 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { Button } from "#/components/primitive/button/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/primitive/tabs/tabs";
 import { AuthCard } from "#/components/shared/auth-card/auth-card";
 import { CheckInbox, SentToAddress } from "#/components/shared/check-inbox/check-inbox";
 import { localizedPath } from "#/lib/locale";
+import { searchSchema } from "#/lib/schema";
 import { redirectToParam } from "#/lib/search-params";
 import { pageMeta } from "#/lib/seo";
 import { roleHomePath } from "#/lib/viewer";
@@ -16,13 +17,11 @@ import { m } from "#/paraglide/messages";
 import { SignInForm } from "#/routes/auth/components/sign-in-form";
 import { SignUpForm } from "#/routes/auth/components/sign-up-form";
 
-const searchSchema = z.object({
-  redirectTo: redirectToParam,
-});
+const authSearchSchema = searchSchema(Schema.Struct({ redirectTo: redirectToParam }));
 
 /*===== Route =====*/
 export const Route = createFileRoute("/_site-layout/auth")({
-  validateSearch: searchSchema,
+  validateSearch: authSearchSchema,
   beforeLoad: async ({ context, search }) => {
     // Signed-in people have nothing to do here.
     const viewer = await context.queryClient.ensureQueryData(orpc.session.viewer.queryOptions());

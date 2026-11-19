@@ -1,4 +1,4 @@
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
@@ -25,7 +25,7 @@ export function SignUpForm({ onSuccess }: { onSuccess: (email: string) => void }
   const [formError, setFormError] = useState<string>();
   const { widgetRef, solve } = useCaptcha();
   const form = useForm<SignUpValues>({
-    resolver: zodResolver(signUpSchema),
+    resolver: standardSchemaResolver(signUpSchema),
     defaultValues: { name: "", email: "", password: "" },
   });
   const { errors, isSubmitting } = form.formState;

@@ -1,4 +1,4 @@
-import { Schema, SchemaIssue, SchemaTransformation } from "effect";
+import { Effect, Schema, SchemaIssue, SchemaTransformation } from "effect";
 
 import { normalizePersianText } from "#/lib/persian-text";
 import { issuesToErrorData } from "#/lib/schema-issues";
@@ -68,3 +68,34 @@ export const PersianText = Schema.String.pipe(
     SchemaTransformation.transform({ decode: normalizePersianText, encode: (value: string) => value }),
   ),
 );
+
+/*===== Search Params =====*/
+// A search param comes from a URL anyone can edit, so a bad value never fails the page: it reads as its fallback, the
+// way a missing one does (docs/frontend/search-params.md).
+
+/**
+ * A route's search params for `validateSearch`, as a Standard Schema. Unlike `standardSchema`, keys it doesn't name are
+ * dropped rather than refused: a URL may carry parameters other code added.
+ */
+export function searchSchema<S extends Schema.ConstraintDecoder<unknown>>(schema: S) {
+  return Schema.toStandardSchemaV1(schema, {
+    leafHook,
+    checkHook,
+    parseOptions: { errors: "all", onExcessProperty: "ignore" },
+  });
+}
+
+/** A search param with a default: missing or invalid, it reads as `fallback`. */
+export function searchParam<S extends Schema.Top & Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+  fallback: S["Type"] & S["Encoded"],
+) {
+  return Schema.optionalKey(schema.pipe(Schema.catchDecoding(() => Effect.succeedSome(fallback)))).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(fallback)),
+  );
+}
+
+/** An optional search param: invalid, it reads as missing. */
+export function optionalSearchParam<S extends Schema.Top & Schema.ConstraintDecoder<unknown>>(schema: S) {
+  return Schema.optionalKey(schema.pipe(Schema.catchDecoding(() => Effect.succeedNone)));
+}

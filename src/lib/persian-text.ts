@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 import { toLatinDigits } from "#/lib/digits";
 
 /*===== Persian Text =====*/
@@ -37,15 +35,6 @@ export function normalizePersianText(value: string): string {
     .replace(REPEATED_ZWNJ, "‌")
     .replace(LOOSE_ZWNJ, "")
     .trim();
-}
-
-/**
- * A string schema for free text that is normalized first (`normalizePersianText`, which also trims). An overwrite
- * rather than a transform: it keeps the schema a string, and the checks chained after it (`.min()`, `.max()`) see the
- * normalized value.
- */
-export function persianText() {
-  return z.string().overwrite(normalizePersianText);
 }
 
 /*===== Digits =====*/

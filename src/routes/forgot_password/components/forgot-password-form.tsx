@@ -1,4 +1,4 @@
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
@@ -20,7 +20,7 @@ import { forgotPasswordSchema, type ForgotPasswordValues } from "#/routes/forgot
 export function ForgotPasswordForm({ onSent }: { onSent: (email: string) => void }) {
   const [formError, setFormError] = useState<string>();
   const form = useForm<ForgotPasswordValues>({
-    resolver: zodResolver(forgotPasswordSchema),
+    resolver: standardSchemaResolver(forgotPasswordSchema),
     defaultValues: { email: "" },
   });
   const { errors, isSubmitting } = form.formState;

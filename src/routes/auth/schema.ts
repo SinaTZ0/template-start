@@ -1,28 +1,33 @@
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { NAME_MAX_LENGTH } from "#/lib/auth-constants";
-import { emailField, newPasswordField } from "#/lib/auth-form-fields";
-import { persianText } from "#/lib/persian-text";
+import { EmailField, NewPasswordField } from "#/lib/auth-form-fields";
+import { PersianText, standardSchema } from "#/lib/schema";
 import { m } from "#/paraglide/messages";
 
 /*===== Sign In =====*/
 // Written for the form's messages. The server (Better-Auth) is the final authority.
-export const signInSchema = z.object({
-  email: emailField(),
-  password: z.string().min(1, { error: () => m.auth_form_password_required() }),
+const SignInFields = Schema.Struct({
+  email: EmailField,
+  password: Schema.String.check(Schema.isMinLength(1, { text: () => m.auth_form_password_required() })),
 });
 
-export type SignInValues = z.infer<typeof signInSchema>;
+export const signInSchema = standardSchema(SignInFields);
+
+export type SignInValues = typeof SignInFields.Type;
 
 /*===== Sign Up =====*/
 // Only the name is free text: the email and password are sent exactly as typed. The server normalizes the name again
-// and checks its length (`src/lib/auth.server.ts`).
-export const signUpSchema = z.object({
-  name: persianText()
-    .min(1, { error: () => m.auth_form_name_required() })
-    .max(NAME_MAX_LENGTH, { error: () => m.auth_form_name_too_long({ max: NAME_MAX_LENGTH }) }),
-  email: emailField(),
-  password: newPasswordField(),
+// and checks its length (`#/server/better-auth.server`).
+const SignUpFields = Schema.Struct({
+  name: PersianText.check(
+    Schema.isMinLength(1, { text: () => m.auth_form_name_required() }),
+    Schema.isMaxLength(NAME_MAX_LENGTH, { text: () => m.auth_form_name_too_long({ max: NAME_MAX_LENGTH }) }),
+  ),
+  email: EmailField,
+  password: NewPasswordField,
 });
 
-export type SignUpValues = z.infer<typeof signUpSchema>;
+export const signUpSchema = standardSchema(SignUpFields);
+
+export type SignUpValues = typeof SignUpFields.Type;

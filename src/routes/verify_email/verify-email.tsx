@@ -1,11 +1,12 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react";
-import { z } from "zod";
+import { Schema } from "effect";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/primitive/alert/alert";
 import { buttonVariants } from "#/components/primitive/button/button.styles";
 import { AuthCard } from "#/components/shared/auth-card/auth-card";
+import { optionalSearchParam, searchSchema } from "#/lib/schema";
 import { pageMeta } from "#/lib/seo";
 import { roleHomePath } from "#/lib/viewer";
 import { orpc } from "#/orpc/client";
@@ -13,13 +14,11 @@ import { m } from "#/paraglide/messages";
 
 // Better-Auth's link check (`/api/auth/verify-email`) sends the browser here, signed in, or with `error=` naming why the
 // link didn't work: expired, already used, or for an account other than the one signed in.
-const searchSchema = z.object({
-  error: z.string().optional().catch(undefined),
-});
+const verifyEmailSearchSchema = searchSchema(Schema.Struct({ error: optionalSearchParam(Schema.String) }));
 
 /*===== Route =====*/
 export const Route = createFileRoute("/_site-layout/verify-email")({
-  validateSearch: searchSchema,
+  validateSearch: verifyEmailSearchSchema,
   loader: ({ context }) => context.queryClient.ensureQueryData(orpc.session.viewer.queryOptions()),
   head: (args) => pageMeta({ args, title: m.verify_title(), index: false }),
   component: VerifyEmailPage,
