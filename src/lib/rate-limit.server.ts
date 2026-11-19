@@ -1,4 +1,3 @@
-import { env } from "#/env.server";
 import { createLogger } from "#/lib/logger.server";
 import { m } from "#/paraglide/messages";
 
@@ -94,7 +93,8 @@ export function clientAddress(headers: Headers): string | null {
     return addressKey(address);
   }
   // Development and tests have no proxy in front. One shared key keeps the limits working, and testable, locally.
-  if (env.NODE_ENV !== "production") return "local";
+  // A production build always runs behind Caddy (`import.meta.env.PROD` is Vite's, fixed when it builds).
+  if (!import.meta.env?.PROD) return "local";
   noteAddressMissing(Date.now());
   return null;
 }

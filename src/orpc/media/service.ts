@@ -2,16 +2,16 @@ import { randomUUID } from "node:crypto";
 
 import { Clock, Context, Effect, Layer, Option } from "effect";
 
-import { mediaKey } from "#/lib/storage.server";
 import type { UserRole } from "#/lib/user-constants";
 import { MEDIA_ATTACH_WINDOW_MS, MEDIA_UPLOAD_KINDS_BY_ROLE } from "#/orpc/media/constants";
 import type { MediaKind } from "#/orpc/media/constants";
 import type { Media } from "#/orpc/media/contract";
 import { ImageRejected, MediaKindNotAllowed, MediaUnusable, TooManyWaitingUploads } from "#/orpc/media/errors";
 import { DiscardMedia } from "#/orpc/media/jobs.server";
-import { isMediaId, isMediaKind, toPublicMedia, variantKeys } from "#/orpc/media/mapper";
+import { isMediaId, isMediaKind, mediaKey, toPublicMedia, variantKeys } from "#/orpc/media/mapper";
 import { processImage } from "#/orpc/media/processing.server";
 import { MediaRepo } from "#/orpc/media/repository";
+import { AppConfig } from "#/server/config.server";
 import { Jobs } from "#/server/jobs.server";
 import { Storage } from "#/server/storage.server";
 
@@ -55,6 +55,7 @@ export class MediaService extends Context.Service<
   static readonly layer = Layer.effect(
     MediaService,
     Effect.gen(function* () {
+      const { mediaPublicUrl } = yield* AppConfig;
       const repo = yield* MediaRepo;
       const storage = yield* Storage;
       const jobs = yield* Jobs;
@@ -114,7 +115,7 @@ export class MediaService extends Context.Service<
               .pipe(Effect.catchCause((cause) => Effect.logError("could not clean up the variants", cause))),
           ),
         );
-        return toPublicMedia(record);
+        return toPublicMedia({ record, publicUrl: mediaPublicUrl });
       });
 
       /*------ Attach ------*/

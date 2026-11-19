@@ -8,7 +8,7 @@ import { issueToErrorData } from "#/lib/schema";
 import type { UserRole } from "#/lib/user-constants";
 import { noErrorData } from "#/orpc/errors";
 import { m } from "#/paraglide/messages";
-import { verifyCaptcha } from "#/server/captcha.server";
+import { Captcha } from "#/server/captcha.server";
 import type { CaptchaFailed, Forbidden, InvalidInput, RateLimited, Unauthorized } from "#/server/errors";
 import { checkRateLimit } from "#/server/rate-limit.server";
 import { CurrentUser, RequestContext, requireRole, requireUser } from "#/server/request-context.server";
@@ -172,7 +172,7 @@ export function effectProcedure(
     const program = Effect.gen(function* () {
       yield* checkRateLimit(API_RATE_LIMIT);
       if (rateLimit) yield* checkRateLimit(rateLimit);
-      if (captcha) yield* verifyCaptcha((input as { captcha: string }).captcha);
+      if (captcha) yield* (yield* Captcha).verify((input as { captcha: string }).captcha);
       // A public procedure's Effect can't require `CurrentUser` (the overloads above), so this never runs.
       if (!access) return yield* spec.run({ input }).pipe(Effect.provideService(CurrentUser, noUser));
       const user = yield* access === "user" ? requireUser : requireRole(access);

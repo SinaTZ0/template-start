@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SITE_ORIGIN } from "#/lib/site.server";
+import { Effect } from "effect";
+
+import { AppConfig } from "#/server/config.server";
+import { appRuntime } from "#/server/runtime.server";
 
 /*===== robots.txt =====*/
 /**
@@ -8,8 +11,16 @@ import { SITE_ORIGIN } from "#/lib/site.server";
  * Private pages aren't listed here: a `Disallow` would stop crawlers from reading their `noindex` tag, and would publish
  * their paths. `pageMeta({ index: false })` keeps them out of search results instead.
  */
-function handleGet() {
-  const body = ["User-agent: *", "Disallow: /api/", "Disallow: /rpc/", "", `Sitemap: ${SITE_ORIGIN}/sitemap.xml`, ""];
+async function handleGet() {
+  const siteUrl = await appRuntime.runPromise(AppConfig.use((config) => Effect.succeed(config.siteUrl)));
+  const body = [
+    "User-agent: *",
+    "Disallow: /api/",
+    "Disallow: /rpc/",
+    "",
+    `Sitemap: ${siteUrl.origin}/sitemap.xml`,
+    "",
+  ];
 
   return new Response(body.join("\n"), {
     headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },

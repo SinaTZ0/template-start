@@ -23,7 +23,7 @@
     "import/no-unassigned-import": [
       "warn",
       {
-        "allow": ["**/*.css", "#/env.server"]
+        "allow": ["**/*.css", "**/load-env.server"]
       }
     ],
     "shadcn/no-restyle": [

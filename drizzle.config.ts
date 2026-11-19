@@ -1,16 +1,17 @@
 import { defineConfig } from "drizzle-kit";
 
-import { env } from "./src/env.server";
+import "./src/server/load-env.server";
 
 /*===== Drizzle Kit Config =====*/
-// Reuses the validated server env so CLI commands fail with the same clear error as the app
-// when DATABASE_URL is missing or malformed.
+// Reads `DATABASE_URL` the way the app does (`.env` in development, the environment elsewhere).
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("Set DATABASE_URL (see .env.example) to run drizzle-kit.");
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: env.DATABASE_URL,
+    url,
   },
   verbose: true,
 });

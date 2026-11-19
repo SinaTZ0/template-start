@@ -10,6 +10,7 @@ import { toPublicNote } from "#/orpc/note/mapper";
 import { NoteRepo } from "#/orpc/note/repository";
 import type { NotePosition, NoteRecord } from "#/orpc/note/repository";
 import { NoteFields } from "#/orpc/note/validation";
+import { AppConfig } from "#/server/config.server";
 import { Db } from "#/server/db.server";
 import { decodeInput } from "#/server/errors";
 import type { InvalidInput } from "#/server/errors";
@@ -72,6 +73,7 @@ export class NoteService extends Context.Service<
   static readonly layer = Layer.effect(
     NoteService,
     Effect.gen(function* () {
+      const { mediaPublicUrl } = yield* AppConfig;
       const db = yield* Db;
       const notes = yield* NoteRepo;
       const mediaRepo = yield* MediaRepo;
@@ -81,7 +83,7 @@ export class NoteService extends Context.Service<
       /** A stored note with its image, in its public shape. */
       const publicNote = (record: NoteRecord) =>
         Effect.map(record.imageMediaId ? mediaRepo.findById(record.imageMediaId) : Effect.succeedNone, (image) =>
-          toPublicNote({ note: record, image: Option.getOrNull(image) }),
+          toPublicNote({ note: record, image: Option.getOrNull(image) }, mediaPublicUrl),
         );
 
       /*------ List ------*/
@@ -91,7 +93,7 @@ export class NoteService extends Context.Service<
         const page = rows.slice(0, NOTE_PAGE_SIZE);
         const last = page.at(-1);
         return {
-          notes: page.map(toPublicNote),
+          notes: page.map((row) => toPublicNote(row, mediaPublicUrl)),
           nextCursor: rows.length > NOTE_PAGE_SIZE && last ? toCursor(last.note) : null,
         };
       });
@@ -101,7 +103,7 @@ export class NoteService extends Context.Service<
         if (!isNoteId(id)) return yield* new NoteNotFound({ id });
         const found = yield* notes.findOwned({ id, ownerId });
         if (Option.isNone(found)) return yield* new NoteNotFound({ id });
-        return toPublicNote(found.value);
+        return toPublicNote(found.value, mediaPublicUrl);
       });
 
       /*------ Add ------*/

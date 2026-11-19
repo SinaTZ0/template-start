@@ -7,7 +7,6 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Redacted } from "effect";
 
 import * as schema from "#/db/schema";
-import { verifyAltchaPayload } from "#/lib/altcha.server";
 import {
   ACCOUNT_BLOCKED_CODE,
   ALTCHA_HEADER,
@@ -80,15 +79,19 @@ function sendAuthMail({
  *
  * @param db Better-Auth's own Drizzle client: its adapter speaks promises, so it gets a small `pg` pool of its own.
  * @param queueMail Queues an auth email on the app's job queue (`SendMail`).
+ * @param verifyCaptcha Checks the sign-up's captcha (`Captcha.verify`).
  */
 export function createBetterAuth({
   config,
   db,
   queueMail,
+  verifyCaptcha,
 }: {
   config: AppConfig["Service"];
   db: NodePgDatabase;
   queueMail: (mail: MailPayload) => Promise<void>;
+  /** Whether the sign-up's Altcha payload is a fresh solution (`Captcha.verify`). */
+  verifyCaptcha: (payload: string | null | undefined) => Promise<boolean>;
 }) {
   const siteOrigin = config.siteUrl.origin;
   return betterAuth({
@@ -199,7 +202,7 @@ export function createBetterAuth({
         // Better-Auth has no built-in Altcha provider, so the check runs here. The payload travels in a header because
         // the sign-up body only accepts user fields.
         if (ctx.path === "/sign-up/email") {
-          const verified = await verifyAltchaPayload(ctx.headers?.get(ALTCHA_HEADER));
+          const verified = await verifyCaptcha(ctx.headers?.get(ALTCHA_HEADER));
           if (!verified) {
             throw new APIError("BAD_REQUEST", { code: CAPTCHA_FAILED_CODE, message: "Captcha verification failed." });
           }

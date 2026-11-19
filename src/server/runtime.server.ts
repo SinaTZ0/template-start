@@ -6,6 +6,7 @@ import { NoteRepo } from "#/orpc/note/repository";
 import { NoteService } from "#/orpc/note/service";
 import { SessionService } from "#/orpc/session/service";
 import { Auth } from "#/server/auth.server";
+import { Captcha } from "#/server/captcha.server";
 import { AppConfig } from "#/server/config.server";
 import { Db, PgLive } from "#/server/db.server";
 import { Jobs } from "#/server/jobs.server";
@@ -25,7 +26,7 @@ import { Storage } from "#/server/storage.server";
 const PlatformLive = Auth.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(Db.layer, Jobs.layer)),
   Layer.provideMerge(PgLive),
-  Layer.provideMerge(Layer.mergeAll(Storage.layer, Mailer.layer)),
+  Layer.provideMerge(Layer.mergeAll(Storage.layer, Mailer.layer, Captcha.layer)),
   Layer.provideMerge(AppConfig.layer),
 );
 

@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SITE_ORIGIN } from "#/lib/site.server";
+import { Effect } from "effect";
+
+import { AppConfig } from "#/server/config.server";
+import { appRuntime } from "#/server/runtime.server";
 import { type Locale, localizeHref, locales } from "#/paraglide/runtime";
 
 /*===== Entries =====*/
@@ -17,12 +20,16 @@ const STATIC_ENTRIES: SitemapEntry[] = [{ path: "/" }];
  * Content pages (articles, products) add one entry each here, read through the oRPC `client` (`#/orpc/client`) from a
  * procedure that returns only published items, with `lastModified` from their update time (`docs/frontend/seo.md`).
  */
-function handleGet() {
+async function handleGet() {
+  const siteUrl = await appRuntime.runPromise(AppConfig.use((config) => Effect.succeed(config.siteUrl)));
   const entries = STATIC_ENTRIES;
 
   const urls = entries.flatMap(({ path, lastModified }) => {
     const lastmod = lastModified ? `<lastmod>${lastModified.toISOString()}</lastmod>` : "";
-    const localized = locales.map((locale) => ({ locale, url: localizedUrl({ path, locale }) }));
+    const localized = locales.map((locale) => ({
+      locale,
+      url: localizedUrl({ path, locale, origin: siteUrl.origin }),
+    }));
     const alternates =
       localized.length > 1
         ? localized
@@ -39,8 +46,8 @@ function handleGet() {
 }
 
 /** A page's absolute URL in one locale, escaped for XML. */
-function localizedUrl({ path, locale }: { path: string; locale: Locale }): string {
-  return escapeXml(new URL(localizeHref(path, { locale }), SITE_ORIGIN).href);
+function localizedUrl({ path, locale, origin }: { path: string; locale: Locale; origin: string }): string {
+  return escapeXml(new URL(localizeHref(path, { locale }), origin).href);
 }
 
 /** Escapes the characters XML reserves. URLs can hold `&` (a query) and Persian slugs are percent-encoded by `URL`. */

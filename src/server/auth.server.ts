@@ -6,6 +6,7 @@ import { createLogger } from "#/lib/logger.server";
 import { setTraceUser } from "#/lib/trace.server";
 import { SendMail } from "#/mail/jobs.server";
 import { createBetterAuth } from "#/server/better-auth.server";
+import { Captcha } from "#/server/captcha.server";
 import type { AuthSession, BetterAuth } from "#/server/better-auth.server";
 import { AppConfig } from "#/server/config.server";
 import { Jobs } from "#/server/jobs.server";
@@ -35,6 +36,7 @@ export class Auth extends Context.Service<
       const config = yield* AppConfig;
       // Better-Auth's emails are queued on the app's own queue, from its callbacks outside any fiber.
       const context = yield* Effect.context<Jobs>();
+      const captcha = yield* Captcha;
 
       /*------ Pool ------*/
       // Better-Auth's adapter speaks promises, so it gets a small pool of its own beside the app's (`PgLive`), closed
@@ -60,6 +62,13 @@ export class Auth extends Context.Service<
         config,
         db: drizzle({ client: tracePool(pool) }),
         queueMail: (mail) => Effect.runPromiseWith(context)(SendMail.enqueue(mail)),
+        verifyCaptcha: (payload) =>
+          Effect.runPromise(
+            captcha.verify(payload).pipe(
+              Effect.as(true),
+              Effect.orElseSucceed(() => false),
+            ),
+          ),
       });
 
       return Auth.of({

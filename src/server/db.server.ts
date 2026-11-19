@@ -58,7 +58,7 @@ export class Db extends Context.Service<
     Db,
     Effect.gen(function* () {
       const config = yield* AppConfig;
-      const q = yield* PgDrizzle.makeWithDefaults({ paramsInErrors: config.logQueryParams });
+      const q = yield* PgDrizzle.makeWithDefaults({ paramsInErrors: config.log.queryParams });
       return Db.of({
         q,
         // Failing to begin or commit is the database failing, not the work: a defect like a failed query.
