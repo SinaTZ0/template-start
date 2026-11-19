@@ -42,7 +42,20 @@
           {
             "name": "cn",
             "message": "Import cn from #/lib/utils: it knows the app's type styles (docs/frontend/components.md)."
-          }
+          },
+          { "name": "zod", "message": "Schemas are Effect Schema (`Schema` from effect, `#/lib/schema`)." },
+          {
+            "name": "pino",
+            "message": "Log with Effect.log*, or createLogger from #/server/observability/log.server."
+          },
+          {
+            "name": "pg-boss",
+            "message": "Jobs run on Effect's persisted queue: defineJob from #/server/jobs.server."
+          },
+          { "name": "dotenv", "message": "Settings come from AppConfig (#/server/config.server)." },
+          { "name": "@effect/schema", "message": "Effect v4 has Schema in effect: import { Schema } from \"effect\"." },
+          { "name": "@effect/platform", "message": "Effect v4 has these in effect: effect/http and friends." },
+          { "name": "@effect/sql", "message": "Effect v4 has these in effect: effect/sql. The app's database is Db." }
         ]
       }
     ]
