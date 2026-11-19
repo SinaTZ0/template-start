@@ -1,6 +1,6 @@
 import { Context, Effect, Option } from "effect";
 
-import type { AuthSession } from "#/lib/auth.server";
+import type { AuthSession } from "#/server/better-auth.server";
 import type { UserRole } from "#/lib/user-constants";
 import { Auth } from "#/server/auth.server";
 import { Forbidden, Unauthorized } from "#/server/errors";

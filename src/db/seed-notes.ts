@@ -1,7 +1,9 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { Data, Effect, Layer } from "effect";
 
-import { db } from "#/db/client.server";
 import { note, user } from "#/db/schema";
+import { AppConfig } from "#/server/config.server";
+import { Db, PgLive } from "#/server/db.server";
 
 /*===== Seed Notes =====*/
 // Loads a set of sample notes, so a new server (or a fresh local database) has something on /notes. It's the note
@@ -34,55 +36,72 @@ const SAMPLE_NOTES: { title: string; body: string }[] = [
 const SAMPLE_TITLES = SAMPLE_NOTES.map((sample) => sample.title);
 
 /*------ Owner ------*/
-/** The account given by `--owner`, or the first admin. Exits with a hint when there's neither. */
-async function findOwner(email: string | undefined): Promise<{ id: string; email: string }> {
+class NoOwner extends Data.TaggedError("NoOwner")<{ readonly message: string }> {}
+
+/** The account given by `--owner`, or the first admin. */
+const findOwner = Effect.fn("SeedNotes.findOwner")(function* (email: string | undefined) {
+  const { q } = yield* Db;
   const [owner] = email
-    ? await db.select({ id: user.id, email: user.email }).from(user).where(eq(user.email, email.toLowerCase()))
-    : await db
+    ? yield* q.select({ id: user.id, email: user.email }).from(user).where(eq(user.email, email.toLowerCase()))
+    : yield* q
         .select({ id: user.id, email: user.email })
         .from(user)
         .where(eq(user.role, "admin"))
         .orderBy(asc(user.createdAt))
         .limit(1);
   if (owner) return owner;
-
-  console.error(
-    email
+  return yield* new NoOwner({
+    message: email
       ? `No account has the email ${email}. Sign up with it first.`
       : "There's no admin to give the notes to. Make one first (`pnpm db:seed`, or `deploy/deploy.sh admin <email>` " +
-          "on a server), or pass --owner <email>.",
-  );
-  await db.$client.end();
-  process.exit(1);
-}
+        "on a server), or pass --owner <email>.",
+  });
+});
 
 /*===== Run =====*/
 const args = process.argv.slice(2);
 const replace = args.includes("--replace");
 const ownerIndex = args.indexOf("--owner");
-const owner = await findOwner(ownerIndex === -1 ? undefined : args[ownerIndex + 1]);
 
-const samples = and(eq(note.ownerId, owner.id), inArray(note.title, SAMPLE_TITLES));
-const [existing] = await db.select({ id: note.id }).from(note).where(samples).limit(1);
+const seedNotes = Effect.gen(function* () {
+  const { q, transaction } = yield* Db;
+  const owner = yield* findOwner(ownerIndex === -1 ? undefined : args[ownerIndex + 1]);
 
-if (existing && !replace) {
-  console.info(`Skipped ${owner.email}: the sample notes are there. Pass --replace to load them again.`);
-} else {
+  const samples = and(eq(note.ownerId, owner.id), inArray(note.title, SAMPLE_TITLES));
+  const [existing] = yield* q.select({ id: note.id }).from(note).where(samples).limit(1);
+
+  if (existing && !replace) {
+    console.info(`Skipped ${owner.email}: the sample notes are there. Pass --replace to load them again.`);
+    return;
+  }
   // One transaction, so a stopped run leaves the notes as they were rather than half of them.
-  await db.transaction(async (tx) => {
-    if (existing) await tx.delete(note).where(samples);
-    // A minute apart, the first the newest: the list shows the newest first, so it reads in this order.
-    const now = Date.now();
-    await tx.insert(note).values(
-      SAMPLE_NOTES.map((sample, index) => ({
-        ownerId: owner.id,
-        title: sample.title,
-        body: sample.body,
-        createdAt: new Date(now - index * 60_000),
-      })),
-    );
-  });
+  yield* transaction(
+    Effect.gen(function* () {
+      if (existing) yield* q.delete(note).where(samples);
+      // A minute apart, the first the newest: the list shows the newest first, so it reads in this order.
+      const now = Date.now();
+      yield* q.insert(note).values(
+        SAMPLE_NOTES.map((sample, index) => ({
+          ownerId: owner.id,
+          title: sample.title,
+          body: sample.body,
+          createdAt: new Date(now - index * 60_000),
+        })),
+      );
+    }),
+  );
   console.info(`Seeded ${SAMPLE_NOTES.length} sample notes for ${owner.email}.`);
-}
+});
 
-await db.$client.end();
+// The pool is closed when the program ends, whether it succeeded or not.
+await Effect.runPromise(
+  seedNotes.pipe(
+    Effect.provide(Db.layer.pipe(Layer.provideMerge(PgLive), Layer.provide(AppConfig.layer))),
+    Effect.catchTag("NoOwner", (error) =>
+      Effect.sync(() => {
+        console.error(error.message);
+        process.exitCode = 1;
+      }),
+    ),
+  ),
+);

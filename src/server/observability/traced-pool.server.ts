@@ -1,8 +1,6 @@
 import { performance } from "node:perf_hooks";
 
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import type { PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import { env } from "#/env.server";
 import { createLogger } from "#/lib/logger.server";
@@ -56,47 +54,14 @@ function withTracedQuery<T extends object>(target: T, overrides: Record<string, 
   });
 }
 
-/** Traces the pool's queries, and those on the clients it checks out for transactions. */
-function tracePool(pool: Pool): Pool {
+/**
+ * Traces the pool's queries, and those on the clients it checks out for transactions: each is a `db` span of the current
+ * request, and a slow one is logged on its own. For the one pool outside Effect, Better-Auth's (`#/server/auth.server`).
+ */
+export function tracePool(pool: Pool): Pool {
   const connect = (...args: unknown[]) =>
     args.length > 0
       ? (pool.connect as QueryFunction)(...args)
       : pool.connect().then((client: PoolClient) => withTracedQuery(client));
   return withTracedQuery(pool, { connect });
 }
-
-/*===== Pool =====*/
-// Without these, pg waits forever: a stalled Postgres would hang every request instead of failing it.
-const pool = new Pool({
-  connectionString: env.DATABASE_URL,
-  // How long a request waits for a free connection (all ten busy, or Postgres unreachable) before it fails.
-  connectionTimeoutMillis: 5_000,
-  // Far above any query the app runs. Postgres cancels a statement that takes longer, which frees its connection.
-  statement_timeout: 30_000,
-  // A transaction left open (a crashed handler, a lost await) would otherwise hold its connection and its locks.
-  idle_in_transaction_session_timeout: 60_000,
-});
-
-// Postgres closing an idle connection (a restart, a dropped network, an idle timeout) is emitted here. Without a
-// listener Node treats it as an uncaught error and the process exits. The pool has already dropped that connection
-// and opens a new one for the next query, so logging it is all there is to do.
-pool.on("error", (error) => log.error({ err: error }, "idle database connection failed"));
-
-/*===== Client =====*/
-/**
- * Shared Drizzle client backed by a node-postgres connection pool. Every query is timed into the current request's
- * trace (`#/lib/trace.server`).
- *
- * Server-only: create one per process and pass it to repositories through their
- * dependency object rather than importing it there directly.
- */
-export const db = drizzle({ client: tracePool(pool) });
-
-/** A transaction opened with `db.transaction(...)`. */
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/**
- * What services and repositories take as `db`: the client, or a transaction on it. A service that must write several
- * rows together passes its transaction down, and the repositories run inside it.
- */
-export type Database = typeof db | Transaction;

@@ -13,7 +13,7 @@ import type { CaptchaFailed, Forbidden, InvalidInput, RateLimited, Unauthorized 
 import { checkRateLimit } from "#/server/rate-limit.server";
 import { CurrentUser, RequestContext, requireRole, requireUser } from "#/server/request-context.server";
 import { appRuntime } from "#/server/runtime.server";
-import type { AppServices } from "#/server/runtime.server";
+import type { AppRuntime, AppServices } from "#/server/runtime.server";
 
 const log = createLogger("orpc");
 
@@ -162,7 +162,7 @@ export function effectProcedure(
     signal,
   }: {
     input: never;
-    context: { headers: Headers };
+    context: { headers: Headers; runtime?: AppRuntime };
     errors: unknown;
     path: readonly string[];
     signal?: AbortSignal;
@@ -182,13 +182,14 @@ export function effectProcedure(
       Effect.provideService(RequestContext, { headers: context.headers }),
     );
 
-    const exit = await appRuntime.runPromiseExit(program, { signal });
+    const exit = await (context.runtime ?? appRuntime).runPromiseExit(program, { signal });
     if (Exit.isSuccess(exit)) return exit.value;
 
     /*------ Expected Failures ------*/
     const failure = Cause.findError(exit.cause);
     if (Result.isSuccess(failure)) {
-      const error = failure.success;
+      // A typed failure of the Effect, or of building the runtime's layers (config, database), which maps to nothing.
+      const error = failure.success as Tagged;
       const mapped =
         commonError(error) ??
         (spec.errors as Record<string, (args: { error: Tagged; errors: unknown }) => ORPCError<string, unknown>>)[

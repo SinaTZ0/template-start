@@ -1,28 +1,35 @@
 import { createRouterClient } from "@orpc/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Layer, ManagedRuntime } from "effect";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { AuthSession } from "#/lib/auth.server";
 import { router } from "#/orpc/router";
+import { Auth } from "#/server/auth.server";
+import type { AuthSession } from "#/server/better-auth.server";
+import { AppLayer } from "#/server/runtime.server";
 
 /*===== Access =====*/
 // Who gets past the boundary, called the way a loader calls the API (`createRouterClient`). Only the session is
-// faked; the one call let through reads a user who has no notes.
+// faked, by a runtime whose `Auth` returns it; the one call let through reads a user who has no notes.
 
-const session = vi.hoisted(() => ({ current: null as unknown }));
-
-vi.mock("#/lib/auth.server", () => ({
-  getRequestSession: () => Promise.resolve(session.current),
-}));
+let session: AuthSession | null = null;
 
 function signedInAs(user: { role: string; status: string }) {
-  session.current = { user: { id: "test-user", ...user } } as unknown as AuthSession;
+  session = { user: { id: "test-user", ...user } } as unknown as AuthSession;
 }
 
-const client = createRouterClient(router, { context: { headers: new Headers() } });
+const runtime = ManagedRuntime.make(
+  Layer.merge(
+    AppLayer,
+    Auth.layerTest(() => session),
+  ),
+);
+const client = createRouterClient(router, { context: { headers: new Headers(), runtime } });
 
 beforeEach(() => {
-  session.current = null;
+  session = null;
 });
+
+afterAll(() => runtime.dispose());
 
 describe("public procedures", () => {
   it("serve a visitor", async () => {

@@ -1,8 +1,10 @@
 import { eq } from "drizzle-orm";
+import { Effect } from "effect";
 
-import { db } from "#/db/client.server";
 import { user } from "#/db/schema";
-import { auth } from "#/lib/auth.server";
+import { Auth } from "#/server/auth.server";
+import { Db } from "#/server/db.server";
+import { AppLayer } from "#/server/runtime.server";
 
 /*===== Seed =====*/
 // Creates the first admin from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD. Idempotent: an existing account with that email
@@ -15,26 +17,32 @@ if (!email || !password) {
   throw new Error("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD to seed the admin.");
 }
 
-/*------ Account ------*/
-// Through the internal adapter rather than `auth.api.signUpEmail`, which would require a solved captcha.
-const context = await auth.$context;
-const existing = await context.internalAdapter.findUserByEmail(email);
-
-if (!existing) {
-  const created = await context.internalAdapter.createUser(
-    { email, name: "Admin", emailVerified: true },
-    { method: "admin" },
-  );
-  await context.internalAdapter.linkAccount({
-    userId: created.id,
-    providerId: "credential",
-    accountId: created.id,
-    password: await context.password.hash(password),
+const seedAdmin = Effect.gen(function* () {
+  /*------ Account ------*/
+  // Through the internal adapter rather than `signUpEmail`, which would require a solved captcha.
+  const { betterAuth } = yield* Auth;
+  const existing = yield* Effect.promise(async () => {
+    const context = await betterAuth.$context;
+    const found = await context.internalAdapter.findUserByEmail(email);
+    if (found) return found;
+    const created = await context.internalAdapter.createUser(
+      { email, name: "Admin", emailVerified: true },
+      { method: "admin" },
+    );
+    await context.internalAdapter.linkAccount({
+      userId: created.id,
+      providerId: "credential",
+      accountId: created.id,
+      password: await context.password.hash(password),
+    });
+    return null;
   });
-}
 
-/*------ Role ------*/
-await db.update(user).set({ role: "admin" }).where(eq(user.email, email));
+  /*------ Role ------*/
+  const { q } = yield* Db;
+  yield* q.update(user).set({ role: "admin" }).where(eq(user.email, email));
+  console.info(existing ? `Promoted ${email} to admin.` : `Created admin ${email}.`);
+});
 
-console.info(existing ? `Promoted ${email} to admin.` : `Created admin ${email}.`);
-await db.$client.end();
+// The pools are closed when the program ends.
+await Effect.runPromise(seedAdmin.pipe(Effect.provide(AppLayer)));

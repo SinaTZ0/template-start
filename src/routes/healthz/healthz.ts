@@ -1,37 +1,41 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "drizzle-orm";
+import { Effect } from "effect";
 
-import { db } from "#/db/client.server";
-import { createLogger } from "#/lib/logger.server";
-
-const log = createLogger("health");
+import { Db } from "#/server/db.server";
+import { appRuntime } from "#/server/runtime.server";
 
 /** Longer than a healthy query ever takes, shorter than the container healthcheck's own timeout. */
-const DB_TIMEOUT_MS = 2_000;
+const DB_TIMEOUT = "2 seconds";
 
 /*===== Health Check =====*/
 /**
- * `GET /healthz`: 200 when the app can query Postgres, 503 otherwise. Docker's healthcheck and uptime monitors poll it.
+ * 200 when the app can query Postgres within `DB_TIMEOUT`, 503 otherwise. A failure is logged, and reported to the
+ * error viewer.
  *
- * Storage isn't checked: an S3 outage only breaks uploads, and restarting the app wouldn't fix it. The request log
- * skips healthy probes (`src/lib/request-log.server.ts`), so only failures and slow checks are written.
+ * Storage isn't checked: an S3 outage only breaks uploads, and restarting the app wouldn't fix it.
+ */
+const checkHealth = Effect.gen(function* () {
+  const { q } = yield* Db;
+  yield* q.execute(sql`select 1`);
+}).pipe(
+  Effect.timeout(DB_TIMEOUT),
+  Effect.as(true),
+  Effect.catchCause((cause) =>
+    Effect.logError("database unreachable", cause).pipe(Effect.annotateLogs({ module: "health" }), Effect.as(false)),
+  ),
+);
+
+/**
+ * `GET /healthz`: Docker's healthcheck and uptime monitors poll it. The request log skips healthy probes
+ * (`src/lib/request-log.server.ts`), so only failures and slow checks are written.
  */
 async function handleGet() {
-  const headers = { "Cache-Control": "no-store" };
-
-  try {
-    // Shorter than the pool's own connection timeout (`#/db/client.server`), so the probe answers within its limit.
-    await Promise.race([
-      db.execute(sql`select 1`),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`No answer within ${DB_TIMEOUT_MS} ms`)), DB_TIMEOUT_MS),
-      ),
-    ]);
-    return Response.json({ status: "ok" }, { headers });
-  } catch (error) {
-    log.error({ err: error }, "database unreachable");
-    return Response.json({ status: "error" }, { status: 503, headers });
-  }
+  const healthy = await appRuntime.runPromise(checkHealth);
+  return Response.json(
+    { status: healthy ? "ok" : "error" },
+    { status: healthy ? 200 : 503, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 /*===== Route =====*/

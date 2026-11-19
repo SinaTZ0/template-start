@@ -9,6 +9,7 @@ import { Auth } from "#/server/auth.server";
 import { AppConfig } from "#/server/config.server";
 import { Db, PgLive } from "#/server/db.server";
 import { Jobs } from "#/server/jobs.server";
+import { Mailer } from "#/server/mailer.server";
 import { LoggerLive } from "#/server/observability/logger.server";
 import { TracerLive } from "#/server/observability/request-trace.server";
 import { Storage } from "#/server/storage.server";
@@ -17,10 +18,14 @@ import { Storage } from "#/server/storage.server";
 // The app's services, each built once per runtime from its dependencies (docs/backend/architecture.md). A new
 // feature adds its repository and service layers here.
 
-/** The infrastructure: configuration, the Postgres pool and what shares it, the bucket, auth. */
-const PlatformLive = Layer.mergeAll(Db.layer, Jobs.layer).pipe(
+/**
+ * The infrastructure: configuration, the Postgres pool and what shares it (Drizzle, the job queue), the bucket, the
+ * mailbox, and Better-Auth, which queues its emails as jobs.
+ */
+const PlatformLive = Auth.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(Db.layer, Jobs.layer)),
   Layer.provideMerge(PgLive),
-  Layer.provideMerge(Layer.mergeAll(Storage.layer, Auth.layer)),
+  Layer.provideMerge(Layer.mergeAll(Storage.layer, Mailer.layer)),
   Layer.provideMerge(AppConfig.layer),
 );
 
@@ -37,6 +42,8 @@ export const AppLayer = FeaturesLive.pipe(
 );
 
 export type AppServices = Layer.Success<typeof AppLayer>;
+
+export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, unknown>;
 
 /*===== Runtime =====*/
 /**

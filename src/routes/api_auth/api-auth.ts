@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Effect } from "effect";
 
-import { auth } from "#/lib/auth.server";
 import { limitRequest, rateLimitedMessage, type RateLimitPolicy } from "#/lib/rate-limit.server";
+import { Auth } from "#/server/auth.server";
+import { appRuntime } from "#/server/runtime.server";
 
 /*===== Rate Limits =====*/
-// The app's limiter replaces Better-Auth's (`rateLimit` is off in `auth.server.ts`), so the API and auth share one
-// client address and one 429 shape. Endpoints that check a password or send mail get the strict policy. The mail ones
-// don't exist until the project sends email, but are listed so they are covered once it does.
+// The app's limiter replaces Better-Auth's (`rateLimit` is off in `#/server/better-auth.server`), so the API and auth
+// share one client address and one 429 shape. Endpoints that check a password or send mail get the strict policy.
 const CREDENTIAL_PATHS = new Set([
   "/sign-in/email",
   "/sign-up/email",
@@ -41,7 +42,10 @@ function rejectOverLimit(request: Request): Response | undefined {
 /*===== Better-Auth Endpoints =====*/
 /** Better-Auth answers every `/api/auth/*` request itself, once the rate limit lets it through. */
 function handleRequest({ request }: { request: Request }) {
-  return rejectOverLimit(request) ?? auth.handler(request);
+  return (
+    rejectOverLimit(request) ??
+    appRuntime.runPromise(Auth.use(({ betterAuth }) => Effect.promise(() => betterAuth.handler(request))))
+  );
 }
 
 /*===== Route =====*/
