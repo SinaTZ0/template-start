@@ -42,8 +42,9 @@ export function takeRequestRecord(traceId: string): RequestRecord | undefined {
  * (`NoteNotFound`, `Unauthorized`, `RateLimited`) is an expected outcome: a signed-out visitor would otherwise fill the
  * backend's error list. Such a span ends as a success that names the failure (`app.outcome`). An interruption ends
  * as it is. A defect ends as an error, and so does any failure of an entry span: a request's, which fails only for a
- * 5xx, and a job run's, for which any failure is a failed run. An error is exported with its text redacted
- * (`redactedFailure`).
+ * 5xx, and a job run's, for which any failure is a failed run. So does a failure of a span that names an error
+ * (`error.type`): the boundary sets it when a typed failure is answered with a 5xx (`effectProcedure`). An error is
+ * exported with its text redacted (`redactedFailure`).
  */
 function exportedExit({
   span,
@@ -55,11 +56,16 @@ function exportedExit({
   isEntry: boolean;
 }) {
   if (exit._tag === "Success" || Cause.hasInterruptsOnly(exit.cause)) return exit;
-  if (isEntry || Cause.hasDies(exit.cause)) return redactedFailure(exit.cause);
+  if (isEntry || Cause.hasDies(exit.cause) || namesError(span)) return redactedFailure(exit.cause);
   const failure = Cause.findError(exit.cause);
   const tag = failure._tag === "Success" ? (failure.success as { _tag?: unknown } | null)?._tag : undefined;
   span.attribute("app.outcome", typeof tag === "string" ? tag : "failure");
   return Exit.void;
+}
+
+/** Whether the code that ran the span marked its failure as an error, with OpenTelemetry's attribute for one. */
+function namesError(span: Tracer.Span): boolean {
+  return span.attributes.has("error.type");
 }
 
 /**
@@ -107,7 +113,8 @@ function recordStatement({ sql, system, ms }: { sql: string; system: unknown; ms
  * - count every statement's time (`db.client.operation.duration`).
  * - export a span that ended in an expected failure as a success (`exportedExit`).
  *
- * A span counts as failed when its exit carries a defect. A typed failure (`NoteNotFound`) is an expected outcome.
+ * A span counts as failed when its exit carries a defect, or it names an error (`error.type`). Any other typed failure
+ * (`NoteNotFound`) is an expected outcome.
  */
 function collectingTracer({ base, slowQueryMs }: { base: Tracer.Tracer; slowQueryMs: number }): Tracer.Tracer {
   return Tracer.make({
@@ -153,7 +160,7 @@ function collectingTracer({ base, slowQueryMs }: { base: Tracer.Tracer; slowQuer
           name: sql ?? span.name,
           at: start - record.start,
           ms,
-          failed: exit._tag === "Failure" && Cause.hasDies(exit.cause),
+          failed: exit._tag === "Failure" && (Cause.hasDies(exit.cause) || namesError(span)),
         });
       };
       return span;

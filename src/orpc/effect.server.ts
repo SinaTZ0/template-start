@@ -1,11 +1,11 @@
-import { ORPCError } from "@orpc/server";
+import { COMMON_ERROR_STATUS_MAP, ORPCError } from "@orpc/server";
 import { Cause, Effect, Exit, Result } from "effect";
 
 import { rateLimitedMessage } from "#/lib/rate-limit.server";
 import type { RateLimitPolicy } from "#/lib/rate-limit.server";
 import { issueToErrorData } from "#/lib/schema";
 import type { UserRole } from "#/lib/user-constants";
-import { noErrorData } from "#/orpc/errors";
+import { ERROR_STATUS_MAP, noErrorData } from "#/orpc/errors";
 import { m } from "#/paraglide/messages";
 import { Captcha } from "#/server/captcha.server";
 import type { CaptchaFailed, Forbidden, InvalidInput, RateLimited, Unauthorized } from "#/server/errors";
@@ -108,6 +108,36 @@ function commonError(error: Tagged): ORPCError<string, unknown> | undefined {
   }
 }
 
+/*===== Server Failures =====*/
+const COMMON_TAGS = new Set(["Unauthorized", "Forbidden", "InvalidInput", "RateLimited", "CaptchaFailed"]);
+
+// As the HTTP handler answers them (`#/orpc/handler.server`): a code neither map knows is a 500.
+const ERROR_STATUS: Record<string, number> = { ...COMMON_ERROR_STATUS_MAP, ...ERROR_STATUS_MAP };
+
+/** Whether the client receives the contract error as a 5xx. */
+function isServerError(error: ORPCError<string, unknown>): boolean {
+  return (ERROR_STATUS[error.code] ?? 500) >= 500;
+}
+
+type ErrorMap = Record<string, (args: { error: Tagged; errors: unknown }) => ORPCError<string, unknown>>;
+
+/**
+ * The contract error a feature's typed failure is answered with, or `undefined` when no case maps it. Called twice
+ * for a failure: inside the fiber, only to learn whether it is a 5xx, and after it, where the messages are in the
+ * request's locale.
+ */
+function featureError({
+  cases,
+  error,
+  errors,
+}: {
+  cases: ErrorMap;
+  error: Tagged;
+  errors: unknown;
+}): ORPCError<string, unknown> | undefined {
+  return cases[error._tag]?.({ error, errors });
+}
+
 /*===== Effect Procedure =====*/
 /**
  * What a public procedure's Effect gets as `CurrentUser`: `AccessOption` keeps its code from asking for one, so this
@@ -140,6 +170,8 @@ const noUser = new Proxy({} as CurrentUser["Service"], {
  *   doesn't compile.
  * - **Expected failures** become contract errors: the common ones here, the feature's own through `errors`, which must
  *   name every one the Effect can fail with.
+ * - **A failure answered with a 5xx** (`errors` maps it to `SERVICE_UNAVAILABLE`, say) is the server's failure, typed or
+ *   not: the call's span ends as an error and the failure is logged, which reports it.
  * - **Defects** (a failed query, a bug) are logged once with an `errorId`, which the client receives in an
  *   `INTERNAL_SERVER_ERROR` and the error viewer is searched by.
  * - **A client that disconnects** interrupts the Effect, which rolls back its open transaction.
@@ -172,6 +204,7 @@ export function effectProcedure(
   }) => {
     /*------ Run ------*/
     const { access, rateLimit, captcha } = spec;
+    const cases = spec.errors as ErrorMap;
     // Read here, outside the fiber: the request this call belongs to, which learns who its user is.
     const scope = requestScope.current();
     const program = Effect.gen(function* () {
@@ -188,6 +221,13 @@ export function effectProcedure(
         .run({ input })
         .pipe(Effect.provideService(CurrentUser, user), Effect.annotateLogs({ userId: user.id }));
     }).pipe(
+      // A typed failure ends a span as a success that names it (docs/backend/logging.md), unless the client gets a
+      // 5xx for it: then the span says what kind of error it was, and is exported as one.
+      Effect.tapError((error) => {
+        if (COMMON_TAGS.has(error._tag)) return Effect.void;
+        const answer = featureError({ cases, error, errors });
+        return answer && !isServerError(answer) ? Effect.void : Effect.annotateCurrentSpan("error.type", error._tag);
+      }),
       Effect.withSpan(`rpc.${path.join(".")}`, { kind: "internal" }),
       Effect.annotateLogs({ module: "orpc" }),
       Effect.provideService(RequestContext, { headers: context.headers }),
@@ -202,12 +242,14 @@ export function effectProcedure(
     if (Result.isSuccess(failure)) {
       // A typed failure of the Effect, or of building the runtime's layers (config, database), which maps to nothing.
       const error = failure.success as Tagged;
-      const mapped =
-        commonError(error) ??
-        (spec.errors as Record<string, (args: { error: Tagged; errors: unknown }) => ORPCError<string, unknown>>)[
-          error._tag
-        ]?.({ error, errors });
-      if (mapped) throw mapped;
+      const mapped = commonError(error) ?? featureError({ cases, error, errors });
+      if (mapped) {
+        // The client can't act on a 5xx, so someone has to hear of it: the line is also the error viewer's report.
+        if (isServerError(mapped)) {
+          log.error({ err: error, path: path.join("."), code: mapped.code }, "procedure failed");
+        }
+        throw mapped;
+      }
     }
 
     /*------ Client Gone ------*/
