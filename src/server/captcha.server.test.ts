@@ -1,7 +1,7 @@
+import { expect, layer } from "@effect/vitest";
 import { solveChallenge } from "altcha-lib";
 import { deriveKey } from "altcha-lib/algorithms/pbkdf2";
-import { Effect, Layer, ManagedRuntime } from "effect";
-import { afterAll, describe, expect, it } from "vitest";
+import { Effect, Layer } from "effect";
 
 import { Captcha } from "#/server/captcha.server";
 import { AppConfig } from "#/server/config.server";
@@ -11,37 +11,37 @@ import { CaptchaFailed } from "#/server/errors";
 // The only thing between a public form and a script that fills its table: a call must carry a solved challenge, and
 // one solution must not be worth more than one call.
 
-// One runtime, as the app has: the solutions already used are the service's own memory.
-const runtime = ManagedRuntime.make(Captcha.layer.pipe(Layer.provide(AppConfig.layer)));
-const run = <A, E>(effect: Effect.Effect<A, E, Captcha>) => runtime.runPromise(effect);
-
-afterAll(() => runtime.dispose());
-
-async function solve(): Promise<string> {
-  const challenge = await run(Captcha.use((captcha) => captcha.issue));
-  const solution = await solveChallenge({ challenge, deriveKey });
-  if (!solution) throw new Error("the challenge wasn't solved");
+/** A solved challenge, as the browser sends it. */
+const solve = Effect.gen(function* () {
+  const captcha = yield* Captcha;
+  const challenge = yield* captcha.issue;
+  const solution = yield* Effect.promise(() => solveChallenge({ challenge, deriveKey }));
+  if (!solution) return yield* Effect.die(new Error("the challenge wasn't solved"));
   return btoa(JSON.stringify({ challenge, solution }));
-}
+});
 
 /** The check's failure, or `undefined` when it lets the call through. */
 const failureOf = (payload: string) =>
-  run(
-    Captcha.use((captcha) => captcha.verify(payload)).pipe(
-      Effect.flip,
-      Effect.orElseSucceed(() => undefined),
-    ),
+  Captcha.use((captcha) => captcha.verify(payload)).pipe(
+    Effect.flip,
+    Effect.orElseSucceed(() => undefined),
   );
 
-describe("Captcha.verify", () => {
-  it("lets a solved challenge through once", async () => {
-    const captcha = await solve();
+// One layer for the block, as the app has one: the solutions already used are the service's own memory. On the real
+// clock (`excludeTestServices`), since a challenge expires by it.
+layer(Captcha.layer.pipe(Layer.provide(AppConfig.layer)), { excludeTestServices: true })("Captcha.verify", (it) => {
+  it.effect("lets a solved challenge through once", () =>
+    Effect.gen(function* () {
+      const captcha = yield* solve;
 
-    expect(await failureOf(captcha)).toBeUndefined();
-    expect(await failureOf(captcha)).toBeInstanceOf(CaptchaFailed);
-  });
+      expect(yield* failureOf(captcha)).toBeUndefined();
+      expect(yield* failureOf(captcha)).toBeInstanceOf(CaptchaFailed);
+    }),
+  );
 
-  it("turns away a call without a solution", async () => {
-    expect(await failureOf("")).toBeInstanceOf(CaptchaFailed);
-  });
+  it.effect("turns away a call without a solution", () =>
+    Effect.gen(function* () {
+      expect(yield* failureOf("")).toBeInstanceOf(CaptchaFailed);
+    }),
+  );
 });

@@ -20,6 +20,8 @@
     "react/react-in-jsx-scope": "off",
     // `_tag` is how Effect tells errors and other tagged values apart.
     "no-underscore-dangle": ["warn", { "allow": ["_tag"] }],
+    // `@effect/vitest`'s tests: an Effect run with the test's layers (docs/backend/architecture.md → Testing).
+    "vitest/no-standalone-expect": ["error", { "additionalTestBlockFunctions": ["it.effect", "it.live"] }],
     "import/no-unassigned-import": [
       "warn",
       {

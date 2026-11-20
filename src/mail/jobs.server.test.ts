@@ -1,5 +1,5 @@
-import { Effect, Layer } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect, Exit, Layer } from "effect";
 
 import { SendMail } from "#/mail/jobs.server";
 import type { MailPayload } from "#/mail/jobs.server";
@@ -35,22 +35,26 @@ function refusingMailer(permanent: boolean) {
 }
 
 describe("mail.send", () => {
-  it("renders the email in its language and hands it to the mailbox", async () => {
-    const sent: OutgoingMail[] = [];
-    await Effect.runPromise(SendMail.run(mail).pipe(Effect.provide(Mailer.layerMemory(sent))));
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      to: mail.to,
-      subject: expect.any(String),
-      html: expect.stringContaining(mail.url),
-    });
-  });
+  it.effect("renders the email in its language and hands it to the mailbox", () =>
+    Effect.gen(function* () {
+      const sent: OutgoingMail[] = [];
+      yield* SendMail.run(mail).pipe(Effect.provide(Mailer.layerMemory(sent)));
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({
+        to: mail.to,
+        subject: expect.any(String),
+        html: expect.stringContaining(mail.url),
+      });
+    }),
+  );
 
-  it("gives up on a refusal for good, but fails a temporary one so the queue retries it", async () => {
-    const permanent = await Effect.runPromiseExit(SendMail.run(mail).pipe(Effect.provide(refusingMailer(true))));
-    expect(permanent._tag).toBe("Success");
+  it.effect("gives up on a refusal for good, but fails a temporary one so the queue retries it", () =>
+    Effect.gen(function* () {
+      const permanent = yield* Effect.exit(SendMail.run(mail).pipe(Effect.provide(refusingMailer(true))));
+      expect(Exit.isSuccess(permanent)).toBe(true);
 
-    const temporary = await Effect.runPromiseExit(SendMail.run(mail).pipe(Effect.provide(refusingMailer(false))));
-    expect(temporary._tag).toBe("Failure");
-  });
+      const temporary = yield* Effect.exit(SendMail.run(mail).pipe(Effect.provide(refusingMailer(false))));
+      expect(Exit.isFailure(temporary)).toBe(true);
+    }),
+  );
 });

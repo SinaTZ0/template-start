@@ -21,14 +21,14 @@ import { Storage } from "#/server/storage.server";
 // feature adds its repository and service layers here.
 
 /**
- * The infrastructure: configuration, the Postgres pool and what shares it (Drizzle, the job queue), the bucket, the
- * mailbox, and Better-Auth, which queues its emails as jobs.
+ * The services that reach outside the process. A test replaces one with its test layer (`Auth.layerTest`,
+ * `Storage.layerMemory`, `Mailer.layerMemory`).
  */
-const PlatformLive = Auth.layer.pipe(
-  Layer.provideMerge(Layer.mergeAll(Db.layer, Jobs.layer)),
-  Layer.provideMerge(PgLive),
-  Layer.provideMerge(Layer.mergeAll(Storage.layer, Mailer.layer, Captcha.layer)),
-);
+type OutsideServices = {
+  readonly auth?: typeof Auth.layer;
+  readonly storage?: typeof Storage.layer;
+  readonly mailer?: typeof Mailer.layer;
+};
 
 /**
  * Logging, tracing and export (docs/backend/logging.md), built in this order: the app's logger, then the OTLP exporter
@@ -43,14 +43,34 @@ const FeaturesLive = Layer.mergeAll(NoteService.layer, SessionService.layer).pip
 );
 
 /**
- * Everything Effect code on the server can require. Logging and tracing wrap it all, layer construction included, and
- * the configuration wraps them.
+ * Builds the app's layer: everything Effect code on the server can require. Logging and tracing wrap it all, layer
+ * construction included, and the configuration wraps them.
+ *
+ * A test passes the services it replaces. They have to go in here, not be merged over the finished layer: a service
+ * takes its dependencies when its layer is built (`SessionService` keeps the `Auth` it was built with), so a layer
+ * merged on afterwards reaches only code that asks for the service at call time, and the real one is still built.
  */
-export const AppLayer = FeaturesLive.pipe(
-  Layer.provideMerge(PlatformLive),
-  Layer.provideMerge(ObservabilityLive),
-  Layer.provideMerge(AppConfig.layer),
-);
+export function makeAppLayer({
+  auth = Auth.layer,
+  storage = Storage.layer,
+  mailer = Mailer.layer,
+}: OutsideServices = {}) {
+  // The infrastructure: the Postgres pool and what shares it (Drizzle, the job queue), the bucket, the mailbox, and
+  // Better-Auth, which queues its emails as jobs.
+  const PlatformLive = auth.pipe(
+    Layer.provideMerge(Layer.mergeAll(Db.layer, Jobs.layer)),
+    Layer.provideMerge(PgLive),
+    Layer.provideMerge(Layer.mergeAll(storage, mailer, Captcha.layer)),
+  );
+  return FeaturesLive.pipe(
+    Layer.provideMerge(PlatformLive),
+    Layer.provideMerge(ObservabilityLive),
+    Layer.provideMerge(AppConfig.layer),
+  );
+}
+
+/** The app's layer as the server runs it. */
+export const AppLayer = makeAppLayer();
 
 export type AppServices = Layer.Success<typeof AppLayer>;
 

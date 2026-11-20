@@ -30,7 +30,9 @@
         "name": "@effect/language-service",
         "diagnosticSeverity": { "outdatedApi": "error", "unstableApiUsage": "error", "schemaClassMissingBrand": "off" },
         "overrides": [
-          { "include": ["src/server/**/*.ts"], "options": { "diagnosticSeverity": { "unstableApiUsage": "off" } } }
+          { "include": ["src/server/**/*.ts"], "options": { "diagnosticSeverity": { "unstableApiUsage": "off" } } },
+          // `@effect/vitest` is itself marked unstable.
+          { "include": ["src/**/*.test.ts"], "options": { "diagnosticSeverity": { "unstableApiUsage": "off" } } }
         ]
       }
     ]
