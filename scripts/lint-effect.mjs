@@ -1,16 +1,18 @@
 import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
-/*===== Effect Layer Rules =====*/
-// Checks the rules of a feature's Effect files that the type checker can't (docs/backend/architecture.md). Each
-// rule names what to write instead. Run by `pnpm lint`.
+/*===== Effect Rules =====*/
+// Checks the rules of the server's Effect code that the type checker can't (docs/backend/architecture.md). Each rule
+// names what to write instead. Run by `pnpm lint`.
 
-const FEATURES_DIR = "src/orpc";
+const SOURCE_DIR = "src";
 
-/** The files whose code is all Effect: business rules, queries and background work. */
-const EFFECT_FILES = /^(service|repository|jobs\.server)\.ts$/;
+/** Generated code, which no rule applies to. */
+const GENERATED = /^src\/(paraglide\/|routeTree\.gen\.ts$)/;
 
-const RULES = [
+/*------ Feature Files ------*/
+// The files whose code is all Effect: business rules, queries and background work.
+const FEATURE_RULES = [
   {
     pattern: /\basync\b|\bawait\b/,
     message:
@@ -30,14 +32,37 @@ const RULES = [
   },
 ];
 
-/** Every `service.ts`, `repository.ts` and `jobs.server.ts` under the features. */
-async function effectFiles() {
+/*------ Everywhere ------*/
+const SOURCE_RULES = [
+  {
+    pattern: /yield\*\s*\(\s*yield\*/,
+    message: "ask for the service on its own line (`const notes = yield* NoteService;`), then call it.",
+  },
+];
+
+/*------ Routes ------*/
+const ROUTE_RULES = [
+  {
+    pattern: /\bappRuntime\b/,
+    message: "run the Effect with runInRequest (#/server/runtime.server), so it joins the request's trace.",
+  },
+];
+
+/** Which files each set of rules applies to, by their path from the repository root. */
+const RULE_SETS = [
+  { files: /^src\/orpc\/[^/]+\/(service|repository|jobs\.server)\.ts$/, rules: FEATURE_RULES },
+  { files: /\.tsx?$/, rules: SOURCE_RULES },
+  { files: /^src\/routes\//, rules: ROUTE_RULES },
+];
+
+/** Every TypeScript file under `src/`, generated code aside. */
+async function sourceFiles(dir = SOURCE_DIR) {
   const files = [];
-  for (const feature of await readdir(FEATURES_DIR, { withFileTypes: true })) {
-    if (!feature.isDirectory()) continue;
-    for (const name of await readdir(join(FEATURES_DIR, feature.name))) {
-      if (EFFECT_FILES.test(name)) files.push(join(FEATURES_DIR, feature.name, name));
-    }
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name).split(sep).join("/");
+    if (GENERATED.test(path)) continue;
+    if (entry.isDirectory()) files.push(...(await sourceFiles(path)));
+    else if (/\.tsx?$/.test(entry.name)) files.push(path);
   }
   return files;
 }
@@ -51,10 +76,11 @@ function code(line) {
 
 /*===== Run =====*/
 let problems = 0;
-for (const file of await effectFiles()) {
+for (const file of await sourceFiles()) {
+  const rules = RULE_SETS.filter((set) => set.files.test(file)).flatMap((set) => set.rules);
   const lines = (await readFile(file, "utf8")).split("\n");
   lines.forEach((line, index) => {
-    for (const { pattern, message } of RULES) {
+    for (const { pattern, message } of rules) {
       if (pattern.test(code(line))) {
         console.error(`${file}:${index + 1}: ${message}`);
         problems += 1;
@@ -67,4 +93,4 @@ if (problems > 0) {
   console.error(`\nlint-effect: ${problems} problem(s).`);
   process.exit(1);
 }
-console.log("lint-effect: feature services, repositories and jobs OK");
+console.log("lint-effect: Effect code OK");
