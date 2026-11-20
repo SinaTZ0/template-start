@@ -23,7 +23,8 @@ export const uploadMediaProcedure = effectProcedure(base.media.upload, {
   run: ({ input }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;
-      return yield* (yield* MediaService).upload({
+      const mediaService = yield* MediaService;
+      return yield* mediaService.upload({
         // Better-Auth types additional fields as optional, but the column is NOT NULL with a default.
         user: { id: user.id, role: user.role as UserRole },
         kind: input.kind,

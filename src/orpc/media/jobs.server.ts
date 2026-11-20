@@ -27,7 +27,8 @@ export const deleteMedia = Effect.fn("MediaJobs.deleteMedia")(function* (mediaId
     return yield* Effect.die(new Error(`Media ${record.id} has an unknown kind: ${record.kind}`));
   }
 
-  yield* (yield* Storage).deleteMany(variantKeys({ kind: record.kind, mediaId }));
+  const storage = yield* Storage;
+  yield* storage.deleteMany(variantKeys({ kind: record.kind, mediaId }));
   yield* repo.delete(mediaId);
 });
 
@@ -42,7 +43,8 @@ export const DiscardMedia = defineJob({
   payload: Schema.Struct({ mediaId: Schema.String }),
   run: Effect.fn("MediaJobs.discard")(function* ({ mediaId }: { readonly mediaId: string }) {
     if (!isMediaId(mediaId)) return;
-    const found = yield* (yield* MediaRepo).findById(mediaId);
+    const repo = yield* MediaRepo;
+    const found = yield* repo.findById(mediaId);
     if (Option.isNone(found) || found.value.attachedAt) return;
     yield* deleteMedia(mediaId);
   }),

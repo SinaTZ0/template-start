@@ -157,7 +157,8 @@ const noUser = new Proxy({} as CurrentUser["Service"], {
  *   access: "user",
  *   run: ({ input }) => Effect.gen(function* () {
  *     const user = yield* CurrentUser;
- *     yield* (yield* NoteService).remove({ ownerId: user.id, id: input.id });
+ *     const notes = yield* NoteService;
+ *     yield* notes.remove({ ownerId: user.id, id: input.id });
  *   }),
  *   errors: { NoteNotFound: ({ errors }) => errors.NOT_FOUND({ data: noErrorData }) },
  * });
@@ -210,7 +211,10 @@ export function effectProcedure(
     const program = Effect.gen(function* () {
       yield* checkRateLimit(API_RATE_LIMIT);
       if (rateLimit) yield* checkRateLimit(rateLimit);
-      if (captcha) yield* (yield* Captcha).verify((input as { captcha: string }).captcha);
+      if (captcha) {
+        const verifier = yield* Captcha;
+        yield* verifier.verify((input as { captcha: string }).captcha);
+      }
       // A public procedure's Effect can't require `CurrentUser` (`AccessOption`), so the stand-in is never read.
       if (!access) return yield* spec.run({ input }).pipe(Effect.provideService(CurrentUser, noUser));
       const user = yield* access === "user" ? requireUser : requireRole(access);

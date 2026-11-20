@@ -33,7 +33,8 @@ export class CurrentUser extends Context.Service<CurrentUser, User>()("app/serve
  */
 export const requireUser: Effect.Effect<User, Unauthorized, RequestContext | Auth> = Effect.gen(function* () {
   const { headers } = yield* RequestContext;
-  const session = yield* (yield* Auth).session(headers);
+  const auth = yield* Auth;
+  const session = yield* auth.session(headers);
   if (Option.isNone(session) || session.value.user.status === "blocked") return yield* new Unauthorized();
   return session.value.user;
 });

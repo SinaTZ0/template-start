@@ -36,7 +36,8 @@ export const SendMail = defineJob({
   retrySchedule: Schedule.exponential("2 seconds"),
   run: Effect.fn("MailJobs.send")(function* ({ to, ...mail }: MailPayload) {
     const email = yield* Effect.promise(() => renderMail(mail));
-    const { messageId } = yield* (yield* Mailer).send({ to, ...email }).pipe(
+    const mailer = yield* Mailer;
+    const { messageId } = yield* mailer.send({ to, ...email }).pipe(
       // A refusal for good is reported once instead of being retried into the same answer. The server's reply says
       // why: an unknown address, a rejected login (`SMTP_USER`, `SMTP_PASSWORD`), a daily limit.
       Effect.catchIf(

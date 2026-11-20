@@ -17,7 +17,8 @@ export const listNotesProcedure = effectProcedure(base.note.list, {
   run: ({ input }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;
-      return yield* (yield* NoteService).list({ ownerId: user.id, cursor: input.cursor });
+      const notes = yield* NoteService;
+      return yield* notes.list({ ownerId: user.id, cursor: input.cursor });
     }),
   errors: {},
 });
@@ -28,7 +29,8 @@ export const getNoteProcedure = effectProcedure(base.note.get, {
   run: ({ input }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;
-      return yield* (yield* NoteService).read({ ownerId: user.id, id: input.id });
+      const notes = yield* NoteService;
+      return yield* notes.read({ ownerId: user.id, id: input.id });
     }),
   errors: {
     NoteNotFound: ({ errors }) => errors.NOT_FOUND({ data: noErrorData }),
@@ -41,7 +43,8 @@ export const createNoteProcedure = effectProcedure(base.note.create, {
   run: ({ input }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;
-      return yield* (yield* NoteService).add({ ownerId: user.id, input });
+      const notes = yield* NoteService;
+      return yield* notes.add({ ownerId: user.id, input });
     }),
   errors: {
     MediaUnusable: ({ errors }) => errors.INVALID_INPUT({ data: imageUnusable() }),
@@ -54,7 +57,8 @@ export const updateNoteProcedure = effectProcedure(base.note.update, {
   run: ({ input: { id, ...fields } }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;
-      return yield* (yield* NoteService).edit({ ownerId: user.id, id, input: fields });
+      const notes = yield* NoteService;
+      return yield* notes.edit({ ownerId: user.id, id, input: fields });
     }),
   errors: {
     NoteNotFound: ({ errors }) => errors.NOT_FOUND({ data: noErrorData }),
@@ -68,7 +72,8 @@ export const deleteNoteProcedure = effectProcedure(base.note.delete, {
   run: ({ input }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;
-      yield* (yield* NoteService).remove({ ownerId: user.id, id: input.id });
+      const notes = yield* NoteService;
+      yield* notes.remove({ ownerId: user.id, id: input.id });
     }),
   errors: {
     NoteNotFound: ({ errors }) => errors.NOT_FOUND({ data: noErrorData }),

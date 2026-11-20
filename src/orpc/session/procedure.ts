@@ -11,7 +11,8 @@ export const viewerProcedure = effectProcedure(base.session.viewer, {
   run: () =>
     Effect.gen(function* () {
       const { headers } = yield* RequestContext;
-      return yield* (yield* SessionService).viewer(headers);
+      const sessions = yield* SessionService;
+      return yield* sessions.viewer(headers);
     }),
   errors: {},
 });
