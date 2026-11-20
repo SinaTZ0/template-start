@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Effect } from "effect";
 
 import { limitRequest, rateLimitedMessage, type RateLimitPolicy } from "#/lib/rate-limit.server";
 import { Auth } from "#/server/auth.server";
-import { appRuntime } from "#/server/runtime.server";
+import { runInRequest } from "#/server/runtime.server";
 
 /*===== Rate Limits =====*/
 // The app's limiter replaces Better-Auth's (`rateLimit` is off in `#/server/better-auth.server`), so the API and auth
@@ -42,10 +41,7 @@ function rejectOverLimit(request: Request): Response | undefined {
 /*===== Better-Auth Endpoints =====*/
 /** Better-Auth answers every `/api/auth/*` request itself, once the rate limit lets it through. */
 function handleRequest({ request }: { request: Request }) {
-  return (
-    rejectOverLimit(request) ??
-    appRuntime.runPromise(Auth.use(({ betterAuth }) => Effect.promise(() => betterAuth.handler(request))))
-  );
+  return rejectOverLimit(request) ?? runInRequest(Auth.use((auth) => auth.handle(request)));
 }
 
 /*===== Route =====*/

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { Effect } from "effect";
 
 import { Db } from "#/server/db.server";
-import { appRuntime } from "#/server/runtime.server";
+import { runInRequest } from "#/server/runtime.server";
 
 /** Longer than a healthy query ever takes, shorter than the container healthcheck's own timeout. */
 const DB_TIMEOUT = "2 seconds";
@@ -31,7 +31,7 @@ const checkHealth = Effect.gen(function* () {
  * (`#/server/observability/http.server`), so only failures and slow checks are written.
  */
 async function handleGet() {
-  const healthy = await appRuntime.runPromise(checkHealth);
+  const healthy = await runInRequest(checkHealth);
   return Response.json(
     { status: healthy ? "ok" : "error" },
     { status: healthy ? 200 : 503, headers: { "Cache-Control": "no-store" } },

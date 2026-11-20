@@ -9,6 +9,7 @@ import type { AuthSession, BetterAuth } from "#/server/better-auth.server";
 import { AppConfig } from "#/server/config.server";
 import { Jobs } from "#/server/jobs.server";
 import { createLogger } from "#/server/observability/log.server";
+import { joinRequest } from "#/server/observability/request-scope.server";
 
 const log = createLogger("auth");
 
@@ -20,8 +21,10 @@ const log = createLogger("auth");
 export class Auth extends Context.Service<
   Auth,
   {
-    /** The Better-Auth server itself, for `/api/auth/*` and the seed. */
+    /** The Better-Auth server itself, for the seed. */
     readonly betterAuth: BetterAuth;
+    /** Answers an `/api/auth/*` request. Better-Auth turns its own failures into responses. */
+    readonly handle: (request: Request) => Effect.Effect<Response>;
     /** The session the request's cookies belong to, if any. Its queries are this span's: the pool isn't traced. */
     readonly session: (headers: Headers) => Effect.Effect<Option.Option<AuthSession>>;
     /** Signs a user out everywhere by deleting all their sessions, e.g. once they are blocked. */
@@ -32,10 +35,12 @@ export class Auth extends Context.Service<
     Auth,
     Effect.gen(function* () {
       const config = yield* AppConfig;
-      // Better-Auth calls back outside any fiber: its emails are queued, and its captcha checked, on this layer's
-      // services.
-      const run = Effect.runPromiseWith(yield* Effect.context<Jobs>());
       const captcha = yield* Captcha;
+      // Better-Auth calls back outside any fiber: its emails are queued, and its captcha checked, on this layer's
+      // services, as part of the request Better-Auth is answering (`joinRequest`).
+      const services = yield* Effect.context<Jobs>();
+      const runCallback = <A, E>(effect: Effect.Effect<A, E, Jobs>) =>
+        Effect.runPromiseWith(services)(joinRequest(effect));
 
       /*------ Pool ------*/
       // Better-Auth's adapter speaks promises, so it gets a small pool of its own beside the app's (`PgLive`), closed
@@ -60,9 +65,9 @@ export class Auth extends Context.Service<
       const betterAuth = createBetterAuth({
         config,
         db: drizzle({ client: pool }),
-        queueMail: (mail) => run(SendMail.enqueue(mail)),
+        queueMail: (mail) => runCallback(SendMail.enqueue(mail)),
         verifyCaptcha: (payload) =>
-          run(
+          runCallback(
             captcha.verify(payload).pipe(
               Effect.as(true),
               Effect.orElseSucceed(() => false),
@@ -72,6 +77,7 @@ export class Auth extends Context.Service<
 
       return Auth.of({
         betterAuth,
+        handle: (request) => Effect.promise(() => betterAuth.handler(request)).pipe(Effect.withSpan("Auth.handle")),
         session: (headers) =>
           Effect.promise(() => betterAuth.api.getSession({ headers })).pipe(
             Effect.map(Option.fromNullishOr),
@@ -92,6 +98,7 @@ export class Auth extends Context.Service<
       Auth,
       Auth.of({
         betterAuth: undefined as never,
+        handle: () => Effect.die("Auth.layerTest has no Better-Auth server."),
         session: () => Effect.sync(() => Option.fromNullishOr(session())),
         revokeSessions: () => Effect.void,
       }),

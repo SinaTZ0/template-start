@@ -1,4 +1,5 @@
 import { Layer, ManagedRuntime } from "effect";
+import type { Effect } from "effect";
 
 import { MediaRepo } from "#/orpc/media/repository";
 import { MediaService } from "#/orpc/media/service";
@@ -13,6 +14,7 @@ import { Jobs } from "#/server/jobs.server";
 import { Mailer } from "#/server/mailer.server";
 import { ExportLive } from "#/server/observability/export.server";
 import { LoggerLive } from "#/server/observability/logger.server";
+import { joinRequest } from "#/server/observability/request-scope.server";
 import { RequestSpansLive } from "#/server/observability/request-spans.server";
 import { Storage } from "#/server/storage.server";
 
@@ -79,9 +81,21 @@ export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, unknown>;
 /*===== Runtime =====*/
 /**
  * The server's one runtime. It builds `AppLayer` on first use (the pool, the queue's table) and keeps it for the
- * process. Boundaries run Effects on it: the oRPC handler (`#/orpc/effect.server`), the job workers (`src/server.ts`).
+ * process. Boundaries run Effects on it: the oRPC handler (`#/orpc/effect.server`), the job workers (`src/server.ts`),
+ * and the server routes outside oRPC (`runInRequest`).
  */
 export const appRuntime = ManagedRuntime.make(AppLayer);
+
+/**
+ * Runs an Effect for the request being handled, as part of its trace (`joinRequest`). This is how a server route
+ * outside oRPC (`/healthz`, `/api/auth/*`, `/robots.txt`) runs one; a procedure's Effect is run by `effectProcedure`.
+ *
+ * A failure rejects the promise, and Start answers the request with a 500. The route handles what it expects
+ * (`/healthz` turns an unreachable database into a 503).
+ */
+export function runInRequest<A, E>(effect: Effect.Effect<A, E, AppServices>): Promise<A> {
+  return appRuntime.runPromise(joinRequest(effect));
+}
 
 // In development a changed server module is loaded again, with a new runtime. The one it replaces is disposed, which
 // closes its pools: without it, every reload would keep ten more connections open.

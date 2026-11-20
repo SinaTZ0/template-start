@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Effect } from "effect";
 
 import { AppConfig } from "#/server/config.server";
-import { appRuntime } from "#/server/runtime.server";
+import { runInRequest } from "#/server/runtime.server";
 import { type Locale, localizeHref, locales } from "#/paraglide/runtime";
 
 /*===== Entries =====*/
@@ -21,7 +21,7 @@ const STATIC_ENTRIES: SitemapEntry[] = [{ path: "/" }];
  * procedure that returns only published items, with `lastModified` from their update time (`docs/frontend/seo.md`).
  */
 async function handleGet() {
-  const siteUrl = await appRuntime.runPromise(AppConfig.use((config) => Effect.succeed(config.siteUrl)));
+  const siteUrl = await runInRequest(AppConfig.use((config) => Effect.succeed(config.siteUrl)));
   const entries = STATIC_ENTRIES;
 
   const urls = entries.flatMap(({ path, lastModified }) => {

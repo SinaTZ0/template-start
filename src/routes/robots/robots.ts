@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Effect } from "effect";
 
 import { AppConfig } from "#/server/config.server";
-import { appRuntime } from "#/server/runtime.server";
+import { runInRequest } from "#/server/runtime.server";
 
 /*===== robots.txt =====*/
 /**
@@ -12,7 +12,7 @@ import { appRuntime } from "#/server/runtime.server";
  * their paths. `pageMeta({ index: false })` keeps them out of search results instead.
  */
 async function handleGet() {
-  const siteUrl = await appRuntime.runPromise(AppConfig.use((config) => Effect.succeed(config.siteUrl)));
+  const siteUrl = await runInRequest(AppConfig.use((config) => Effect.succeed(config.siteUrl)));
   const body = [
     "User-agent: *",
     "Disallow: /api/",

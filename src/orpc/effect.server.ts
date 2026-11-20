@@ -10,7 +10,7 @@ import { m } from "#/paraglide/messages";
 import { Captcha } from "#/server/captcha.server";
 import type { CaptchaFailed, Forbidden, InvalidInput, RateLimited, Unauthorized } from "#/server/errors";
 import { createLogger } from "#/server/observability/log.server";
-import { requestScope } from "#/server/observability/request-scope.server";
+import { joinRequest, requestScope } from "#/server/observability/request-scope.server";
 import { checkRateLimit } from "#/server/rate-limit.server";
 import { CurrentUser, RequestContext, requireRole, requireUser } from "#/server/request-context.server";
 import { appRuntime } from "#/server/runtime.server";
@@ -172,7 +172,7 @@ export function effectProcedure(
   }) => {
     /*------ Run ------*/
     const { access, rateLimit, captcha } = spec;
-    // Read here, outside the fiber: the request this call belongs to, whose trace it joins.
+    // Read here, outside the fiber: the request this call belongs to, which learns who its user is.
     const scope = requestScope.current();
     const program = Effect.gen(function* () {
       yield* checkRateLimit(API_RATE_LIMIT);
@@ -189,12 +189,12 @@ export function effectProcedure(
         .pipe(Effect.provideService(CurrentUser, user), Effect.annotateLogs({ userId: user.id }));
     }).pipe(
       Effect.withSpan(`rpc.${path.join(".")}`, { kind: "internal" }),
-      Effect.annotateLogs({ module: "orpc", ...(scope?.clientId && { clientId: scope.clientId }) }),
-      scope ? Effect.withParentSpan(scope.span) : (self) => self,
+      Effect.annotateLogs({ module: "orpc" }),
       Effect.provideService(RequestContext, { headers: context.headers }),
     );
 
-    const exit = await (context.runtime ?? appRuntime).runPromiseExit(program, { signal });
+    // The call joins its request's trace, over HTTP and in-process alike.
+    const exit = await (context.runtime ?? appRuntime).runPromiseExit(joinRequest(program), { signal });
     if (Exit.isSuccess(exit)) return exit.value;
 
     /*------ Expected Failures ------*/
