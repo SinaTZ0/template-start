@@ -5,8 +5,15 @@ import { AppConfig } from "#/server/config.server";
 
 /*===== Storage =====*/
 /**
- * The S3-compatible bucket uploads live in (docs/backend/media.md). A failing bucket is a defect: a request reports it,
- * a job retries. Each call is a `Storage.*` span.
+ * How long one call to the bucket may take. The SDK sets no limit of its own, so a bucket that stops answering would
+ * hold an upload's request, or the job deleting files, for as long as the connection stays open. Far above a healthy
+ * call: the largest object is one processed image.
+ */
+const CALL_TIMEOUT = "30 seconds";
+
+/**
+ * The S3-compatible bucket uploads live in (docs/backend/media.md). A failing bucket is a defect, and so is one that
+ * doesn't answer within `CALL_TIMEOUT`: a request reports it, a job retries. Each call is a `Storage.*` span.
  */
 export class Storage extends Context.Service<
   Storage,
@@ -39,46 +46,49 @@ export class Storage extends Context.Service<
         (opened) => Effect.sync(() => opened.destroy()),
       );
 
-      const put = Effect.fn("Storage.put")(function* ({
-        key,
-        body,
-        contentType,
-      }: {
-        key: string;
-        body: Buffer;
-        contentType: string;
-      }) {
-        yield* Effect.promise((signal) =>
-          client.send(
-            new PutObjectCommand({
-              Bucket: s3.bucket,
-              Key: key,
-              Body: body,
-              ContentType: contentType,
-              CacheControl: "public, max-age=31536000, immutable",
-            }),
-            { abortSignal: signal },
-          ),
-        );
-      });
-
-      const deleteMany = Effect.fn("Storage.deleteMany")(function* (keys: ReadonlyArray<string>) {
-        if (keys.length === 0) return;
-        const result = yield* Effect.promise((signal) =>
-          client.send(
-            new DeleteObjectsCommand({
-              Bucket: s3.bucket,
-              Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
-            }),
-            { abortSignal: signal },
-          ),
-        );
-        if (result.Errors?.length) {
-          return yield* Effect.die(
-            new Error(`Could not delete ${result.Errors.length} object(s): ${result.Errors[0]?.Message ?? "unknown"}`),
+      const put = Effect.fn("Storage.put")(
+        function* ({ key, body, contentType }: { key: string; body: Buffer; contentType: string }) {
+          yield* Effect.promise((signal) =>
+            client.send(
+              new PutObjectCommand({
+                Bucket: s3.bucket,
+                Key: key,
+                Body: body,
+                ContentType: contentType,
+                CacheControl: "public, max-age=31536000, immutable",
+              }),
+              { abortSignal: signal },
+            ),
           );
-        }
-      });
+        },
+        // The timeout interrupts the call, which aborts the request through its signal.
+        Effect.timeout(CALL_TIMEOUT),
+        Effect.orDie,
+      );
+
+      const deleteMany = Effect.fn("Storage.deleteMany")(
+        function* (keys: ReadonlyArray<string>) {
+          if (keys.length === 0) return;
+          const result = yield* Effect.promise((signal) =>
+            client.send(
+              new DeleteObjectsCommand({
+                Bucket: s3.bucket,
+                Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+              }),
+              { abortSignal: signal },
+            ),
+          );
+          if (result.Errors?.length) {
+            return yield* Effect.die(
+              new Error(
+                `Could not delete ${result.Errors.length} object(s): ${result.Errors[0]?.Message ?? "unknown"}`,
+              ),
+            );
+          }
+        },
+        Effect.timeout(CALL_TIMEOUT),
+        Effect.orDie,
+      );
 
       return Storage.of({ put, deleteMany });
     }),
