@@ -8,8 +8,11 @@ import { m } from "#/paraglide/messages";
 const MAX_PIXELS = 40_000_000;
 const ACCEPTED_FORMATS = ["jpeg", "png", "webp"];
 
-/** Transparency is flattened onto this so a PNG cut-out doesn't turn black. Match it to the app's background. */
-const FLATTEN_BACKGROUND = "#FAFAFA";
+/**
+ * Transparency is flattened onto this so a PNG cut-out doesn't turn black: the light theme's `--background`
+ * (`src/styles.css`) as hex, since sharp can't read the token. Change it with the theme.
+ */
+const FLATTEN_BACKGROUND = "#FFFFFF";
 
 const WEBP_QUALITY = 80;
 const WEBP_THUMB_QUALITY = 72;
