@@ -25,7 +25,13 @@ export class Auth extends Context.Service<
     readonly betterAuth: BetterAuth;
     /** Answers an `/api/auth/*` request. Better-Auth turns its own failures into responses. */
     readonly handle: (request: Request) => Effect.Effect<Response>;
-    /** The session the request's cookies belong to, if any. Its queries are this span's: the pool isn't traced. */
+    /**
+     * The session the request's cookies belong to, if any. Its queries are this span's: the pool isn't traced.
+     *
+     * Read once per request: every call with the same `Headers` object, the request's own, shares one read. A page's
+     * loaders each call a procedure, and each asks who the user is. So a change made during a request (a revoked
+     * session) is seen by the next request, not by the rest of this one.
+     */
     readonly session: (headers: Headers) => Effect.Effect<Option.Option<AuthSession>>;
     /** Signs a user out everywhere by deleting all their sessions, e.g. once they are blocked. */
     readonly revokeSessions: (userId: string) => Effect.Effect<void>;
@@ -75,11 +81,22 @@ export class Auth extends Context.Service<
           ),
       });
 
+      /*------ Sessions ------*/
+      // Kept for as long as the request's headers are: nothing to expire, nothing shared between requests.
+      const sessionReads = new WeakMap<Headers, Promise<AuthSession | null>>();
+      const readSession = (headers: Headers) => {
+        const started = sessionReads.get(headers);
+        if (started) return started;
+        const read = betterAuth.api.getSession({ headers });
+        sessionReads.set(headers, read);
+        return read;
+      };
+
       return Auth.of({
         betterAuth,
         handle: (request) => Effect.promise(() => betterAuth.handler(request)).pipe(Effect.withSpan("Auth.handle")),
         session: (headers) =>
-          Effect.promise(() => betterAuth.api.getSession({ headers })).pipe(
+          Effect.promise(() => readSession(headers)).pipe(
             Effect.map(Option.fromNullishOr),
             Effect.withSpan("Auth.session"),
           ),
