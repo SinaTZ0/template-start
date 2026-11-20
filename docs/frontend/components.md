@@ -33,6 +33,8 @@ Import directly from the owning file. `buttonVariants` and other CVA helpers com
 3. Keep shadcn's exports, props, parts and `data-slot` / `data-*` attributes, so shadcn's docs and future updates still
    map onto it.
 4. If it composes other shadcn components, import their primitives, creating them first if they don't exist.
+   If it imports a package the app doesn't have yet (`embla-carousel-react` for the carousel, `input-otp`,
+   `react-resizable-panels`), add it: `package.json` lists only what the app's own code imports.
 5. Add `<name>.stories.tsx`.
 
 ## Changing a Primitive
@@ -45,7 +47,8 @@ its consumers and the primitives that compose it, since some rely on its slots a
 
 Update the shadcn source with the CLI (`pnpm dlx shadcn@latest add --all --overwrite`), then review the diff. The CLI
 can also rewrite `src/styles.css` and `src/lib/utils.ts` (`cn`): keep the app's tokens, and treat a changed helper like any
-other change worth porting.
+other change worth porting. It also adds to `package.json` every package a `ui/` file imports: remove the ones no
+primitive uses, since `ui/` is never built and they would only be installed on the server.
 
 For each changed component in `git diff src/components/ui/` that has a primitive, decide whether the change is worth
 porting (a new `data-*` attribute, an accessibility fix, a new helper or dependency) and port it into the primitive by

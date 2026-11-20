@@ -392,7 +392,9 @@ opens deletes its sessions (`session.viewer`). A procedure that blocks someone s
 - `TOO_MANY_REQUESTS` is a common error, so contracts already declare it. Its data adds `retryAfterSeconds`, and its
   message (`rateLimitedMessage()`) reaches the form through `describeApiFailure`.
 - Auth limits are set by path in `src/routes/api_auth/api-auth.ts`: endpoints that check a password or send mail get
-  the strict policy. Add new Better-Auth endpoints of that kind to `CREDENTIAL_PATHS`.
+  the strict policy. Add new Better-Auth endpoints of that kind to `CREDENTIAL_PATHS`. They count per address only:
+  nothing limits the attempts on one account
+  ([future-hardening-and-features.md](../future-hardening-and-features.md)).
 - Procedure calls a loader makes during SSR run in-process, with the page request's headers, so they count against
   the same address as the page request.
 - Browser calls are also counted once at the handler, before their body is read, with the same numbers on separate

@@ -104,6 +104,13 @@ Fill in [app-identity.md](./frontend/app-identity.md) and delete its stub note:
 - Replace `public/favicon.ico`, and return a 1200×630 preview image in the new style from `siteImage()` in
   `src/lib/site.ts`, with its `alt` a message.
 - Set `site_name` and `site_description` in every locale file to the project's name and description.
+- Carry the new colours to the two places that can't read the tokens. Emails: `mailTheme` in
+  `src/mail/templates/theme.ts` holds the light theme's tokens as hex, and `mailFontFamily` the font
+  ([mail.md](./backend/mail.md)). Uploaded images: `FLATTEN_BACKGROUND` in `src/orpc/media/processing.server.ts` is
+  the colour a transparent PNG is flattened onto, the light theme's page background as hex
+  ([media.md](./backend/media.md)).
+- Ask which time zone the project's readers live in and set `APP_TIME_ZONE` in `src/lib/locale.ts`: every date is
+  shown in it. The template ships `Asia/Tehran`.
 - Ask which languages the project needs. The template ships Persian and English; follow
   [i18n.md](./frontend/i18n.md) → Adding or Removing a Language for anything else.
 

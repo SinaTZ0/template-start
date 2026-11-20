@@ -69,6 +69,10 @@ pnpm add @orpc/tanstack-query@beta @tanstack/react-query   # TanStack Query util
 pnpm add @orpc/openapi@beta                                # only for OpenAPI handler/spec, or form-data helpers
 ```
 
+`package.json` pins every `@orpc/*` package to one exact beta, without `^`: a caret on a beta also matches the next
+one, and betas change the API. After `pnpm add`, remove the caret it wrote; to move to a newer beta, change all of them
+together and read its release notes.
+
 oRPC v2 accepts any Standard Schema, which is how this project passes Effect Schema (`standardSchema` in
 `src/lib/schema.ts`). Don't install `zod` or `@orpc/zod`.
 

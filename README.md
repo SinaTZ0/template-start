@@ -110,7 +110,8 @@ docs/                              start at backend-flow.md or frontend-flow.md
 
 2. Rename: `name` in `package.json`, `compose.dev.yaml` and `compose.prod.yaml` (and `image` there), the bucket name in
    `.env.example` and `.env.production.example`, the `site_name` and `site_description` messages in `messages/*.json`,
-   and the image `siteImage()` returns for link previews in `src/lib/site.ts`. Put the project's git URL in
+   the image `siteImage()` returns for link previews in `src/lib/site.ts`, and the time zone dates are shown in
+   (`APP_TIME_ZONE` in `src/lib/locale.ts`). Put the project's git URL in
    `tools/deploy/repository.txt` and rebuild the deploy tool (`pnpm deploy:build`), so Set up on a new server offers
    this repository. Keep English, or change the languages (`docs/frontend/i18n.md` → Adding or Removing a Language).
 3. Design the look. Everything that ships (colours, type styles, radius and shadows in `src/styles.css`, the primitives'

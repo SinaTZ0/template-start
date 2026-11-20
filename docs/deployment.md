@@ -549,4 +549,4 @@ whole way back.
   (`deploy/deploy.sh check --test`), and turn on off-site backups (`deploy/deploy.sh offsite`), with the password
   of `.env`'s copy kept somewhere that isn't the server (Backups above).
 - Go through [future-hardening-and-features.md](./future-hardening-and-features.md) (shared rate limits behind IPv6
-  or a CDN, the CSP) and fix each item or note why it doesn't apply.
+  or a CDN, sign-in attempts per account, the CSP) and fix each item or note why it doesn't apply.

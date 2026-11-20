@@ -2,8 +2,9 @@
 
 Extra protection the template leaves out, safe to ship without, but worth deciding on per project. None of these is a
 bug in the code as it runs today. Each one starts to matter only under a condition named below: a server set up a
-certain way, a CDN in front, or a domain shared with other sites. Go through the list before going live
-([deployment.md](./deployment.md) → Before Going Live) and either fix an item or note why it doesn't apply.
+certain way, a CDN in front, a domain shared with other sites, or accounts worth breaking into. Go through the list
+before going live ([deployment.md](./deployment.md) → Before Going Live) and either fix an item or note why it doesn't
+apply.
 
 ## Rate Limits Can Count Many Visitors as One
 
@@ -39,6 +40,30 @@ counts a `/64` as one client (`addressKey`).
   `servers { trusted_proxies static <CDN ranges> client_ip_headers X-Forwarded-For }`, and
   `header_up X-Real-IP {client_ip}` in place of `{remote_host}`. Only list the CDN's own ranges: anyone else could then
   pick their address.
+
+## Sign-in Attempts Are Limited per Address, Not per Account
+
+Sign-in allows ten attempts a minute from one address (`CREDENTIAL_RATE_LIMIT` in
+`src/routes/api_auth/api-auth.ts`), and nothing counts the attempts made on one account. Someone guessing an account's
+password from many addresses at once (a botnet, a list of proxies) is slowed on each address but never on the account,
+and Better-Auth's sign-in has no lockout of its own. The app's other protections don't cover this: the captcha guards
+sign-up only, and a password needs eight characters, with no check that it isn't a known leaked one.
+
+**When it matters:** once an account holds something worth the effort (money, personal data, an admin role), or as
+soon as a review asks for a lockout.
+
+**How to check:** the app's log has a line per request at `LOG_LEVEL=info`: many `POST /api/auth/sign-in/email 401`
+within minutes, more than the people who use the site could mistype.
+
+**How to fix:** pick what fits the project; the first two together cover most of it.
+
+- Count sign-ins per account as well: a second policy beside `rejectOverLimit`'s, keyed by the email in the request
+  body rather than the client's address, low enough to stop guessing and high enough for someone who forgot their
+  password (say ten an hour). A limit that refuses outright lets anyone lock a person out by failing on purpose, so
+  prefer one that asks for the captcha once it is reached.
+- Refuse leaked passwords at sign-up and reset with Better-Auth's `haveibeenpwned` plugin. It sends the first five
+  characters of the password's SHA-1 hash to `api.pwnedpasswords.com`, so check the server can reach it.
+- Add a second factor for the roles that matter (Better-Auth's `two-factor` plugin).
 
 ## No Content-Security-Policy
 
