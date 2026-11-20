@@ -80,7 +80,8 @@ export const getNoteProcedure = effectProcedure(base.note.get, {
   run: ({ input }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;
-      return yield* (yield* NoteService).read({ ownerId: user.id, id: input.id });
+      const notes = yield* NoteService;
+      return yield* notes.read({ ownerId: user.id, id: input.id });
     }),
   errors: { NoteNotFound: ({ errors }) => errors.NOT_FOUND({ data: noErrorData }) },
 });

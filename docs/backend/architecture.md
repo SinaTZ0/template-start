@@ -142,13 +142,55 @@ errors: {
   `src/server/errors.ts` aside. A service that starts failing in a new way doesn't compile until each procedure that
   calls it says what the client sees. The message is written in the case, in the request's locale (`imageUnusable` in
   `src/orpc/note/procedure.ts`).
-- Everything else is a defect: a failed query, a bucket that refuses, a bug. Repositories end every method in
-  `Effect.orDie`, and `Storage` dies when the bucket fails. The boundary logs a defect once and answers
-  `INTERNAL_SERVER_ERROR` with an `errorId`.
+- **Typed or defect.** A failure is typed when someone can act on it: the client (a missing note, a name that is
+  taken) or the code that called (a mailbox that says "try later"). Everything else is a defect: a failed query, a
+  bucket that refuses, a bug. Repositories end every method in `Effect.orDie`, and `Storage` dies when the bucket
+  fails. The boundary logs a defect once and answers `INTERNAL_SERVER_ERROR` with an `errorId`.
 - A promise API whose failure is an expected outcome is wrapped with `Effect.tryPromise` and a `catch` that builds a
   tagged error (`Mailer.send` and `MailDeliveryError`). `Effect.promise` turns a rejection into a defect.
-- A race that is a product outcome (two saves claiming one upload) is decided by the service from what the repository
-  returns (`MediaRepo.claim` answers whether it won), never by catching a failed query.
+- **An error that wraps a lower failure keeps it** as `cause: Schema.Defect()`, so the log line and the report show
+  where it came from:
+
+  ```ts
+  export class RatesUnavailable extends Schema.TaggedError<RatesUnavailable>()("RatesUnavailable", {
+    /** The provider's HTTP status, when it answered. */
+    status: Schema.UndefinedOr(Schema.Int),
+    cause: Schema.Defect(),
+  }) {}
+
+  // catch: (cause) => new RatesUnavailable({ status: undefined, cause })
+  ```
+
+  Leave it out only when the lower error holds what the logs must not keep. `MailDeliveryError` copies the server's
+  reply with the addresses masked instead, because Nodemailer's own error names the recipient.
+
+- **The database answers a conflict; the code doesn't catch one.** A race that is a product outcome (two saves
+  claiming one upload, two tags with one name) is decided by the service from what the repository returns, never by
+  catching a failed query. `MediaRepo.claim` answers whether it won. An insert that may meet a unique index is written
+  `.onConflictDoNothing({ target: tag.name }).returning()`, and its method returns `Option.none()` when the row was
+  already there, which the service turns into its tagged error (`TagNameTaken`). A unique violation that is caught
+  has already aborted the transaction it ran in.
+- **An outbound call has a time limit.** Postgres (both pools), the mailbox (`Mailer`) and the bucket (`Storage`) each
+  have one, so a service that stops answering fails the call instead of holding it. A new client gets its own setting,
+  or `Effect.timeout`, which interrupts the call.
+- **Retry only what can succeed next time**: a typed, temporary failure of a call that is safe to repeat, a set number
+  of times. Inside a request that is a couple of quick tries:
+
+  ```ts
+  Effect.retry({
+    while: (error) => error.status === undefined || error.status >= 500,
+    schedule: Schedule.jittered(Schedule.exponential("200 millis")),
+    times: 2,
+  });
+  ```
+
+  Anything longer is a job ([jobs.md](./jobs.md)): the queue retries on a schedule up to `maxAttempts`, and `mail.send`
+  gives up at once on a refusal that is `permanent`. Never retry a defect, or a call that isn't safe to run twice.
+
+- **A failure answered with a 5xx is the server's, typed or not.** When a case maps a tagged error to a 5xx
+  (`errors.SERVICE_UNAVAILABLE`), nobody outside can fix it, so the boundary logs it, which reports it, and the call's
+  span ends as an error ([logging.md](./logging.md) → What counts as failed). A 4xx is the client's to fix: it is
+  neither logged as an error nor a failed span.
 
 ### Errors are uniform and safe
 
@@ -187,7 +229,8 @@ export const deleteNoteProcedure = effectProcedure(base.note.delete, {
   run: ({ input }) =>
     Effect.gen(function* () {
       const user = yield* CurrentUser;
-      yield* (yield* NoteService).remove({ ownerId: user.id, id: input.id });
+      const notes = yield* NoteService;
+      yield* notes.remove({ ownerId: user.id, id: input.id });
     }),
   errors: {
     NoteNotFound: ({ errors }) => errors.NOT_FOUND({ data: noErrorData }),
@@ -210,8 +253,8 @@ turned away before any verification or session work. Then:
   `CurrentUser` doesn't compile, so a public procedure can't call a service that needs a user.
 - **The request.** `RequestContext` holds the request's headers (`session.viewer` reads them). Effect code learns about
   the request only through it: it never calls Start's `getRequest*` helpers or reads `AsyncLocalStorage`.
-- **Tracing.** The call is an `rpc.<path>` span (`rpc.note.list`) whose parent is the request's root span, read from
-  the request scope before the fiber starts. A loader's in-process call and a browser's call over `/rpc` are traced
+- **Tracing.** The call is an `rpc.<path>` span (`rpc.note.list`) whose parent is the request's root span
+  (`joinRequest`, under Services and layers). A loader's in-process call and a browser's call over `/rpc` are traced
   alike. Its log lines carry `module: "orpc"`, the browser's `clientId` and, after access, the user's `userId`.
 - **The runtime.** Effects run on `appRuntime`, unless the oRPC context carries a `runtime` (tests only).
 
@@ -241,6 +284,15 @@ other oRPC middlewares: a cross-cutting concern is an option of `effectProcedure
 - **Only boundaries run Effects**: `effectProcedure`, the server entry (`observeRequest`, the job workers), the
   server routes outside oRPC (`/api/auth/*`, `/healthz`, `/robots.txt`, `/sitemap.xml`), Better-Auth's callbacks
   (`src/server/auth.server.ts`), seeds and tests. Everywhere else, compose with `yield*`.
+- **A boundary inside a request joins its trace.** A server route outside oRPC runs its Effect with
+  `runInRequest(effect)` (`src/server/runtime.server.ts`), never `appRuntime.runPromise`. It applies `joinRequest`
+  (`src/server/observability/request-scope.server.ts`), which puts the Effect's spans under the request's root span
+  and tags its log lines with the request's client and user. `effectProcedure` and Better-Auth's callbacks apply
+  `joinRequest` themselves. An Effect run without it starts a trace of its own, and the request's line and timeline
+  never show its work.
+- **Ask for a service, then call it**: `const notes = yield* NoteService;` and `yield* notes.list(…)` on the next
+  line, never `yield* (yield* NoteService).list(…)`. A body that is one call can be
+  `NoteService.use((notes) => notes.stats)`.
 - A promise API is wrapped once, in its platform service (`Storage`, `Mailer`, `Auth`), and used as Effects from
   there. Effect's `@stability unstable` modules (`effect/sql`, `effect/persistence`, `effect/observability`) are used
   only inside `src/server/`.
@@ -249,7 +301,11 @@ other oRPC middlewares: a cross-cutting concern is an option of `effectProcedure
 
 - Better-Auth owns sign-up, sign-in and sessions at `/api/auth/*` (`src/routes/api_auth/`). The `Auth` layer builds it
   (`createBetterAuth` in `src/server/better-auth.server.ts`) from `AppConfig`, with its own small `pg` pool named
-  `auth`, since its adapter speaks promises. Server code reads sessions through `Auth.session(headers)`.
+  `auth`, since its adapter speaks promises. The route hands each request to `Auth.handle(request)`. Server code
+  reads sessions through `Auth.session(headers)`.
+- **The session is read once per request.** A page's loaders each call a procedure, and each asks who the user is:
+  every `Auth.session` call with the request's own `Headers` object shares one read. A change made during a request
+  (a revoked session) is therefore seen by the next request, not by the rest of this one.
 - The sign-up captcha (Altcha) is a `before` hook there, checked with `Captcha.verify`; the browser gets its challenge
   from `captcha.createChallenge`.
 - An account is used once its address is confirmed: sign-up sends a link instead of signing in, and a sign-in before
@@ -392,19 +448,29 @@ opens deletes its sessions (`session.viewer`). A procedure that blocks someone s
 
 ### Testing
 
+- Tests of Effect code use `@effect/vitest`. `it.effect("…", () => Effect.gen(…))` runs an Effect as the test, and
+  `layer(SomeLayer)("name", (it) => { … })` builds a layer once for a block of tests and closes it after the last one.
+  A test doesn't build a runtime or call `runPromise`; the boundary test below is the one exception.
 - Test consequential behavior against the real database (`DATABASE_URL`, after `pnpm db:migrate`): a representative
-  success case and the failures that matter (rejection, ownership, idempotency, cleanup). Build a runtime from the
-  app's own layers (`ManagedRuntime.make(AppLayer)`), run the service's Effects on it, and dispose it in `afterAll`.
-  An expected failure is read with `Effect.flip` and checked by its class (`NoteNotFound`). `note/integration.test.ts`
-  and `media/integration.test.ts` do this.
-- Replace a platform service with a test layer when the real one would reach outside: `Mailer.layerMemory` keeps what
-  is sent (`src/mail/jobs.server.test.ts`), `Storage.layerMemory` is a bucket in memory, `Auth.layerTest` returns a
-  fixed session.
+  success case and the failures that matter (rejection, ownership, idempotency, cleanup). Build the block on the app's
+  own layers, ask for the service (`yield* NoteService`) and call it. An expected failure is read with `Effect.flip`
+  and checked by its class (`NoteNotFound`). `note/integration.test.ts` and `media/integration.test.ts` do this.
+- The rows a block needs are a fixtures layer, `Layer.effectDiscard(Effect.acquireRelease(insert, remove))`, provided
+  over the app's (`Fixtures.pipe(Layer.provideMerge(AppLayer))`): created when the block starts and removed when it
+  ends, whether its tests passed or not. Each run uses its own IDs, so it can run against a development database.
+- `it.effect` runs on a test clock that stands still until the test moves it (`TestClock.adjust`), which suits code
+  that sleeps, retries or waits. A block that uses the real database passes `{ excludeTestServices: true }` to keep the
+  real clock: the pool's timeouts and the rows' timestamps count real time.
+- Replace a service that reaches outside by building the app's layer with its test layer:
+  `makeAppLayer({ auth: Auth.layerTest(() => session) })`, and likewise `storage: Storage.layerMemory` (a bucket in
+  memory) and `mailer: Mailer.layerMemory(sent)` (keeps what is sent). Never merge a test layer over `AppLayer`: a
+  service takes its dependencies when its layer is built, so the merged one reaches only code that asks for the
+  service at call time, and the real one is still built and used by everything else. Code that asks at call time can
+  be given the layer directly, as `src/mail/jobs.server.test.ts` gives `SendMail.run` its `Mailer`.
 - Test through `createRouterClient(router, { context: { headers, runtime } })` or the RPC handler only when the
-  behavior lives at the boundary: access, the error shape, status codes. `src/orpc/access.test.ts` does it for a
-  signed-out visitor, a blocked account and the wrong role, with a runtime whose `Auth` is `Auth.layerTest`.
-- Each test creates its own rows with a per-run ID and deletes them afterwards, so it can run against a development
-  database.
+  behavior lives at the boundary: access, the error shape, status codes. The boundary is a promise API that takes the
+  runtime it runs on, so this test is plain vitest with a `ManagedRuntime` of its own. `src/orpc/access.test.ts` does
+  it for a signed-out visitor, a blocked account and the wrong role, on `makeAppLayer` with `Auth.layerTest`.
 
 ### Logging
 
@@ -415,10 +481,23 @@ logs through `createLogger`, never `console`. The rules, the request line and ho
 ### Checks
 
 - `pnpm typecheck` runs `effect-tsgo tsc`, TypeScript with the Effect language service's diagnostics
-  (`tsconfig.json`). Warnings fail it too. Effect v3 APIs and an unstable Effect API outside `src/server/` are errors.
-- `pnpm lint` runs `scripts/lint-effect.mjs` on every feature's `service.ts`, `repository.ts` and `jobs.server.ts`:
-  no `async`/`await`, no `throw`/`try`, no running Effects, and no `#/paraglide/messages`. Each message says what to
-  write instead.
+  (`tsconfig.json`). Warnings fail it too. On top of its defaults (a floating Effect, a missing service or error in a
+  type, `yield` without `*`), these are errors:
+  - an Effect v3 API, and an unstable Effect API outside `src/server/`;
+  - running an Effect inside Effect code, or `Effect.provide` with a layer outside an entry point (tests and seeds
+    are entry points);
+  - `try`/`catch` in a generator, and `Data.TaggedError` where a `Schema.TaggedError` can describe the error;
+  - `console`, `Date` / `Date.now()`, `Math.random`, timers and `process.env` in Effect code: log with `Effect.log*`,
+    read the time with `DateTime.now` / `DateTime.nowAsDate` or `Clock`, and settings from `AppConfig`;
+  - a service method that requires a service its layer was built with, and a cast into an Effect's type.
+
+  Turn one off for a line only with the reason beside it (`// @effect-diagnostics-next-line <rule>:off`, as
+  `InvalidInput` in `src/server/errors.ts` does).
+
+- `pnpm lint` runs `scripts/lint-effect.mjs`. In every feature's `service.ts`, `repository.ts` and `jobs.server.ts`:
+  no `async`/`await`, no `throw`/`try`, no running Effects, and no `#/paraglide/messages`. Everywhere under `src/`:
+  no `yield* (yield* Service).method(…)`. In `src/routes/`: no `appRuntime`, since a server route runs its Effect
+  with `runInRequest`. Each message says what to write instead.
 - oxlint refuses the libraries the backend replaced (`.oxlintrc.json` → `no-restricted-imports`): `zod`, `pino`,
   `pg-boss`, `dotenv`, and the v3 packages `@effect/schema`, `@effect/platform` and `@effect/sql`.
 

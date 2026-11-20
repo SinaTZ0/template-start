@@ -11,7 +11,7 @@ serve:   browser ──GET <MEDIA_PUBLIC_URL>/…──▶ (production: Caddy) �
 
 - **Any S3-compatible store.** Development uses SeaweedFS from `compose.dev.yaml`. The code only speaks the S3 API,
   through the `Storage` service (`src/server/storage.server.ts`, on `@aws-sdk/client-s3`), so the store can change
-  without code changes. A bucket that fails is a defect: a request reports it, a job retries it.
+  without code changes. A bucket that fails, or doesn't answer a call within 30 seconds, is a defect: a request reports it, a job retries it.
 - **The app writes.** Uploads go through the server, which checks, converts and resizes the image, then puts every
   variant into the bucket. Users never write to the bucket directly.
 - **Browsers read** straight from the bucket in development, and through a read-only proxy path (`/media`) in

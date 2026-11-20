@@ -190,11 +190,14 @@ count the same time more than once.
 
 Procedures are timed the same way over HTTP (`/rpc/*`) and in-process, when a loader calls them during SSR: both are
 children of the request's root span, which the boundary finds through the request scope (`request-scope.server.ts`,
-read outside the fiber only). Loaders, `beforeLoad` and rendering aren't spans of their own: they run in the browser
+read outside the fiber only). Every other boundary that runs an Effect during a request joins it the same way
+(`joinRequest`): the server routes outside oRPC, through `runInRequest`, and Better-Auth's callbacks, so a sign-up's
+captcha check and the email it queues are part of the sign-up's request. Loaders, `beforeLoad` and rendering aren't spans of their own: they run in the browser
 too, and the server-side work they start is already a `procedure` span. Time spent rendering shows as the gap between
 those spans and the end of the request.
 
-Better-Auth's queries run on its own pool, which isn't traced: their time is the `Auth.session` span's.
+Better-Auth's queries run on its own pool, which isn't traced: their time is the `Auth.session` span's, and the
+`Auth.handle` span's for an `/api/auth/*` request.
 
 ### Timing Other Work
 
@@ -308,6 +311,9 @@ line and the slow-request timeline keep working.
   `app.outcome` instead.
 - The request's span is an error when the response is a 5xx, as the conventions ask of a server, and a job run's span
   when the run fails in any way.
+- A typed failure the client gets a 5xx for is an error after all (a case that maps it to `SERVICE_UNAVAILABLE`).
+  `effectProcedure` names it on the call's span (`error.type`, the error's tag), and a span that names an error is
+  exported as one. The failure is also logged at `error`, so it is reported.
 
 The trace context a request arrives with (`traceparent`) is not read: the app is the first hop behind Caddy, and a
 header anyone can send must not pick the trace a request joins.

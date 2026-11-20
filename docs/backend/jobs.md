@@ -25,7 +25,8 @@ export const DiscardMedia = defineJob({
   payload: Schema.Struct({ mediaId: Schema.String }),
   run: Effect.fn("MediaJobs.discard")(function* ({ mediaId }: { readonly mediaId: string }) {
     if (!isMediaId(mediaId)) return;
-    const found = yield* (yield* MediaRepo).findById(mediaId);
+    const repo = yield* MediaRepo;
+    const found = yield* repo.findById(mediaId);
     if (Option.isNone(found) || found.value.attachedAt) return;
     yield* deleteMedia(mediaId);
   }),

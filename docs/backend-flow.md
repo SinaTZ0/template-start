@@ -30,8 +30,9 @@ feature (`src/orpc/note/`) is the worked example, and `media` (`src/orpc/media/`
    every locale file ([i18n.md](./frontend/i18n.md) → Messages from the API). Free-text fields use `PersianText`
    ([architecture.md](./backend/architecture.md) → Validation happens twice, Free text is normalized).
 3. **Errors**: declare each expected failure in `errors.ts` as a `Schema.TaggedError`, named for the fact
-   (`NoteNotFound`) and carrying facts, never text ([architecture.md](./backend/architecture.md) → Services fail with
-   tagged errors, procedures map them).
+   (`NoteNotFound`) and carrying facts, never text. One that wraps a lower failure keeps it as
+   `cause: Schema.Defect()` ([architecture.md](./backend/architecture.md) → Services fail with tagged errors,
+   procedures map them).
 
 ## Implement
 
@@ -45,7 +46,8 @@ feature (`src/orpc/note/`) is the worked example, and `media` (`src/orpc/media/`
    its data reach the server through a deploy step.
 6. **Repository**: write `repository.ts`, a `Context.Service` class (`NoteRepo`) whose layer takes `Db`. One focused
    read or write per method, each an `Effect.fn("<Feature>Repo.<method>")` that ends in `Effect.orDie`. Queries for a
-   user's records filter by the owner ([architecture.md](./backend/architecture.md) → Services and layers, Auth,
+   user's records filter by the owner, and a write that may meet a unique index answers whether it won
+   (`onConflictDoNothing().returning()`) instead of failing ([architecture.md](./backend/architecture.md) → Services and layers, Auth,
    Database).
 7. **Service**: write the rules and orchestration in `service.ts`, a `Context.Service` class (`NoteService`) whose
    methods are `Effect.fn("<Feature>Service.<method>")` and take the request's facts (`ownerId`, the input) as
@@ -54,15 +56,16 @@ feature (`src/orpc/note/`) is the worked example, and `media` (`src/orpc/media/`
    [media.md](./backend/media.md). Work that is slow, should be retried or runs on a schedule (mail, calls to other
    services, clean-ups) is a job the service queues in its transaction, declared in the feature's `jobs.server.ts`
    ([jobs.md](./backend/jobs.md)). An email is a template and a `SendMail.enqueue` ([mail.md](./backend/mail.md) →
-   Adding an Email). Add the repository's and the service's layers to `FeaturesLive` in
-   `src/server/runtime.server.ts`.
+   Adding an Email). A call to another service has a time limit, and is retried only for a typed, temporary failure.
+   Add the repository's and the service's layers to `FeaturesLive` in `src/server/runtime.server.ts`.
 8. **Mapper**: add `mapper.ts` only if the stored and public shapes differ.
 9. **Procedure**: in `procedure.ts`, implement `base.<feature>.<procedure>` (`implementer.server.ts`) with
    `effectProcedure` (`src/orpc/effect.server.ts`): `access` for who may call it, `rateLimit` for a procedure that is
    expensive or abusable (uploads, mail, heavy queries), `captcha` for a public one that writes, `run` calling the
    service, and `errors` with a case for each of the service's tagged errors, where the message a person reads is
    written. Register it in `src/orpc/router.ts` ([architecture.md](./backend/architecture.md) → The boundary, Auth,
-   Rate limiting).
+   Rate limiting). A server route outside oRPC (a webhook, a feed) runs its Effect with `runInRequest`, so its work
+   is part of the request's trace.
 10. **Status codes**: a new error code that oRPC doesn't map already gets its HTTP status in `ERROR_STATUS_MAP`
     (`src/orpc/errors.ts`). `NOT_FOUND`, `CONFLICT`, `UNAUTHORIZED` and `FORBIDDEN` need nothing.
 11. **Environment variables**: a new one goes in `AppConfig` (`src/server/config.server.ts`, a secret as
@@ -78,8 +81,9 @@ feature (`src/orpc/note/`) is the worked example, and `media` (`src/orpc/media/`
     error viewer. Outside Effect, use `createLogger`, never `console`. `Effect.fn` names are the spans; wrap other slow
     work in `Effect.withSpan` ([logging.md](./backend/logging.md)).
 13. **Test**: add an `integration.test.ts` if the behavior is consequential: a success case and the failures that
-    matter, run on a runtime built from `AppLayer` ([architecture.md](./backend/architecture.md) → Testing). Run
-    `pnpm lint` and `pnpm typecheck`, and the test itself if the database is running.
+    matter, written with `@effect/vitest` (`it.effect`) in a `layer(…)` block on `AppLayer`, with the rows it needs
+    as a fixtures layer ([architecture.md](./backend/architecture.md) → Testing). Run `pnpm lint` and
+    `pnpm typecheck`, and the test itself if the database is running.
 14. **Use it**: a page reads the procedure through `orpc.<feature>.<procedure>.queryOptions()` (`src/orpc/client.ts`)
     in its `loader` and component, and mutations invalidate the queries they change. The client calls procedures
     in-process during SSR and over `/rpc` in the browser. Build that side with [frontend-flow.md](./frontend-flow.md)
