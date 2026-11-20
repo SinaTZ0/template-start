@@ -22,17 +22,54 @@
     "skipLibCheck": true,
     "strict": true,
     // Effect diagnostics, run by `effect-tsgo tsc` in `pnpm typecheck` (the `effect` skill). Warnings fail the
-    // typecheck too. v3 APIs are errors: agents often reach for them. APIs Effect marks `@stability unstable` (sql,
-    // persistence, observability, ErrorReporter) may change in a minor release, so each is wrapped once in
-    // `src/server/` and used through that wrapper everywhere else.
+    // typecheck too. Each one below checks a rule of docs/backend/architecture.md that is off, or only a suggestion, by
+    // default:
+    // - v3 APIs are errors: agents often reach for them.
+    // - APIs Effect marks `@stability unstable` (sql, persistence, observability, ErrorReporter) may change in a minor
+    //   release, so each is wrapped once in `src/server/` and used through that wrapper everywhere else.
+    // - Only boundaries run Effects or provide layers: `runEffectInsideEffect`, `strictEffectProvide`.
+    // - Failures are tagged errors, never thrown: `tryCatchInEffectGen`, `preferSchemaTaggedError`.
+    // - Effect code reads the time, logs and settings through Effect (`Clock`/`DateTime`, `Effect.log*`, `AppConfig`),
+    //   so a test controls them: the `global*InEffect` rules and `processEnvInEffect`.
+    // - A service's methods don't leak the services it was built with, and nothing is cast into an Effect's type.
     "plugins": [
       {
         "name": "@effect/language-service",
-        "diagnosticSeverity": { "outdatedApi": "error", "unstableApiUsage": "error", "schemaClassMissingBrand": "off" },
+        "diagnosticSeverity": {
+          "outdatedApi": "error",
+          "unstableApiUsage": "error",
+          "schemaClassMissingBrand": "off",
+          "runEffectInsideEffect": "error",
+          "strictEffectProvide": "error",
+          "tryCatchInEffectGen": "error",
+          "preferSchemaTaggedError": "error",
+          "globalConsoleInEffect": "error",
+          "globalDateInEffect": "error",
+          "globalRandomInEffect": "error",
+          "globalTimersInEffect": "error",
+          "processEnvInEffect": "error",
+          "schemaSyncInEffect": "error",
+          "leakingRequirements": "error",
+          "unsafeEffectTypeAssertion": "error"
+        },
         "overrides": [
           { "include": ["src/server/**/*.ts"], "options": { "diagnosticSeverity": { "unstableApiUsage": "off" } } },
-          // `@effect/vitest` is itself marked unstable.
-          { "include": ["src/**/*.test.ts"], "options": { "diagnosticSeverity": { "unstableApiUsage": "off" } } }
+          // A test is an entry point, so it provides layers, and `@effect/vitest` is itself marked unstable.
+          {
+            "include": ["src/**/*.test.ts"],
+            "options": { "diagnosticSeverity": { "unstableApiUsage": "off", "strictEffectProvide": "off" } }
+          },
+          // Seeds are scripts run by hand: they provide their own layers and print to the terminal.
+          {
+            "include": ["src/db/seed*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "strictEffectProvide": "off",
+                "globalConsoleInEffect": "off",
+                "globalDateInEffect": "off"
+              }
+            }
+          }
         ]
       }
     ]

@@ -25,6 +25,7 @@ export class CaptchaFailed extends Schema.TaggedError<CaptchaFailed>()("CaptchaF
  * turns the issue into per-field messages in the request's locale. A `Data` error, not a `Schema` one: the issue is a
  * value Schema can't describe.
  */
+// @effect-diagnostics-next-line preferSchemaTaggedError:off
 export class InvalidInput extends Data.TaggedError("InvalidInput")<{ readonly issue: SchemaIssue.Issue }> {}
 
 /**

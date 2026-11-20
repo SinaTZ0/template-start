@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { Data, Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
 import { note, user } from "#/db/schema";
 import { AppConfig } from "#/server/config.server";
@@ -36,7 +36,7 @@ const SAMPLE_NOTES: { title: string; body: string }[] = [
 const SAMPLE_TITLES = SAMPLE_NOTES.map((sample) => sample.title);
 
 /*------ Owner ------*/
-class NoOwner extends Data.TaggedError("NoOwner")<{ readonly message: string }> {}
+class NoOwner extends Schema.TaggedError<NoOwner>()("NoOwner", { message: Schema.String }) {}
 
 /** The account given by `--owner`, or the first admin. */
 const findOwner = Effect.fn("SeedNotes.findOwner")(function* (email: string | undefined) {

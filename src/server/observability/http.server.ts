@@ -28,8 +28,10 @@ function withHeader({ response, name, value }: { response: Response; name: strin
 /*===== Server Errors =====*/
 /**
  * What the request's span fails with when the response is a 5xx, so the trace reads as failed the way OpenTelemetry
- * expects of a server span. It carries the response, which is still sent.
+ * expects of a server span. It carries the response, which is still sent, so it is a `Data` error: a `Response` is not
+ * a value Schema describes, and the error never leaves this file.
  */
+// @effect-diagnostics-next-line preferSchemaTaggedError:off
 class ServerErrorResponse extends Data.TaggedError("ServerErrorResponse")<{
   readonly message: string;
   readonly handled: Handled;

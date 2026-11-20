@@ -1,5 +1,5 @@
 import { and, asc, count, eq, isNull, lt } from "drizzle-orm";
-import { Context, Effect, Layer, Option } from "effect";
+import { Context, DateTime, Effect, Layer, Option } from "effect";
 
 import { media } from "#/db/schema";
 import { Db } from "#/server/db.server";
@@ -81,7 +81,7 @@ export class MediaRepo extends Context.Service<
       const claim = Effect.fn("MediaRepo.claim")(function* (id: string) {
         const rows = yield* q
           .update(media)
-          .set({ attachedAt: new Date() })
+          .set({ attachedAt: yield* DateTime.nowAsDate })
           .where(and(eq(media.id, id), isNull(media.attachedAt)))
           .returning({ id: media.id });
         return rows.length > 0;

@@ -1,4 +1,4 @@
-import { Clock, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 
 import { ORPHANED_MEDIA_AGE_MS } from "#/orpc/media/constants";
 import { isMediaId, isMediaKind, variantKeys } from "#/orpc/media/mapper";
@@ -64,7 +64,9 @@ const ORPHAN_MAX_BATCHES = 50;
  */
 export const deleteOrphanedMedia = Effect.fn("MediaJobs.deleteOrphaned")(function* () {
   const repo = yield* MediaRepo;
-  const uploadedBefore = new Date((yield* Clock.currentTimeMillis) - ORPHANED_MEDIA_AGE_MS);
+  const uploadedBefore = DateTime.toDate(
+    DateTime.subtract(yield* DateTime.now, { milliseconds: ORPHANED_MEDIA_AGE_MS }),
+  );
   // Skipped in later batches: a media that failed is still unattached, so the query returns it again.
   const failedIds = new Set<string>();
   let deleted = 0;

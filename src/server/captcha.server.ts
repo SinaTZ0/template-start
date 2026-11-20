@@ -1,7 +1,7 @@
 import { CappedMap, createChallenge, randomInt } from "altcha-lib";
 import { deriveKey } from "altcha-lib/algorithms/pbkdf2";
 import { deriveHmacKeySecret, verify } from "altcha-lib/frameworks/shared";
-import { Context, Effect, Layer, Redacted } from "effect";
+import { Context, DateTime, Effect, Layer, Redacted } from "effect";
 
 import type { AltchaChallenge } from "#/orpc/captcha/contract";
 import { AppConfig } from "#/server/config.server";
@@ -46,18 +46,24 @@ export class Captcha extends Context.Service<
       const used = new CappedMap<string, boolean>({ maxSize: 10_000 });
 
       return Captcha.of({
-        issue: Effect.promise(() =>
-          createChallenge({
-            algorithm: ALGORITHM,
-            cost: COST,
-            // Deterministic mode lets the server verify with one key derivation instead of repeating the search.
-            counter: randomInt(MIN_COUNTER, MAX_COUNTER),
-            deriveKey,
-            expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS),
-            hmacSignatureSecret: key,
-            hmacKeySignatureSecret: keySecret,
-          }),
-        ).pipe(Effect.withSpan("Captcha.issue")),
+        issue: DateTime.now.pipe(
+          Effect.map((now) => DateTime.toDate(DateTime.add(now, { milliseconds: CHALLENGE_TTL_MS }))),
+          Effect.flatMap((expiresAt) =>
+            Effect.promise(() =>
+              createChallenge({
+                algorithm: ALGORITHM,
+                cost: COST,
+                // Deterministic mode lets the server verify with one key derivation instead of repeating the search.
+                counter: randomInt(MIN_COUNTER, MAX_COUNTER),
+                deriveKey,
+                expiresAt,
+                hmacSignatureSecret: key,
+                hmacKeySignatureSecret: keySecret,
+              }),
+            ),
+          ),
+          Effect.withSpan("Captcha.issue"),
+        ),
         verify: (payload) =>
           Effect.promise(() => verify(payload, deriveKey, key, keySecret, used)).pipe(
             Effect.flatMap(({ error }) => (error === null ? Effect.void : Effect.fail(new CaptchaFailed()))),

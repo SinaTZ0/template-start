@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Layer, Redacted } from "effect";
+import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import { createTransport } from "nodemailer";
 
 import { AppConfig } from "#/server/config.server";
@@ -22,14 +22,14 @@ export type OutgoingMail = {
  * accept, a daily limit reached. Sending again in a minute gets the same answer. A 4xx reply ("try later"), a timeout
  * or a dropped connection is temporary.
  */
-export class MailDeliveryError extends Data.TaggedError("MailDeliveryError")<{
-  readonly message: string;
-  readonly permanent: boolean;
+export class MailDeliveryError extends Schema.TaggedError<MailDeliveryError>()("MailDeliveryError", {
+  message: Schema.String,
+  permanent: Schema.Boolean,
   /** The SMTP reply code, when the server answered (550, 421, 535…). */
-  readonly responseCode: number | undefined;
+  responseCode: Schema.UndefinedOr(Schema.Int),
   /** Nodemailer's code for what failed: `EAUTH`, `ECONNECTION`, `ETIMEDOUT`, `EENVELOPE`… */
-  readonly code: string | undefined;
-}> {}
+  code: Schema.UndefinedOr(Schema.String),
+}) {}
 
 function maskAddresses(text: string): string {
   return text.replace(/[^\s<>()"',;:]+@[^\s<>()"',;:]+/g, "[address]");
