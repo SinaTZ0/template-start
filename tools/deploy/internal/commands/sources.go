@@ -1,7 +1,10 @@
 package commands
 
 import (
+	"context"
 	"io"
+	"os/exec"
+	"strings"
 
 	"deploy/internal/envfile"
 	"deploy/internal/sources"
@@ -9,15 +12,27 @@ import (
 )
 
 // checkSources runs before each build: for each package source this server can't reach, it offers the source's mirror
-// and writes the choice to .env. Without a terminal it stops instead, naming the setting, rather than start a build
-// that would hang for minutes; note, when set, is added to that message.
+// and writes the choice to .env (or /etc/docker/daemon.json for Docker Hub). Without a terminal it stops instead,
+// naming the setting, rather than start a build that would hang or fail with 403; note, when set, is added to that
+// message.
 func (t *Tool) checkSources(note string) error {
 	env := t.P.EnvFile()
 	var blocked []sources.Blocked
-	_ = ui.Spin("Checking that this server can reach the package registries", func(io.Writer) error {
+	var dockerProblem string
+	_ = ui.Spin("Checking that this server can reach Docker Hub and the package registries", func(io.Writer) error {
 		blocked = sources.Check(func(key string) string { return envfile.Get(env, key) })
+		if !sources.HasDockerMirrors(sources.DockerDaemonConfigPath) {
+			dockerProblem = sources.ProbeDockerHub(context.Background())
+		}
 		return nil
 	})
+
+	if dockerProblem != "" {
+		if err := handleBlockedDockerHub(dockerProblem, note); err != nil {
+			return err
+		}
+	}
+
 	for _, b := range blocked {
 		ui.Warn("%s: %s, so the build can't download %s from it.", b.Name, b.Problem, b.What)
 		if !ui.Interactive {
@@ -41,5 +56,42 @@ func (t *Tool) checkSources(note string) error {
 		}
 		ui.OK("Set %s=%s in .env", b.Key, b.Mirror)
 	}
+	return nil
+}
+
+func handleBlockedDockerHub(problem, note string) error {
+	mirrors := strings.Join(sources.DockerMirrors, ", ")
+	ui.Warn("registry-1.docker.io: %s, so Docker can't pull base images from Docker Hub.", problem)
+	if !ui.Interactive {
+		msg := `Add {"registry-mirrors": ["` + strings.Join(sources.DockerMirrors, `", "`) + `"]} to ` +
+			sources.DockerDaemonConfigPath + " and run `systemctl restart docker`, then apply (deploy/deploy.sh apply)."
+		if note != "" {
+			msg += "\n" + note
+		}
+		return ui.Fail("%s", msg)
+	}
+	use, err := ui.Confirm(
+		"Configure Docker Hub mirrors ("+mirrors+") in "+sources.DockerDaemonConfigPath+" and restart Docker?",
+		true,
+	)
+	if err != nil {
+		return err
+	}
+	if !use {
+		ui.Warn("Continuing without Docker Hub mirrors.")
+		return nil
+	}
+	if err := sources.WriteDockerMirrors(sources.DockerDaemonConfigPath, sources.DockerMirrors); err != nil {
+		return ui.Fail("Couldn't write %s (%v). Run as root or add registry-mirrors manually.", sources.DockerDaemonConfigPath, err)
+	}
+	if err := ui.Spin("Restarting Docker to apply registry mirrors", func(w io.Writer) error {
+		cmd := exec.Command("systemctl", "restart", "docker")
+		cmd.Stdout = w
+		cmd.Stderr = w
+		return cmd.Run()
+	}); err != nil {
+		return ui.Fail("Wrote %s, but `systemctl restart docker` failed (%v). Restart Docker and try again.", sources.DockerDaemonConfigPath, err)
+	}
+	ui.OK("Configured Docker Hub mirrors (%s) in %s", mirrors, sources.DockerDaemonConfigPath)
 	return nil
 }

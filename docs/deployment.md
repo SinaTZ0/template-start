@@ -218,23 +218,26 @@ which a deploy leaves running: `docker compose -f compose.prod.yaml --profile ob
 
 ## Package Registries
 
-The images come from Docker Hub, but their builds download packages: npm packages from `registry.npmjs.org` (the app)
-and Go modules from `proxy.golang.org` (the error viewer). Where one of them is blocked, the build doesn't fail fast:
-pnpm retries for about ten minutes before it gives up. So before each build (Set up, Apply, Update) the tool checks
-both from the server, which takes a few seconds:
+Builds pull base images from Docker Hub (`registry-1.docker.io`) and download packages: npm packages from
+`registry.npmjs.org` (the app) and Go modules from `proxy.golang.org` (the error viewer). Where one of them is blocked,
+the build either fails with `403 Forbidden` or hangs while pnpm retries for minutes. So before each build (Set up,
+Apply, Update) the tool checks all three from the server, which takes a few seconds:
 
+- Docker Hub: `https://registry-1.docker.io/v2/`, which answers `403 Forbidden` where Docker Hub blocks the region
+  (skipped once `/etc/docker/daemon.json` already has `registry-mirrors`).
 - npm: a request to every IPv4 address of `registry.npmjs.org`. Every one, because a block can be partial (on one
   server, 2 of 12 answered): a single request could pass while pnpm, which spreads its downloads over all of them,
   hangs. IPv4, because builds run on Docker's network, which has no IPv6.
 - Go: one large module zip, which `proxy.golang.org` hands over to `storage.googleapis.com`, the part that answers
   `403 Forbidden` where Google blocks the region. Small modules pass even there.
 
-For one that doesn't answer, it offers a mirror and writes it to `.env`:
+For one that doesn't answer, it offers a mirror and writes it to `/etc/docker/daemon.json` (restarting Docker) or `.env`:
 
-| Setting        | Mirror offered                   |
-| -------------- | -------------------------------- |
-| `NPM_REGISTRY` | `https://registry.npmmirror.com` |
-| `GOPROXY`      | `https://goproxy.cn`             |
+| Target / Setting          | Mirror offered                                          |
+| ------------------------- | ------------------------------------------------------- |
+| `/etc/docker/daemon.json` | `https://dockerhub.timeweb.cloud`, `https://huecker.io` |
+| `NPM_REGISTRY`            | `https://registry.npmmirror.com`                        |
+| `GOPROXY`                 | `https://goproxy.cn`                                    |
 
 The build never needs jsDelivr, though `project.inlang/settings.json` names two inlang plugins there: the compiler
 tries the CDN first and falls back to the copies committed in `project.inlang/cache/plugins/`
